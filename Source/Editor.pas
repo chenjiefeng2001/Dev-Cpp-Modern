@@ -1,4 +1,4 @@
-{
+﻿{
     This file is part of Dev-C++
     Copyright (c) 2004 Bloodshed Software
 
@@ -160,6 +160,11 @@ type
     fCompletionInitialPosition: TBufferCoord;
     fFunctionTipTimer: TTimer;
     fFunctionTip: TCodeToolTip;
+    // LSP hover: 鼠标驻留触发器 (400ms)
+    fHoverTimer: TTimer;
+    fHoverCoord: TBufferCoord;
+    fHoverCoordValid: Boolean;
+    procedure OnHoverTimer(Sender: TObject);
     fParenthCompleteState: TSymbolCompleteState;
     fArrayCompleteState: TSymbolCompleteState;
     fBraceCompleteState: TSymbolCompleteState;
@@ -169,6 +174,10 @@ type
     procedure EditorKeyPress(Sender: TObject; var Key: Char);
     procedure EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure EditorKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure EditorTextChanged(Sender: TObject);
+    function TryLspGotoDefinitionAtCaret: Boolean;
+    function TryLspGotoDefinitionAtMouse(X, Y: Integer): Boolean;
+    procedure HandleLspNoResult(Sender: TObject);
     procedure EditorMouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure EditorStatusChange(Sender: TObject; Changes: TSynStatusChanges);
     procedure EditorReplaceText(Sender: TObject; const aSearch, aReplace: String; Line, Column: integer; var Action:
@@ -239,7 +248,9 @@ implementation
 uses
   main, project, MultiLangSupport, devcfg, utils, Vcl.Themes,
   DataFrm, GotoLineFrm, Macros, debugreader, IncrementalFrm,
-  CodeCompletionForm, SynEditMiscClasses, CharUtils, Vcl.Printers, SynEditPrintTypes;
+  CodeCompletionForm, SynEditMiscClasses, CharUtils, Vcl.Printers, SynEditPrintTypes,
+  LSP.Client.Completion, LSP.Client.SignatureHelp, LSP.Client.Hover,
+  LSP.Client.Definition, Lsp.DocumentSync;
 
 { TCloseTabSheet }
 constructor TCloseTabSheet.Create(AOwner:TComponent);
@@ -540,6 +551,15 @@ begin
   fText.OnKeyDown := EditorKeyDown;
   fText.OnKeyUp := EditorKeyUp;
   fText.OnPaintTransient := EditorPaintTransient;
+  // LSP 文档同步: 文本变更 -> 250ms 防抖 didChange
+  fText.OnChange := EditorTextChanged;
+
+  // LSP hover: 400ms 鼠标驻留触发器 (默认关闭, MouseMove 按需重启)
+  fHoverTimer := TTimer.Create(nil);
+  fHoverTimer.Enabled := False;
+  fHoverTimer.Interval := 400;
+  fHoverTimer.OnTimer := OnHoverTimer;
+  fHoverCoordValid := False;
 
   fText.StyleName := '';
   fText.ParentFont := False;
@@ -563,10 +583,31 @@ begin
 
   // Set status bar for the first time
   EditorStatusChange(Self, [scInsertMode]);
+
+  // LSP 文档同步: didOpen (transport 未就绪时仅记录, 就绪后 ResyncAll 补发)
+  LspDocSync.DidOpenFile(fFileName, fText.Text);
 end;
 
 destructor TEditor.Destroy;
 begin
+  // LSP: 先停驻留计时器, 再统一摘除三管理器的悬空引用 (关气泡/作废在途请求)
+  if Assigned(fHoverTimer) then
+    fHoverTimer.Enabled := False;
+  if Assigned(fText) then
+  begin
+    if Assigned(LspHoverManager) then
+      LspHoverManager.EditorDestroyed(fText);
+    if Assigned(LspCompletionManager) then
+      LspCompletionManager.EditorDestroyed(fText);
+    if Assigned(LspSignatureHelpManager) then
+      LspSignatureHelpManager.EditorDestroyed(fText);
+  end;
+  FreeAndNil(fHoverTimer);
+
+  // LSP 文档同步: didClose (判空避免析构时无谓创建单例)
+  if Assigned(LspDocumentSyncManager) then
+    LspDocumentSyncManager.DidCloseFile(fFileName);
+
   // Deactivate the file change monitor
   MainForm.FileMonitor.UnMonitor(fFileName);
 
@@ -608,6 +649,10 @@ end;
 
 procedure TEditor.Activate;
 begin
+  // LSP hover: 切页时旧气泡不得残留
+  if Assigned(LspHoverManager) then
+    LspHoverManager.HideHint;
+
   // Don't waste time refocusing
   if fText.Focused then
     Exit;
@@ -644,7 +689,7 @@ var
 begin
   result := -1;
   for I := 0 to MainForm.Debugger.BreakPointList.Count - 1 do
-    if integer(PBreakPoint(MainForm.Debugger.BreakPointList.Items[I])^.editor) = integer(self) then
+    if PBreakPoint(MainForm.Debugger.BreakPointList.Items[I])^.editor = self then
       if PBreakPoint(MainForm.Debugger.BreakPointList.Items[I])^.line = Line then begin
         Result := I;
         break;
@@ -740,6 +785,9 @@ end;
 procedure TEditor.EditorExit(Sender: TObject);
 begin
   fFunctionTip.ReleaseHandle;
+  // LSP hover: 失焦关闭
+  if Assigned(LspHoverManager) then
+    LspHoverManager.HideHint;
 end;
 
 // Handling this here instead of in PageControlChange because when switching between two active editors side by side
@@ -778,6 +826,13 @@ end;
 
 procedure TEditor.EditorStatusChange(Sender: TObject; Changes: TSynStatusChanges);
 begin
+  // LSP hover: 滚动导致气泡错位, 无条件关闭
+  if ([scTopLine, scLeftChar] * Changes <> []) then
+  begin
+    if Assigned(LspHoverManager) then
+      LspHoverManager.HideHint;
+  end;
+
   // scModified is only fired when the modified state changes
   if scModified in Changes then begin
     if fText.Modified then begin
@@ -809,6 +864,11 @@ begin
         fFunctionTipTimer.Enabled := true;
       end;
     end;
+
+    // LSP signature help: 气泡可见时光标移动则 ContentChange 重查
+    // (请求 ID 保证乱序响应被丢弃, 无需额外防抖)
+    if Assigned(LspSignatureHelpManager) then
+      LspSignatureHelpManager.EditorCaretMoved(fText);
 
     // Remove error line colors
     if not fIgnoreCaretChange then begin
@@ -1117,6 +1177,12 @@ end;
 procedure TEditor.SetFileName(const value: String);
 begin
   if value <> fFileName then begin
+    // LSP 文档同步: 重命名/SaveAs 视为旧文件关闭 + 新文件打开
+    if Assigned(LspDocumentSyncManager) and Assigned(fText) then
+    begin
+      LspDocumentSyncManager.DidCloseFile(fFileName);
+      LspDocumentSyncManager.DidOpenFile(value, fText.Text);
+    end;
     fFileName := value;
     UpdateCaption(ExtractFileName(fFileName));
   end;
@@ -1458,17 +1524,119 @@ begin
   end;
 end;
 
-procedure TEditor.EditorKeyPress(Sender: TObject; var Key: Char);
+procedure TEditor.EditorTextChanged(Sender: TObject);
 begin
+  // LSP 文档同步: 每次文本变更标记脏, 250ms 防抖后发 didChange (Full)
+  // 非 C/C++ 文件在 NotifyChanged 内部直接过滤
+  if fFileName = '' then
+    Exit;
+  try
+    LspDocSync.NotifyChanged(fFileName, fText.Text);
+  except
+    // 同步永不干扰编辑
+  end;
+end;
+
+function TEditor.TryLspGotoDefinitionAtCaret: Boolean;
+begin
+  Result := False;
+  if not Assigned(LspDefinitionManager) then
+    Exit;
+  if not LspDefinitionManager.IsServiceReady then
+    Exit;
+  if not Assigned(fText.Highlighter) then
+    Exit;
+  LspDefinitionManager.SetEditor(fText);
+  LspDefinitionManager.SetCurrentFile(fFileName);
+  LspDefinitionManager.OnNoResult := HandleLspNoResult;
+  Result := LspDefinitionManager.RequestDefinition(fText.CaretY - 1, fText.CaretX - 1);
+end;
+
+function TEditor.TryLspGotoDefinitionAtMouse(X, Y: Integer): Boolean;
+var
+  BC: TBufferCoord;
+begin
+  Result := False;
+  if not Assigned(LspDefinitionManager) then
+    Exit;
+  if not LspDefinitionManager.IsServiceReady then
+    Exit;
+  BC := fText.DisplayToBufferPos(fText.PixelsToRowColumn(X, Y));
+  if (BC.Line < 1) or (BC.Line > fText.Lines.Count) then
+    Exit;
+  LspDefinitionManager.SetEditor(fText);
+  LspDefinitionManager.SetCurrentFile(fFileName);
+  LspDefinitionManager.OnNoResult := HandleLspNoResult;
+  Result := LspDefinitionManager.RequestDefinition(BC.Line - 1, BC.Char - 1);
+end;
+
+procedure TEditor.HandleLspNoResult(Sender: TObject);
+begin
+  // clangd 返回 null (未知符号): 回退旧 parser 跳转, 与 LSP 关闭时行为一致
+  MainForm.actGotoImplDeclEditorExecute(Self);
+end;
+
+procedure TEditor.OnHoverTimer(Sender: TObject);
+begin
+  fHoverTimer.Enabled := False;
+  if not Assigned(LspHoverManager) then
+    Exit;
+  if not Assigned(fText) then
+    Exit;
+  if not fHoverCoordValid then
+    Exit;
+  // 门控: 无焦点 / 拖选中 / 补全开着, 一律放弃本次 (不打扰)
+  if not fText.Focused then
+    Exit;
+  if fText.SelAvail then
+    Exit;
+  if Assigned(fCompletionBox) and fCompletionBox.Visible then
+    Exit;
+  if (fHoverCoord.Line < 1) or (fHoverCoord.Line > fText.Lines.Count) then
+    Exit;
+  LspHoverManager.SetEditor(fText);
+  LspHoverManager.SetCurrentFile(fFileName);
+  // BufferCoord(1-based) -> LSP 0-based
+  LspHoverManager.RequestHover(fHoverCoord.Line - 1, fHoverCoord.Char - 1);
+end;
+
+procedure TEditor.EditorKeyPress(Sender: TObject; var Key: Char);
+var
+  TypedChar: Char;
+begin
+  // LSP hover: 任意键盘输入无条件关闭气泡
+  if Assigned(LspHoverManager) then
+    LspHoverManager.HideHint;
+
   // Don't offer completion functions for plain text files
   if not Assigned(fText.Highlighter) then
     Exit;
+
+  // HandleSymbolCompletion 可能吞掉按键 (如括号跳过时 Key := #0),
+  // 故先保存原始字符用于 LSP 签名帮助分发
+  TypedChar := Key;
 
   // Doing this here instead of in EditorKeyDown to be able to delete some key messages
   HandleSymbolCompletion(Key);
 
   // Spawn code completion window if we are allowed to
   HandleCodeCompletion(Key);
+
+  // LSP signature help: ( , 触发/重触发; ) 回车关闭
+  if Assigned(LspSignatureHelpManager) then
+  begin
+    case TypedChar of
+      '(', ',':
+        begin
+          LspSignatureHelpManager.SetEditor(fText);
+          LspSignatureHelpManager.SetCurrentFile(fFileName);
+          LspSignatureHelpManager.RequestSignatureHelp(string(TypedChar),
+            LspSignatureHelpManager.IsHintVisible);
+        end;
+      ')', #13:
+        LspSignatureHelpManager.HideHint;
+    end;
+  end;
 end;
 
 procedure TEditor.EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
@@ -1495,6 +1663,43 @@ begin
   if not Assigned(fText.Highlighter) then
     Exit;
 
+  // LSP hover: 任意键盘输入无条件关闭气泡
+  if Assigned(LspHoverManager) then
+    LspHoverManager.HideHint;
+
+  // LSP completion: Ctrl+Space 强制触发 (Invoked, 非 triggerCharacter)
+  if (Key = VK_SPACE) and (Shift = [ssCtrl]) then begin
+    if Assigned(LspCompletionManager) then
+    begin
+      LspCompletionManager.SetEditor(fText);
+      LspCompletionManager.SetCurrentFile(fFileName);
+      LspCompletionManager.RequestCompletion('');
+    end;
+    Key := 0;
+    Exit;
+  end;
+
+  // LSP signature help: Alt+Up/Down 切换重载 (不发网络请求)
+  if Assigned(LspSignatureHelpManager) and LspSignatureHelpManager.IsHintVisible and
+    (Shift = [ssAlt]) and ((Key = VK_UP) or (Key = VK_DOWN)) then
+  begin
+    if Key = VK_UP then
+      LspSignatureHelpManager.CycleOverload(-1)
+    else
+      LspSignatureHelpManager.CycleOverload(1);
+    Key := 0;
+    Exit;
+  end;
+
+  // LSP definition: F12 跳转 (服务不可用则同步回退旧 parser 跳转;
+  // 服务可用但返回 null 则异步经 OnNoResult 回退)
+  if (Key = VK_F12) and (Shift = []) then begin
+    if not TryLspGotoDefinitionAtCaret then
+      MainForm.actGotoImplDeclEditorExecute(Self);
+    Key := 0;
+    Exit;
+  end;
+
   // See if we can undo what has been inserted by HandleSymbolCompletion
   case (Key) of
     VK_CONTROL: begin
@@ -1509,6 +1714,9 @@ begin
           fFunctionTip.ReleaseHandle;
           fFunctionTip.ForceHide := true;
         end;
+        // LSP signature help: Esc 同步关闭
+        if Assigned(LspSignatureHelpManager) then
+          LspSignatureHelpManager.HideHint;
       end;
     VK_DELETE: begin // remove completed character
         if not fText.SelAvail then begin
@@ -1761,6 +1969,7 @@ var
   M: TMemoryStream;
   Reason: THandPointReason;
   IsIncludeLine: boolean;
+  HoverBC: TBufferCoord;
 
   procedure ShowFileHint;
   var
@@ -1818,6 +2027,22 @@ var
     fTabSheet.PageControl.Hint := '';
   end;
 begin
+  // LSP hover: 像素->字符换算, 同字符内抖动不打断计时器;
+  // 移到新字符则: 移出符号 Range 立刻关闭 + 重启 400ms 驻留计时
+  if Assigned(LspHoverManager) and Assigned(fHoverTimer) then
+  begin
+    HoverBC := fText.DisplayToBufferPos(fText.PixelsToRowColumn(X, Y));
+    if (not fHoverCoordValid) or (HoverBC.Line <> fHoverCoord.Line) or
+      (HoverBC.Char <> fHoverCoord.Char) then
+    begin
+      fHoverCoord := HoverBC;
+      fHoverCoordValid := True;
+      LspHoverManager.DismissIfOutside(fText, HoverBC);
+      fHoverTimer.Enabled := False;
+      fHoverTimer.Enabled := True;
+    end;
+  end;
+
   // Leverage Ctrl-Clickability to determine if we can show any information
   Reason := HandpointAllowed(p, Shift);
 
@@ -1901,6 +2126,10 @@ var
   line, FileName: String;
   e: TEditor;
 begin
+  // LSP hover: 点击落子后旧气泡失效
+  if Assigned(LspHoverManager) then
+    LspHoverManager.HideHint;
+
   // if ctrl+clicked
   if (ssCtrl in Shift) and (Button = mbLeft) and not fText.SelAvail then begin
 
@@ -1918,7 +2147,7 @@ begin
         if Assigned(e) then begin
           e.SetCaretPosAndActivate(1, 1);
         end;
-      end else
+      end else if not TryLspGotoDefinitionAtMouse(X, Y) then
         MainForm.actGotoImplDeclEditorExecute(self);
     end;
   end;
@@ -2084,6 +2313,9 @@ begin
         UpdateEncoding(fFileName);
         fText.Lines.SaveToFile(fFileName);
         fText.Modified := false;
+        // LSP 文档同步: 落盘文本即最新文本, 先冲脏再发 didSave
+        if Assigned(LspDocumentSyncManager) then
+          LspDocumentSyncManager.DidSaveFile(fFileName, fText.Text);
       except
         MessageDlg(Format(Lang[ID_ERR_SAVEFILE], [fFileName]), mtError, [mbOk], 0);
         Result := False;

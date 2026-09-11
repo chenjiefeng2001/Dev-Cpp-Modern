@@ -1,0 +1,31 @@
+name: QA Gate
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+permissions:
+  contents: read
+
+jobs:
+  qa-gate:
+    name: Static QA Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run QA gate
+        run: python3 tools/qa_check.py
+
+      - name: Verify project file integrity
+        run: |
+          test -f Source/devcpp.dproj && echo "devcpp.dproj present" || { echo "devcpp.dproj missing"; exit 1; }
+          test -f Source/devcpp.dpr && echo "devcpp.dpr present" || { echo "devcpp.dpr missing"; exit 1; }

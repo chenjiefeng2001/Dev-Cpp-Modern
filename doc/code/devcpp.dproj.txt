@@ -20,7 +20,6 @@
     </PropertyGroup>
     <PropertyGroup Condition="('$(Platform)'=='Win64' and '$(Base)'=='true') or '$(Base_Win64)'!=''">
         <Base_Win64>true</Base_Win64>
-        <AppDPIAwarenessMode>PerMonitorV2</AppDPIAwarenessMode>
         <CfgParent>Base</CfgParent>
         <Base>true</Base>
     </PropertyGroup>
@@ -62,7 +61,7 @@
         <DCC_MaxStackSize>8388608</DCC_MaxStackSize>
         <DCC_ExeOutput>..</DCC_ExeOutput>
         <DCC_DcuOutput>Units</DCC_DcuOutput>
-        <DCC_UnitSearchPath>VCL\SVGIconImageList\Svg;VCL\SVGIconImageList\Source;VCL\ClassBrowsing;VCL\devFileMonitor;VCL\devShortcuts;VCL\CompOptionsList;VCL\SynEdit\Source;VCL\vcl-styles-utils\Common;VCL\DDetours\Source;LSP;LSP\Bootstrap;LSP\Client;LSP\Client\Completion;LSP\Client\SignatureHelp;LSP\Client\Hover;LSP\Client\Definition;LSP\Transport;LSP\DocumentSync;Core;Toolchain;Debugger\GDB;Debugger\GDB\Scheduler;Debugger\GDB\Variable;UI\Frames;UI\Frames\WatchCallStack;UI\Theme;Theme;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+        <DCC_UnitSearchPath>VCL\SVGIconImageList\Svg;VCL\SVGIconImageList\Source;VCL\ClassBrowsing;VCL\devFileMonitor;VCL\devShortcuts;VCL\CompOptionsList;VCL\SynEdit\Source;VCL\vcl-styles-utils\Common;VCL\DDetours\Source;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
         <DebugSourcePath>C:\Program Files (x86)\Dev-Cpp\Source\VCL\SynEdit\Source\;C:\Program Files (x86)\Dev-Cpp\Source\VCL\ClassBrowsing\;$(DebugSourcePath)</DebugSourcePath>
         <DCC_UsePackage>vcl;rtl;vclactnband;vclx;vcldb;dbrtl;dbexpress;vclie;xmlrtl;inet;inetdbbde;inetdbxpress;dsnap;VclSmp;dbxcds;soaprtl;vclshlctrls;SynEdit_R7;$(DCC_UsePackage)</DCC_UsePackage>
         <DCC_SYMBOL_PLATFORM>false</DCC_SYMBOL_PLATFORM>
@@ -305,7 +304,7 @@
             </Delphi.Personality>
             <Platforms>
                 <Platform value="Win32">True</Platform>
-                <Platform value="Win64">True</Platform>
+                <Platform value="Win64">False</Platform>
             </Platforms>
             <Deployment Version="3">
                 <DeployFile LocalName="C:\Dev-Cpp\devcpp.exe" Configuration="Debug" Class="ProjectOutput">
@@ -1120,6 +1119,3 @@
     <Import Project="$(APPDATA)\Embarcadero\$(BDSAPPDATABASEDIR)\$(PRODUCTVERSION)\UserTools.proj" Condition="Exists('$(APPDATA)\Embarcadero\$(BDSAPPDATABASEDIR)\$(PRODUCTVERSION)\UserTools.proj')"/>
     <Import Project="$(MSBuildProjectName).deployproj" Condition="Exists('$(MSBuildProjectName).deployproj')"/>
 </Project>
-
-
-

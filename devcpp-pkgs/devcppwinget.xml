@@ -1,0 +1,19 @@
+<?xml version=\"1.0\" encoding=\"utf-8\"?>
+<p:package xmlns:p=\"http://schemas.microsoft.com/appx/manifest/foundation/windows10/package\" xmlns:uap=\"http://schemas.microsoft.com/appx/manifest/foundation/windows10/packaging\" Name=\"Dev-Cpp-Modern\" Publisher=\"Dev-C++ Team\" Version=\"7.0.0\">
+  <p:ids>
+    <uap:Name>Dev-Cpp-Modern</uap:Name>
+  </p:ids>
+  <p:package>
+    <p:description>Modernized Dev-C++ IDE with LSP, GDB/MI, and Frame-based architecture</p:description>
+    <p:moniker>devcpp</p:moniker>
+    <p:license>MIT</p:license>
+    <p:binaries>
+      <p:binary></p:binary>
+    </p:binaries>
+    <p:installerType>nullsoft</p:installerType>
+    <p:installerUrl>https://github.com/chenjiefeng2001/Dev-Cpp-Modern/releases/download/v7.0/devcpp-setup.exe</p:installerUrl>
+    <p:installerSwitches>silent=/S</p:installerSwitches>
+    <p:architecture>x64</p:architecture>
+    <p:package>
+</p:package>
+</p:package>

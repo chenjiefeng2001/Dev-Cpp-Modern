@@ -1,4 +1,4 @@
-{
+﻿{
     This file is part of Dev-C++
     Copyright (c) 2004 Bloodshed Software
 
@@ -25,9 +25,11 @@ interface
 
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs, System.UITypes,
+  Core.Events, Core.Services,
   Menus, StdCtrls, ComCtrls, ToolWin, ExtCtrls, Buttons, utils, SynEditPrint,
   Project, editor, DateUtils, compiler, ActnList, ToolFrm, AppEvnts,
   debugger, ClassBrowser, CodeCompletion, CppParser, CppTokenizer, SyncObjs,
+  ProjectTreeFrame, WatchCallStackFrame,
   StrUtils, SynEditTypes, devFileMonitor, devMonitorTypes, DdeMan, EditorList,
   devShortcuts, debugreader, ExceptionFrm, CommCtrl, devcfg, SynEditTextBuffer,
   CppPreprocessor, CBUtils, StatementList, AStyleFormatterOptionsFrm, ClangFormatterOptionsFrm, System.Actions,
@@ -39,7 +41,8 @@ uses
   Vcl.Styles.Utils.ComCtrls, //Style SysTreeView32, SysListView32
   Vcl.Styles.Utils.ScreenTips, //Style the tooltips_class32 class
   Vcl.Styles.Utils.SysControls,
-  Vcl.Styles.Utils.SysStyleHook, Vcl.VirtualImage
+  Vcl.Styles.Utils.SysStyleHook, Vcl.VirtualImage,
+  Lsp.Bootstrap, Lsp.Client.Definition
   ;
 
 type
@@ -916,6 +919,7 @@ type
     fDebugger: TDebugger;
     fCompiler: TCompiler;
     fEditorList: TEditorList;
+    FWatchCallStackFrame: TWatchCallStackFrame;
     fCurrentPageHint: String;
     fLogOutputRawData: TStringList;
     fCriticalSection: TCriticalSection; // protects fFilesToOpen
@@ -947,6 +951,14 @@ type
     procedure ClearMessageControl;
     procedure UpdateClassBrowsing;
     function ParseParameters(const Parameters: WideString): Integer;
+    // LSP definition 跳转落点 (0-based 行列, 由 LspDefinitionManager 回调)
+    procedure HandleLspNavigate(const AFileName: string; ALine, AChar: Integer);
+    // 调试事件: 断点状态变更 (事件总线订阅)
+    procedure HandleBreakpointEvent(const AEvent: TEvent);
+    // Watch/CallStack/Threads Frame 回调 (TNotifyEvent 形状)
+    procedure HandleWatchVarChange(Sender: TObject);
+    procedure HandleCallStackSelChanged(Sender: TObject);
+    procedure HandleThreadSelChanged(Sender: TObject);
     //procedure Delphi Style
     procedure LoadStyle;
     procedure LoadThemeStyle;
@@ -1011,7 +1023,7 @@ uses
   ProfileAnalysisFrm, FilePropertiesFrm, AddToDoFrm, ViewToDoFrm,
   ImportMSVCFrm, ImportCBFrm, CPUFrm, FileAssocs, TipOfTheDayFrm,
   WindowListFrm, RemoveUnitFrm, ParamsFrm, ProcessListFrm, SynEditHighlighter,
-  ConsoleAppHostFrm;
+  ConsoleAppHostFrm, Core.ServicesImpl;
 
 {$R *.dfm}
 
@@ -6026,6 +6038,37 @@ begin
   end;
 end;
 
+procedure TMainForm.HandleLspNavigate(const AFileName: string; ALine, AChar: Integer);
+var
+  Ed: TEditor;
+  TargetLine, TargetCol, NewTop: Integer;
+begin
+  // Tab 查找或打开 (GetEditorFromFileName 内部负责打开, 但不激活)
+  Ed := fEditorList.GetEditorFromFileName(AFileName);
+  if not Assigned(Ed) then
+    Exit;
+  // LSP 0-based -> SynEdit 1-based
+  TargetLine := ALine + 1;
+  TargetCol := AChar + 1;
+  if TargetLine < 1 then TargetLine := 1;
+  if TargetCol < 1 then TargetCol := 1;
+  Ed.SetCaretPosAndActivate(TargetLine, TargetCol);
+  // 视口居中 (目标上留 1/3 屏, 避免贴边)
+  try
+    if Ed.Text.LinesInWindow > 1 then
+      NewTop := TargetLine - (Ed.Text.LinesInWindow div 3)
+    else
+      NewTop := TargetLine - 3;
+    if NewTop < 1 then NewTop := 1;
+    Ed.Text.TopLine := NewTop;
+  except
+  end;
+  try
+    Ed.Text.SetFocus;
+  except
+  end;
+end;
+
 procedure TMainForm.actGotoImplDeclEditorExecute(Sender: TObject);
 var
   statement: PStatement;
@@ -6268,6 +6311,20 @@ begin
     OnRunEnd := RunEndProc;
   end;
 
+  // Subscribe to breakpoint events from the event manager.
+  // 注意: 方法引用直接赋值即可, @ 取地址得到的是 Pointer, 与 TEventHandler
+  // (reference to) 类型不兼容, 会导致编译错误, 故此处禁用 @.
+  TEventManager.Instance.Subscribe(HandleBreakpointEvent);
+
+  // Create the Watch/CallStack/Threads frame - decouples UI from debugger logic
+  FWatchCallStackFrame := TWatchCallStackFrame.Create(Self);
+  FWatchCallStackFrame.Parent := Self;
+  FWatchCallStackFrame.Align := alRight;
+  FWatchCallStackFrame.Width := 300;
+  FWatchCallStackFrame.OnVarChange := HandleWatchVarChange;
+  FWatchCallStackFrame.OnCallStackSelChanged := HandleCallStackSelChanged;
+  FWatchCallStackFrame.OnThreadSelChanged := HandleThreadSelChanged;
+
   // Remember long version of paths
   fLogOutputRawData := TStringList.Create;
 
@@ -6277,6 +6334,10 @@ begin
     DebugView := Self.DebugView;
   end;
 
+  // LSP 完成管理器采用延迟初始化: Editor 激活/传输就绪时再
+  // 调用 EnsureLspCompletionCreated + SetEditor/SetTransport 挂接,
+  // 避免在此处引用尚未创建的 fEditorList (之前导致非法访问)
+
   // Create an editor manager
   fEditorList := TEditorList.Create;
   with fEditorList do begin
@@ -6285,6 +6346,10 @@ begin
     Splitter := Self.EditorPageControlSplitter;
     Panel := Self.PageControlPanel;
   end;
+
+  // Register service locator backends (Core.Services). Project load/save
+  // delegates are wired after the first project is parsed; nil is safe here.
+  RegisterCoreServices(fCompiler, fDebugger, fEditorList, nil, nil, nil);
 
   // Custom tools
   fTools := TToolController.Create;
@@ -6504,6 +6569,62 @@ begin
   MainForm.fDebugger.OnEvalReady := nil;
 end;
 
+  // Breakpoint event handler - called when breakpoint state changes
+  procedure TMainForm.HandleBreakpointEvent(const AEvent: TEvent);
+  var
+    BPEvt: TBreakpointEvent;
+    SnapAction: TBreakpointAction;
+    SnapFile: string;
+    SnapLine: Integer;
+  begin
+    if not (AEvent is TBreakpointEvent) then Exit;
+    BPEvt := TBreakpointEvent(AEvent);
+
+    // 快照值类型字段: Publish 在分发返回后即释放事件对象,
+    // 队列到 UI 线程的闭包禁止捕获 BPEvt 本体 (悬空), 只许用快照
+    SnapAction := BPEvt.Action;
+    SnapFile := BPEvt.FileName;
+    SnapLine := BPEvt.LineNumber;
+
+    // Ensure UI updates happen on main thread
+    TThread.Queue(nil,
+      procedure
+      var
+        Ed: TEditor;
+      begin
+        case SnapAction of
+          baClearedAll:
+            begin
+              RemoveActiveBreakpoints;
+              LeftPageControl.ActivePageIndex := 0;
+            end;
+          baAdded, baRemoved:
+            begin
+              Ed := fEditorList.GetEditorFromFileName(SnapFile);
+              if Assigned(Ed) then
+                Ed.Text.InvalidateGutterLine(SnapLine);
+            end;
+        end;
+      end);
+  end;
+
+procedure TMainForm.HandleWatchVarChange(Sender: TObject);
+begin
+  // Watch 面板变量变更通知 (Frame -> 主窗体).
+  // 变量树刷新主体走 TWatchUpdateEvent; 此处保留同步入口,
+  // 待 IDebuggerService 完全接管后收敛为 RefreshWatches 调用.
+end;
+
+procedure TMainForm.HandleCallStackSelChanged(Sender: TObject);
+begin
+  // 调用栈选中变更: 后续联动编辑器跳转到对应文件行.
+end;
+
+procedure TMainForm.HandleThreadSelChanged(Sender: TObject);
+begin
+  // 线程选中变更: 后续联动调试器切换线程.
+end;
+
 procedure TMainForm.EvaluateInputKeyPress(Sender: TObject; var Key: Char);
 begin
   if fDebugger.Executing then begin
@@ -6552,6 +6673,22 @@ begin
   if FileCount = 0 then
     UpdateAppTitle;
   fFilesToOpen.Clear;
+
+  // LSP 合闸: 后台拉起 clangd, 握手完成后自动挂接补全/签名/悬停/跳转/文档同步.
+  // 找不到 clangd 时静默待命, 不阻塞启动. rootUri 取 exe 目录
+  // (clangd 按文件向上查找 compile_commands.json, 故此处仅作默认工作区).
+  try
+    LspBootstrapStartup(ExtractFilePath(Application.ExeName));
+  except
+    // 引导永不干扰主窗体展示
+  end;
+
+  // LSP 跳转落点回调 (MainForm 生命周期覆盖所有异步响应, 无悬空风险)
+  try
+    EnsureLspDefinitionCreated;
+    LspDefinitionManager.OnNavigate := Self.HandleLspNavigate;
+  except
+  end;
 
   // do not show tips if Dev-C++ is launched with a file and only slow
   // when the form shows for the first time, not when going fullscreen too
@@ -7285,7 +7422,7 @@ begin
   Result := fFilesToOpen.Count;
 
   // Free list of pointers
-  LocalFree(Cardinal(ParameterList));
+  LocalFree(HLOCAL(ParameterList));
 end;
 
 procedure TMainForm.LoadStyle;
