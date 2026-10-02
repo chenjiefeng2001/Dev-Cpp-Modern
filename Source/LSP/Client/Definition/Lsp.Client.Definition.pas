@@ -23,8 +23,8 @@ interface
 
 uses
   System.SysUtils, System.Classes, System.Generics.Collections, System.SyncObjs,
-  SynEdit,
-  LSP.Transport, Lsp.DocumentSync;
+  LSP.Transport, Lsp.DocumentSync,
+  Lsp.Editor.Types, Lsp.Editor.Interfaces;
 
 // 跳转目标 (Location / LocationLink 归一化)
 type
@@ -53,7 +53,7 @@ type
 // 多目标取首个 (后续可扩展选择器); null 结果走 OnNoResult 回退旧 parser 跳转
   TLspDefinitionManager = class
   private
-    FEditor: TCustomSynEdit;
+    FEditor: IEditorControlAdapter;
     FTransport: TLspTransport;
     FCurrentFile: string;
     FOnNavigate: TLspNavigateEvent;
@@ -75,14 +75,15 @@ type
     function PathToLspUri(const AFileName: string): string;
     function LspUriToPath(const AUri: string): string;
   public
-    constructor Create(AEditor: TCustomSynEdit; ATransport: TLspTransport);
+    constructor Create(const AEditor: IEditorControlAdapter;
+      ATransport: TLspTransport);
     destructor Destroy; override;
 
-    procedure SetEditor(AEditor: TCustomSynEdit);
+    procedure SetEditor(const AEditor: IEditorControlAdapter);
     procedure SetTransport(ATransport: TLspTransport);
     procedure SetCurrentFile(const AFileName: string);
     // 编辑器析构前调用: 作废在途请求、清除回调、摘除悬空引用
-    procedure EditorDestroyed(AEditor: TCustomSynEdit);
+    procedure EditorDestroyed(const AEditor: IEditorControlAdapter);
 
     function IsServiceReady: Boolean;
     // ALine/AChar 均为 0-based. 返回 False=服务不可用, 调用方走同步回退
@@ -98,7 +99,7 @@ type
 var
   LspDefinitionManager: TLspDefinitionManager;
 
-procedure InitializeLspDefinition(AEditor: TCustomSynEdit;
+procedure InitializeLspDefinition(const AEditor: IEditorControlAdapter;
   ATransport: TLspTransport);
 procedure EnsureLspDefinitionCreated;
 
@@ -401,7 +402,8 @@ end;
 
 { TLspDefinitionManager }
 
-constructor TLspDefinitionManager.Create(AEditor: TCustomSynEdit;
+constructor TLspDefinitionManager.Create(
+  const AEditor: IEditorControlAdapter;
   ATransport: TLspTransport);
 begin
   inherited Create;
@@ -429,7 +431,8 @@ begin
   inherited;
 end;
 
-procedure TLspDefinitionManager.SetEditor(AEditor: TCustomSynEdit);
+procedure TLspDefinitionManager.SetEditor(
+  const AEditor: IEditorControlAdapter);
 begin
   FEditor := AEditor;
 end;
@@ -453,7 +456,8 @@ begin
   FCurrentFile := AFileName;
 end;
 
-procedure TLspDefinitionManager.EditorDestroyed(AEditor: TCustomSynEdit);
+procedure TLspDefinitionManager.EditorDestroyed(
+  const AEditor: IEditorControlAdapter);
 begin
   // 作废在途请求 + 清除可能悬空的编辑器方法回调 + 摘除引用
   FActiveRequestId := -1;
@@ -461,13 +465,15 @@ begin
   FActiveContext.FileName := '';
   FActiveContext.Line := 0;
   FActiveContext.Char := 0;
-  if Assigned(AEditor) then
-  begin
-    if TMethod(FOnNoResult).Data = Pointer(AEditor) then
-      FOnNoResult := nil;
-    if FEditor = AEditor then
-      FEditor := nil;
-  end;
+  // Interface equality below compares the interface POINTER (VMT + Self),
+  // not the underlying object. It is correct here only because the caller
+  // passes the very interface value TEditor cached -- see
+  // TEditor.GetAdapter. If that cache is ever removed and adapters start
+  // being built per call, this comparison silently turns False and the
+  // teardown never fires. Do not 'simplify' the caching.
+  FOnNoResult := nil;
+  if FEditor = AEditor then
+    FEditor := nil;
 end;
 
 function TLspDefinitionManager.IsServiceReady: Boolean;
@@ -551,7 +557,7 @@ begin
 
   // FlushOnDemand: 保证 clangd 按最新文本定位符号
   try
-    LspFlushPendingDocument(FCurrentFile, FEditor.Lines.Text);
+    LspFlushPendingDocument(FCurrentFile, FEditor.GetAllText);
   except
   end;
 
@@ -777,7 +783,7 @@ begin
 end;
 
 // 全局初始化
-procedure InitializeLspDefinition(AEditor: TCustomSynEdit;
+procedure InitializeLspDefinition(const AEditor: IEditorControlAdapter;
   ATransport: TLspTransport);
 begin
   if not Assigned(LspDefinitionManager) then

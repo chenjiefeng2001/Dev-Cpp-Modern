@@ -24,8 +24,8 @@ interface
 uses
   System.SysUtils, System.Classes, System.Generics.Collections, System.SyncObjs,
   Vcl.Controls, Vcl.Forms, Vcl.Graphics, Winapi.Windows,
-  SynEditTypes, SynEdit,
-  LSP.Transport, Lsp.DocumentSync;
+  LSP.Transport, Lsp.DocumentSync,
+  Lsp.Editor.Types, Lsp.Editor.Interfaces;
 
 // Hover 数据模型 (textDocument/hover)
 type
@@ -63,14 +63,14 @@ type
     procedure Paint; override;
   public
     procedure SetData(const ACode, ADoc: string);
-    procedure ShowForEditorAt(AEditor: TCustomSynEdit;
-      const ABufferPos: TBufferCoord);
+    procedure ShowForEditorAt(const AEditor: IEditorControlAdapter;
+      const ABufferPos: TLspBufferCoord);
   end;
 
 // Hover 管理器: 异步、无阻塞、按请求 ID 丢弃过期响应
   TLspHoverManager = class
   private
-    FEditor: TCustomSynEdit;
+    FEditor: IEditorControlAdapter;
     FTransport: TLspTransport;
     FCurrentFile: string;
     FOnHover: TNotifyEvent;
@@ -89,21 +89,22 @@ type
     function PathToLspUri(const AFileName: string): string;
     function MouseStillOnRequest: Boolean;
   public
-    constructor Create(AEditor: TCustomSynEdit; ATransport: TLspTransport);
+    constructor Create(const AEditor: IEditorControlAdapter;
+      ATransport: TLspTransport);
     destructor Destroy; override;
 
-    procedure SetEditor(AEditor: TCustomSynEdit);
+    procedure SetEditor(const AEditor: IEditorControlAdapter);
     procedure SetTransport(ATransport: TLspTransport);
     procedure SetCurrentFile(const AFileName: string);
     // 编辑器析构前调用, 防止悬空 FEditor
-    procedure EditorDestroyed(AEditor: TCustomSynEdit);
+    procedure EditorDestroyed(const AEditor: IEditorControlAdapter);
 
     // ALine/AChar 均为 0-based (调用方由 BufferCoord 换算)
     procedure RequestHover(ALine, AChar: Integer);
     // 鼠标移到新字符时调用: 移出符号 Range 则关闭
-    procedure DismissIfOutside(AEditor: TCustomSynEdit;
-      const ABufferPos: TBufferCoord);
-    function PosInLastRange(const ABufferPos: TBufferCoord): Boolean;
+    procedure DismissIfOutside(const AEditor: IEditorControlAdapter;
+      const ABufferPos: TLspBufferCoord);
+    function PosInLastRange(const ABufferPos: TLspBufferCoord): Boolean;
     procedure HideHint;
     function IsHintVisible: Boolean;
 
@@ -115,10 +116,26 @@ type
 var
   LspHoverManager: TLspHoverManager;
 
-procedure InitializeLspHover(AEditor: TCustomSynEdit; ATransport: TLspTransport);
+procedure InitializeLspHover(const AEditor: IEditorControlAdapter; ATransport: TLspTransport);
 procedure EnsureLspHoverCreated;
 
 implementation
+
+{ TLspPixelPoint -> TPoint, for the hint window's screen-coordinate maths.
+  The hint window is VCL and stays VCL: it is shown with ActivateHint at
+  absolute screen coordinates, so TRect / TPoint / Screen legitimately stay
+  in this unit. Only the EDITOR dependency is being cut. }
+function MakePixelPoint(const P: TPoint): TLspPixelPoint;
+begin
+  Result.X := P.X;
+  Result.Y := P.Y;
+end;
+
+function MakeHintPoint(const APoint: TLspPixelPoint): TPoint;
+begin
+  Result.X := APoint.X;
+  Result.Y := APoint.Y;
+end;
 
 // ---------- 独立 JSON 小工具 (与 Completion/Signature 同构) ----------
 
@@ -766,26 +783,25 @@ begin
   end;
 end;
 
-procedure TLspHoverHintWindow.ShowForEditorAt(AEditor: TCustomSynEdit;
-  const ABufferPos: TBufferCoord);
+procedure TLspHoverHintWindow.ShowForEditorAt(
+  const AEditor: IEditorControlAdapter;
+  const ABufferPos: TLspBufferCoord);
 var
   R: TRect;
   P: TPoint;
   Work: TRect;
-  Disp: TDisplayCoord;
 begin
   if not Assigned(AEditor) then
     Exit;
   Color := clInfoBk;
   R := CalcRectFor(560);
-  Disp := AEditor.BufferToDisplayPos(ABufferPos);
-  P := AEditor.ClientToScreen(AEditor.RowColumnToPixels(Disp));
-  Inc(P.Y, AEditor.LineHeight + 6);
+  P := MakeHintPoint(AEditor.BufferToScreenPixels(ABufferPos));
+  Inc(P.Y, AEditor.GetLineHeight + 6);
   Work := Screen.MonitorFromPoint(P).WorkareaRect;
   if P.Y + R.Bottom > Work.Bottom then
   begin
     // 下方放不下则翻到悬停位置上方
-    P := AEditor.ClientToScreen(AEditor.RowColumnToPixels(Disp));
+    P := MakeHintPoint(AEditor.BufferToScreenPixels(ABufferPos));
     P.Y := P.Y - R.Bottom - 6;
     if P.Y < Work.Top then
       P.Y := Work.Top;
@@ -800,7 +816,8 @@ end;
 
 { TLspHoverManager }
 
-constructor TLspHoverManager.Create(AEditor: TCustomSynEdit;
+constructor TLspHoverManager.Create(
+  const AEditor: IEditorControlAdapter;
   ATransport: TLspTransport);
 begin
   inherited Create;
@@ -833,7 +850,8 @@ begin
   inherited;
 end;
 
-procedure TLspHoverManager.SetEditor(AEditor: TCustomSynEdit);
+procedure TLspHoverManager.SetEditor(
+  const AEditor: IEditorControlAdapter);
 begin
   if FEditor = AEditor then
     Exit;
@@ -860,7 +878,8 @@ begin
   FCurrentFile := AFileName;
 end;
 
-procedure TLspHoverManager.EditorDestroyed(AEditor: TCustomSynEdit);
+procedure TLspHoverManager.EditorDestroyed(
+  const AEditor: IEditorControlAdapter);
 begin
   if FEditor = AEditor then
   begin
@@ -902,7 +921,7 @@ begin
 
   // FlushOnDemand: 与补全/签名同理
   try
-    LspFlushPendingDocument(FCurrentFile, FEditor.Lines.Text);
+    LspFlushPendingDocument(FCurrentFile, FEditor.GetAllText);
   except
   end;
 
@@ -922,7 +941,8 @@ begin
   FTransport.SendPayload(Request);
 end;
 
-function TLspHoverManager.PosInLastRange(const ABufferPos: TBufferCoord): Boolean;
+function TLspHoverManager.PosInLastRange(
+  const ABufferPos: TLspBufferCoord): Boolean;
 begin
   Result := False;
   if not FLastRange.HasRange then
@@ -940,8 +960,9 @@ begin
   Result := True;
 end;
 
-procedure TLspHoverManager.DismissIfOutside(AEditor: TCustomSynEdit;
-  const ABufferPos: TBufferCoord);
+procedure TLspHoverManager.DismissIfOutside(
+  const AEditor: IEditorControlAdapter;
+  const ABufferPos: TLspBufferCoord);
 begin
   if not FHintVisible then
     Exit;
@@ -1005,21 +1026,28 @@ end;
 // 响应到达时鼠标是否仍在请求位置 (防"移开后弹 stale 气泡")
 function TLspHoverManager.MouseStillOnRequest: Boolean;
 var
-  Pt: TPoint;
-  BC: TBufferCoord;
+  CursorPixel: TLspPixelPoint;
+  BC: TLspBufferCoord;
 begin
   Result := False;
   if not Assigned(FEditor) then
     Exit;
   try
-    Pt := FEditor.ScreenToClient(Mouse.CursorPos);
-    if Pt.X < 0 then
+    // CursorPixel is the mouse in screen pixels. The ORIGINAL code read the
+    // client point first and range-checked it before converting; that order
+    // is kept, because outside the viewport there is no meaningful buffer
+    // coordinate and a bounds test applied after conversion would be
+    // comparing against garbage.
+    CursorPixel := MakePixelPoint(Mouse.CursorPos);
+    if CursorPixel.X < 0 then
       Exit;
-    if Pt.Y < 0 then
+    if CursorPixel.Y < 0 then
       Exit;
-    if (Pt.X > FEditor.ClientWidth) or (Pt.Y > FEditor.ClientHeight) then
+    if (CursorPixel.X > FEditor.GetClientWidth) or
+      (CursorPixel.Y > FEditor.GetClientHeight) then
       Exit;
-    BC := FEditor.DisplayToBufferPos(FEditor.PixelsToRowColumn(Pt.X, Pt.Y));
+    // ScreenToClient + PixelsToRowColumn + DisplayToBufferPos, collapsed.
+    BC := FEditor.ScreenPixelsToBuffer(CursorPixel);
     Result := (BC.Line - 1 = FActiveContext.Line) and
       (BC.Char - 1 = FActiveContext.Char);
   except
@@ -1081,7 +1109,7 @@ end;
 
 procedure TLspHoverManager.FillHintAndShow(const AResult: TLspHoverResult);
 var
-  AtPos: TBufferCoord;
+  AtPos: TLspBufferCoord;
 begin
   if not Assigned(FEditor) or not Assigned(FHint) then
     Exit;
@@ -1192,7 +1220,7 @@ begin
 end;
 
 // 全局初始化
-procedure InitializeLspHover(AEditor: TCustomSynEdit; ATransport: TLspTransport);
+procedure InitializeLspHover(const AEditor: IEditorControlAdapter; ATransport: TLspTransport);
 begin
   if not Assigned(LspHoverManager) then
     LspHoverManager := TLspHoverManager.Create(AEditor, ATransport)

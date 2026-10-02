@@ -24,8 +24,8 @@ interface
 uses
   System.SysUtils, System.Classes, System.Generics.Collections, System.SyncObjs,
   Vcl.Controls, Vcl.Forms, Vcl.Graphics,
-  SynEditTypes, SynEdit,
-  LSP.Transport, Lsp.DocumentSync;
+  LSP.Transport, Lsp.DocumentSync,
+  Lsp.Editor.Types, Lsp.Editor.Interfaces;
 
 // LSP 签名帮助数据模型 (textDocument/signatureHelp)
 type
@@ -64,7 +64,7 @@ type
     FSignatures: TArray<TLspSignatureInformation>;
     FActiveSignature: Integer;
     FActiveParameter: Integer; // 已归一化 (顶层回退后)
-    FEditor: TCustomSynEdit;   // 弱引用, 仅用于定位
+    FEditor: IEditorControlAdapter;   // 弱引用, 仅用于定位
     function EffectiveActiveParameter(const ASig: TLspSignatureInformation): Integer;
     function ActiveParamRange(const ASig: TLspSignatureInformation;
       out AStart, ALen: Integer): Boolean;
@@ -78,7 +78,7 @@ type
   public
     procedure SetData(const ASigs: TArray<TLspSignatureInformation>;
       AActiveSig, AActiveParam: Integer);
-    procedure ShowForEditor(AEditor: TCustomSynEdit);
+    procedure ShowForEditor(const AEditor: IEditorControlAdapter);
     function CycleSignature(ADelta: Integer): Boolean;
     property ActiveSignature: Integer read FActiveSignature;
   end;
@@ -86,7 +86,7 @@ type
 // 签名帮助管理器: 异步、无阻塞、按请求 ID 丢弃过期响应
   TLspSignatureHelpManager = class
   private
-    FEditor: TCustomSynEdit;
+    FEditor: IEditorControlAdapter;
     FTransport: TLspTransport;
     FCurrentFile: string;
     FOnSignatureHelp: TNotifyEvent;
@@ -107,10 +107,11 @@ type
       out ASig: TLspSignatureInformation): Boolean;
     function PathToLspUri(const AFileName: string): string;
   public
-    constructor Create(AEditor: TCustomSynEdit; ATransport: TLspTransport);
+    constructor Create(const AEditor: IEditorControlAdapter;
+      ATransport: TLspTransport);
     destructor Destroy; override;
 
-    procedure SetEditor(AEditor: TCustomSynEdit);
+    procedure SetEditor(const AEditor: IEditorControlAdapter);
     procedure SetTransport(ATransport: TLspTransport);
     procedure SetCurrentFile(const AFileName: string);
 
@@ -119,9 +120,9 @@ type
     procedure RequestSignatureHelp(const ATriggerChar: string;
       AIsRetrigger: Boolean = False);
     // 光标移动时由 EditorStatusChange 调用: 仅气泡可见且位置变化才重查
-    procedure EditorCaretMoved(AEditor: TCustomSynEdit);
+    procedure EditorCaretMoved(const AEditor: IEditorControlAdapter);
     // 编辑器析构前调用: 关闭气泡、作废在途请求、摘除悬空引用
-    procedure EditorDestroyed(AEditor: TCustomSynEdit);
+    procedure EditorDestroyed(const AEditor: IEditorControlAdapter);
     procedure CancelPendingActive;
     procedure HideHint;
     function IsHintVisible: Boolean;
@@ -137,11 +138,22 @@ type
 var
   LspSignatureHelpManager: TLspSignatureHelpManager;
 
-procedure InitializeLspSignatureHelp(AEditor: TCustomSynEdit;
+procedure InitializeLspSignatureHelp(
+  const AEditor: IEditorControlAdapter;
   ATransport: TLspTransport);
 procedure EnsureLspSignatureHelpCreated;
 
 implementation
+
+{ TLspPixelPoint -> TPoint for the hint window's screen-coordinate maths.
+  The hint window is VCL and stays VCL (ActivateHint at absolute screen
+  coordinates), so TRect / TPoint / Screen legitimately remain here. Only
+  the EDITOR dependency is being cut. }
+function MakeHintPoint(const APoint: TLspPixelPoint): TPoint;
+begin
+  Result.X := APoint.X;
+  Result.Y := APoint.Y;
+end;
 
 // ---------- 独立 JSON 小工具 (与 Completion 同构, 不依赖 System.JSON) ----------
 
@@ -896,7 +908,8 @@ begin
   end;
 end;
 
-procedure TLspSignatureHintWindow.ShowForEditor(AEditor: TCustomSynEdit);
+procedure TLspSignatureHintWindow.ShowForEditor(
+  const AEditor: IEditorControlAdapter);
 var
   R: TRect;
   P: TPoint;
@@ -907,15 +920,13 @@ begin
   FEditor := AEditor;
   Color := clInfoBk;
   R := CalcRectFor(560);
-  P := AEditor.ClientToScreen(
-    AEditor.RowColumnToPixels(AEditor.DisplayXY));
-  Inc(P.Y, AEditor.LineHeight + 4);
+  P := MakeHintPoint(AEditor.CaretToScreenPixels);
+  Inc(P.Y, AEditor.GetLineHeight + 4);
   Work := Screen.MonitorFromPoint(P).WorkareaRect;
   // 底部放不下则翻到光标上方
   if P.Y + R.Bottom > Work.Bottom then
   begin
-    P := AEditor.ClientToScreen(
-      AEditor.RowColumnToPixels(AEditor.DisplayXY));
+    P := MakeHintPoint(AEditor.CaretToScreenPixels);
     P.Y := P.Y - R.Bottom - 4;
     if P.Y < Work.Top then
       P.Y := Work.Top;
@@ -944,7 +955,8 @@ end;
 
 { TLspSignatureHelpManager }
 
-constructor TLspSignatureHelpManager.Create(AEditor: TCustomSynEdit;
+constructor TLspSignatureHelpManager.Create(
+  const AEditor: IEditorControlAdapter;
   ATransport: TLspTransport);
 begin
   inherited Create;
@@ -974,7 +986,8 @@ begin
   inherited;
 end;
 
-procedure TLspSignatureHelpManager.SetEditor(AEditor: TCustomSynEdit);
+procedure TLspSignatureHelpManager.SetEditor(
+  const AEditor: IEditorControlAdapter);
 begin
   if FEditor = AEditor then
     Exit;
@@ -1024,6 +1037,7 @@ procedure TLspSignatureHelpManager.RequestSignatureHelp(
   const ATriggerChar: string; AIsRetrigger: Boolean);
 var
   LspLine, LspChar, ReqId, TrigKind: Integer;
+  CaretPos: TLspBufferCoord;
   ParamsJson, Request: string;
 begin
   if not Assigned(FEditor) then
@@ -1033,7 +1047,7 @@ begin
 
   // FlushOnDemand: 与 Completion 同理, 先同步脏文本再发签名请求
   try
-    LspFlushPendingDocument(FCurrentFile, FEditor.Lines.Text);
+    LspFlushPendingDocument(FCurrentFile, FEditor.GetAllText);
   except
   end;
 
@@ -1042,11 +1056,12 @@ begin
   FActiveContext.RequestId := ReqId;
   FActiveContext.TriggerChar := ATriggerChar;
   FActiveContext.FileName := FCurrentFile;
-  FActiveContext.CaretLine := FEditor.CaretY;
-  FActiveContext.CaretChar := FEditor.CaretX;
+  CaretPos := FEditor.GetCaretPosition;
+  FActiveContext.CaretLine := CaretPos.Line;
+  FActiveContext.CaretChar := CaretPos.Char;
 
-  LspLine := FEditor.CaretY - 1;
-  LspChar := FEditor.CaretX - 1;
+  LspLine := CaretPos.Line - 1;
+  LspChar := CaretPos.Char - 1;
   if LspLine < 0 then LspLine := 0;
   if LspChar < 0 then LspChar := 0;
 
@@ -1078,20 +1093,25 @@ begin
   FTransport.SendPayload(Request);
 end;
 
-procedure TLspSignatureHelpManager.EditorCaretMoved(AEditor: TCustomSynEdit);
+procedure TLspSignatureHelpManager.EditorCaretMoved(
+  const AEditor: IEditorControlAdapter);
 begin
   if not FHintVisible then
     Exit;
+  // Interface equality compares the interface POINTER (VMT + Self), not
+  // the underlying editor. Correct only because TEditor.GetAdapter hands
+  // every caller the same cached value -- do not remove that cache.
   if not Assigned(FEditor) or (AEditor <> FEditor) then
     Exit;
-  if (FEditor.CaretY = FActiveContext.CaretLine) and
-    (FEditor.CaretX = FActiveContext.CaretChar) then
+  if (FEditor.GetCaretPosition.Line = FActiveContext.CaretLine) and
+    (FEditor.GetCaretPosition.Char = FActiveContext.CaretChar) then
     Exit;
   // 光标移动 -> ContentChange 重查, stale 响应由请求 ID 丢弃
   RequestSignatureHelp('', True);
 end;
 
-procedure TLspSignatureHelpManager.EditorDestroyed(AEditor: TCustomSynEdit);
+procedure TLspSignatureHelpManager.EditorDestroyed(
+  const AEditor: IEditorControlAdapter);
 begin
   if not Assigned(AEditor) or (FEditor <> AEditor) then
     Exit;
@@ -1379,7 +1399,8 @@ begin
 end;
 
 // 全局初始化
-procedure InitializeLspSignatureHelp(AEditor: TCustomSynEdit;
+procedure InitializeLspSignatureHelp(
+  const AEditor: IEditorControlAdapter;
   ATransport: TLspTransport);
 begin
   if not Assigned(LspSignatureHelpManager) then

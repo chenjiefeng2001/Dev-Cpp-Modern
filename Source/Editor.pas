@@ -25,7 +25,11 @@ uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs, CodeCompletion, CppParser, SynExportTeX,
   SynEditExport, SynExportRTF, Menus, ImgList, ComCtrls, StdCtrls, ExtCtrls, SynEdit, SynEditKeyCmds, version,
   SynEditCodeFolding, SynExportHTML, SynEditTextBuffer, Math, StrUtils, SynEditTypes, SynEditHighlighter, DateUtils,
-  CodeToolTip, CBUtils, System.UITypes, System.Contnrs, SynEditPrint, Vcl.ExtDlgs;
+  CodeToolTip, CBUtils, System.UITypes, System.Contnrs, SynEditPrint, Vcl.ExtDlgs,
+  // F2: the editor-adapter contract. VclAdapter is the ONLY place in this
+  // unit that may name TCustomSynEdit; everything else talks to the
+  // interface, which is what makes the LSP layer portable later.
+  Lsp.Editor.Types, Lsp.Editor.Interfaces, Lsp.Editor.VclAdapter;
 
 type
   TCloseTabSheet = class(TTabSheet)
@@ -147,6 +151,10 @@ type
     fFileName: String;
     fNew: boolean;
     fText: TSynEditEx;
+    // F2: the LSP contract adapter for this tab's editor. Owned here so its
+    // lifetime is the tab's, and CACHED so every consumer receives the SAME
+    // interface value -- see TEditor.GetAdapter.
+    FEditorAdapter: IEditorControlAdapter;
     fTabSheet: TTabSheet;
     fErrorLine: integer;
     fActiveLine: integer;
@@ -162,7 +170,7 @@ type
     fFunctionTip: TCodeToolTip;
     // LSP hover: 鼠标驻留触发器 (400ms)
     fHoverTimer: TTimer;
-    fHoverCoord: TBufferCoord;
+    fHoverCoord: TLspBufferCoord;
     fHoverCoordValid: Boolean;
     procedure OnHoverTimer(Sender: TObject);
     fParenthCompleteState: TSymbolCompleteState;
@@ -175,6 +183,13 @@ type
     procedure EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure EditorKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure EditorTextChanged(Sender: TObject);
+    // F2: returns this tab's IEditorControlAdapter, creating it on first use.
+    // CACHING IS LOAD-BEARING, NOT AN OPTIMISATION: Delphi compares
+    // interface values by POINTER (VMT + Self), so a freshly built adapter
+    // over the same editor compares UNEQUAL to a cached one, and every
+    // `FEditor = AEditor` teardown check would silently stop matching.
+    // Never change this to build a new adapter per call.
+    function GetAdapter: IEditorControlAdapter;
     function TryLspGotoDefinitionAtCaret: Boolean;
     function TryLspGotoDefinitionAtMouse(X, Y: Integer): Boolean;
     procedure HandleLspNoResult(Sender: TObject);
@@ -246,7 +261,7 @@ type
 implementation
 
 uses
-  main, project, MultiLangSupport, devcfg, utils, Vcl.Themes,
+  project, MainUi, MultiLangSupport, devcfg, utils, Vcl.Themes,
   DataFrm, GotoLineFrm, Macros, debugreader, IncrementalFrm,
   CodeCompletionForm, SynEditMiscClasses, CharUtils, Vcl.Printers, SynEditPrintTypes,
   LSP.Client.Completion, LSP.Client.SignatureHelp, LSP.Client.Hover,
@@ -301,15 +316,15 @@ var
     end;
   end;
 begin
-  for I := 0 to MainForm.Debugger.BreakPointList.Count - 1 do begin
-    bp := PBreakPoint(MainForm.Debugger.BreakPointList.Items[I]);
+  for I := 0 to MainUi.BreakPoints.Count - 1 do begin
+    bp := PBreakPoint(MainUi.BreakPoints.Items[I]);
     if (integer(bp^.editor) = integer(e)) and (bp^.line >= FirstLine) then
       Inc(bp^.line, Count);
   end;
 
-  LinesInsertedList(MainForm.CompilerOutput.Items);
-  LinesInsertedList(MainForm.ResourceOutput.Items);
-  LinesInsertedList(MainForm.FindOutput.Items);
+  LinesInsertedList(MainUi.CompilerOutputItems);
+  LinesInsertedList(MainUi.ResourceOutputItems);
+  LinesInsertedList(MainUi.FindOutputItems);
 end;
 
 procedure TDebugGutter.LinesDeleted(FirstLine, Count: integer);
@@ -335,8 +350,8 @@ var
   end;
 
 begin
-  for I := MainForm.Debugger.BreakPointList.Count - 1 downto 0 do begin
-    bp := PBreakPoint(MainForm.Debugger.BreakPointList.Items[I]);
+  for I := MainUi.BreakPoints.Count - 1 downto 0 do begin
+    bp := PBreakPoint(MainUi.BreakPoints.Items[I]);
     if (integer(bp^.editor) = integer(e)) and (bp^.line >= FirstLine) then begin
       if (bp^.line >= FirstLine + Count) then
         Dec(bp^.line, Count)
@@ -346,9 +361,9 @@ begin
   end;
 
   // really delete items?
-  LinesDeletedList(MainForm.CompilerOutput.Items);
-  LinesDeletedList(MainForm.ResourceOutput.Items);
-  LinesDeletedList(MainForm.FindOutput.Items);
+  LinesDeletedList(MainUi.CompilerOutputItems);
+  LinesDeletedList(MainUi.ResourceOutputItems);
+  LinesDeletedList(MainUi.FindOutputItems);
 end;
 
 { Encoding }
@@ -536,7 +551,7 @@ begin
   fText.Parent := fTabSheet;
   fText.Visible := True;
   fText.Align := alClient;
-  fText.PopupMenu := MainForm.EditorPopup;
+  fText.PopupMenu := TPopupMenu(MainUi.EditorPopupMenu);
   fText.ShowHint := True;
   fText.OnStatusChange := EditorStatusChange;
   fText.OnReplaceText := EditorReplaceText;
@@ -573,13 +588,13 @@ begin
   // Function parameter tips
   fFunctionTip := TCodeToolTip.Create(Application);
   fFunctionTip.Editor := fText;
-  fFunctionTip.Parser := MainForm.CppParser;
+  fFunctionTip.Parser := TCppParser(MainUi.SharedCppParser);
 
   // Initialize code completion stuff
   InitCompletion;
 
   // Setup a monitor which keeps track of outside-of-editor changes
-  MainForm.FileMonitor.Monitor(fFileName);
+  MainUi.MonitorFile(fFileName);
 
   // Set status bar for the first time
   EditorStatusChange(Self, [scInsertMode]);
@@ -593,15 +608,30 @@ begin
   // LSP: 先停驻留计时器, 再统一摘除三管理器的悬空引用 (关气泡/作废在途请求)
   if Assigned(fHoverTimer) then
     fHoverTimer.Enabled := False;
-  if Assigned(fText) then
+  if Assigned(fText) and Assigned(LspCompletionManager) then
+    // Completion is the last manager still on the raw control; it is not
+    // migrated yet, so it keeps its own notification here.
+    LspCompletionManager.EditorDestroyed(fText);
+  // F2 teardown order, and it is load-bearing:
+  //   1. notify every migrated manager while the adapter is still alive --
+  //      each of those calls compares against this exact interface value;
+  //   2. drop the adapter while fText is STILL ALIVE, because the adapter
+  //      holds a raw pointer to it and would otherwise touch freed memory;
+  //   3. only then is fText freed below.
+  if Assigned(FEditorAdapter) then
   begin
+    // One notification per manager. Hover used to appear in BOTH this block
+    // and the raw block above, which would have notified it twice.
+    if Assigned(LspDefinitionManager) then
+      LspDefinitionManager.EditorDestroyed(FEditorAdapter);
     if Assigned(LspHoverManager) then
-      LspHoverManager.EditorDestroyed(fText);
-    if Assigned(LspCompletionManager) then
-      LspCompletionManager.EditorDestroyed(fText);
+      LspHoverManager.EditorDestroyed(FEditorAdapter);
     if Assigned(LspSignatureHelpManager) then
-      LspSignatureHelpManager.EditorDestroyed(fText);
+      LspSignatureHelpManager.EditorDestroyed(FEditorAdapter);
   end;
+  // Released here, BEFORE FreeAndNil(fText) below: the adapter holds a raw
+  // pointer to fText and would otherwise dereference freed memory.
+  FEditorAdapter := nil;
   FreeAndNil(fHoverTimer);
 
   // LSP 文档同步: didClose (判空避免析构时无谓创建单例)
@@ -609,10 +639,10 @@ begin
     LspDocumentSyncManager.DidCloseFile(fFileName);
 
   // Deactivate the file change monitor
-  MainForm.FileMonitor.UnMonitor(fFileName);
+  MainUi.UnMonitorFile(fFileName);
 
   // Delete breakpoints in this editor
-  MainForm.Debugger.DeleteBreakPointsOf(self);
+  MainUi.DeleteBreakPointsOf(Self);
 
   // Destroy code completion stuff
   DestroyCompletion;
@@ -644,7 +674,7 @@ end;
 procedure TEditor.OnMouseOverEvalReady(const evalvalue: String);
 begin
   fText.Hint := fCurrentEvalWord + ' = ' + evalvalue;
-  MainForm.Debugger.OnEvalReady := nil;
+  MainUi.SetEvalReadyHandler(nil);
 end;
 
 procedure TEditor.Activate;
@@ -674,9 +704,9 @@ begin
   thisbreakpoint := HasBreakPoint(Line);
 
   if thisbreakpoint <> -1 then
-    MainForm.Debugger.RemoveBreakPoint(Line, self)
+    MainUi.RemoveBreakPoint(Line, Self)
   else
-    MainForm.Debugger.AddBreakPoint(Line, self);
+    MainUi.AddBreakPoint(Line, Self);
 
   // Convert buffer to display position
   fText.InvalidateGutterLine(Line);
@@ -688,9 +718,9 @@ var
   I: integer;
 begin
   result := -1;
-  for I := 0 to MainForm.Debugger.BreakPointList.Count - 1 do
-    if PBreakPoint(MainForm.Debugger.BreakPointList.Items[I])^.editor = self then
-      if PBreakPoint(MainForm.Debugger.BreakPointList.Items[I])^.line = Line then begin
+  for I := 0 to MainUi.BreakPoints.Count - 1 do
+    if PBreakPoint(MainUi.BreakPoints.Items[I])^.editor = Self then
+      if PBreakPoint(MainUi.BreakPoints.Items[I])^.line = Line then begin
         Result := I;
         break;
       end;
@@ -760,7 +790,7 @@ begin
     end;
     // Open list of provided files
   end else begin
-    MainForm.OpenFileList(TStringList(aFiles));
+    MainUi.OpenFilesFromList(aFiles);
   end;
 end;
 
@@ -798,26 +828,23 @@ var
   I, x, y: integer;
 begin
   // Set title bar to current file
-  MainForm.UpdateAppTitle;
+  MainUi.RefreshAppTitle;
 
   // Set classbrowser to current file
-  MainForm.ClassBrowser.CurrentFile := fFileName;
+  MainUi.SetClassBrowserFile(fFileName);
 
   // Set compiler selector to current file
-  MainForm.UpdateCompilerList;
+  MainUi.UpdateCompilerList;
 
   // Update status bar
-  MainForm.SetStatusbarLineCol;
+  MainUi.SetStatusbarLineCol;
 
   // Update bookmark menu
   for i := 1 to 9 do
-    if fText.GetBookMark(i, x, y) then begin
-      MainForm.TogglebookmarksPopItem.Items[i - 1].Checked := true;
-      MainForm.TogglebookmarksItem.Items[i - 1].Checked := true;
-    end else begin
-      MainForm.TogglebookmarksPopItem.Items[i - 1].Checked := false;
-      MainForm.TogglebookmarksItem.Items[i - 1].Checked := false;
-    end;
+    if fText.GetBookMark(i, x, y) then
+      MainUi.SetToggleBookmarksChecked(i, true)
+    else
+      MainUi.SetToggleBookmarksChecked(i, false);
 
   // Update focus of incremental search
   if Assigned(IncrementalForm) and IncrementalForm.Showing then
@@ -844,7 +871,7 @@ begin
 
   // scSelection includes anything caret related
   if scSelection in Changes then begin
-    MainForm.SetStatusbarLineCol;
+    MainUi.SetStatusbarLineCol;
 
     // Finish symbol completion
     if fParenthCompleteState = scsInserted then
@@ -868,7 +895,7 @@ begin
     // LSP signature help: 气泡可见时光标移动则 ContentChange 重查
     // (请求 ID 保证乱序响应被丢弃, 无需额外防抖)
     if Assigned(LspSignatureHelpManager) then
-      LspSignatureHelpManager.EditorCaretMoved(fText);
+      LspSignatureHelpManager.EditorCaretMoved(GetAdapter);
 
     // Remove error line colors
     if not fIgnoreCaretChange then begin
@@ -882,15 +909,13 @@ begin
   end;
 
   if scInsertMode in Changes then begin
-    with MainForm.Statusbar do begin
-      // Set readonly / insert / overwrite
-      if fText.ReadOnly then
-        Panels[1].Text := Lang[ID_READONLY]
-      else if fText.InsertMode then
-        Panels[1].Text := Lang[ID_INSERT]
-      else
-        Panels[1].Text := Lang[ID_OVERWRITE];
-    end;
+    // Set readonly / insert / overwrite (status bar panel 1)
+    if fText.ReadOnly then
+      MainUi.SetStatusbarEditMode(Lang[ID_READONLY])
+    else if fText.InsertMode then
+      MainUi.SetStatusbarEditMode(Lang[ID_INSERT])
+    else
+      MainUi.SetStatusbarEditMode(Lang[ID_OVERWRITE]);
   end;
 end;
 
@@ -1537,6 +1562,19 @@ begin
   end;
 end;
 
+function MakePixelCoord(const AX, AY: Integer): TLspPixelPoint;
+begin
+  Result.X := AX;
+  Result.Y := AY;
+end;
+
+function TEditor.GetAdapter: IEditorControlAdapter;
+begin
+  if not Assigned(FEditorAdapter) and Assigned(fText) then
+    FEditorAdapter := TVclSynEditAdapter.Create(fText);
+  Result := FEditorAdapter;
+end;
+
 function TEditor.TryLspGotoDefinitionAtCaret: Boolean;
 begin
   Result := False;
@@ -1546,7 +1584,7 @@ begin
     Exit;
   if not Assigned(fText.Highlighter) then
     Exit;
-  LspDefinitionManager.SetEditor(fText);
+  LspDefinitionManager.SetEditor(GetAdapter);
   LspDefinitionManager.SetCurrentFile(fFileName);
   LspDefinitionManager.OnNoResult := HandleLspNoResult;
   Result := LspDefinitionManager.RequestDefinition(fText.CaretY - 1, fText.CaretX - 1);
@@ -1564,7 +1602,7 @@ begin
   BC := fText.DisplayToBufferPos(fText.PixelsToRowColumn(X, Y));
   if (BC.Line < 1) or (BC.Line > fText.Lines.Count) then
     Exit;
-  LspDefinitionManager.SetEditor(fText);
+  LspDefinitionManager.SetEditor(GetAdapter);
   LspDefinitionManager.SetCurrentFile(fFileName);
   LspDefinitionManager.OnNoResult := HandleLspNoResult;
   Result := LspDefinitionManager.RequestDefinition(BC.Line - 1, BC.Char - 1);
@@ -1573,7 +1611,7 @@ end;
 procedure TEditor.HandleLspNoResult(Sender: TObject);
 begin
   // clangd 返回 null (未知符号): 回退旧 parser 跳转, 与 LSP 关闭时行为一致
-  MainForm.actGotoImplDeclEditorExecute(Self);
+  MainUi.GotoImplDeclInEditor(Self);
 end;
 
 procedure TEditor.OnHoverTimer(Sender: TObject);
@@ -1594,7 +1632,7 @@ begin
     Exit;
   if (fHoverCoord.Line < 1) or (fHoverCoord.Line > fText.Lines.Count) then
     Exit;
-  LspHoverManager.SetEditor(fText);
+  LspHoverManager.SetEditor(GetAdapter);
   LspHoverManager.SetCurrentFile(fFileName);
   // BufferCoord(1-based) -> LSP 0-based
   LspHoverManager.RequestHover(fHoverCoord.Line - 1, fHoverCoord.Char - 1);
@@ -1628,7 +1666,7 @@ begin
     case TypedChar of
       '(', ',':
         begin
-          LspSignatureHelpManager.SetEditor(fText);
+          LspSignatureHelpManager.SetEditor(GetAdapter);
           LspSignatureHelpManager.SetCurrentFile(fFileName);
           LspSignatureHelpManager.RequestSignatureHelp(string(TypedChar),
             LspSignatureHelpManager.IsHintVisible);
@@ -1695,7 +1733,7 @@ begin
   // 服务可用但返回 null 则异步经 OnNoResult 回退)
   if (Key = VK_F12) and (Shift = []) then begin
     if not TryLspGotoDefinitionAtCaret then
-      MainForm.actGotoImplDeclEditorExecute(Self);
+      MainUi.GotoImplDeclInEditor(Self);
     Key := 0;
     Exit;
   end;
@@ -1759,7 +1797,7 @@ end;
 
 procedure TEditor.InitCompletion;
 begin
-  fCompletionBox := MainForm.CodeCompletion;
+  fCompletionBox := TCodeCompletion(MainUi.CodeCompletionBox);
   fCompletionBox.Enabled := devCodeCompletion.Enabled;
   fCompletionBox.Color := devCodeCompletion.BackColor;
 
@@ -1817,11 +1855,11 @@ begin
     // Reparse whole file (not function bodies) if it has been modified
     // use stream, don't read from disk (not saved yet)
     if fText.Modified then begin
-      MainForm.CppParser.ParseFile(fFileName, InProject, False, True, M);
+      TCppParser(MainUi.SharedCppParser).ParseFile(fFileName, InProject, False, True, M);
     end;
 
     // Scan the current function body
-    fCompletionBox.CurrentStatement := MainForm.CppParser.FindAndScanBlockAt(fFileName, fText.CaretY, M);
+    fCompletionBox.CurrentStatement := TCppParser(MainUi.SharedCppParser).FindAndScanBlockAt(fFileName, fText.CaretY, M);
   finally
     M.Free;
   end;
@@ -1969,13 +2007,13 @@ var
   M: TMemoryStream;
   Reason: THandPointReason;
   IsIncludeLine: boolean;
-  HoverBC: TBufferCoord;
+  HoverBC: TLspBufferCoord;
 
   procedure ShowFileHint;
   var
     FileName: String;
   begin
-    FileName := MainForm.CppParser.GetHeaderFileName(fFileName, s);
+    FileName := TCppParser(MainUi.SharedCppParser).GetHeaderFileName(fFileName, s);
     if (FileName <> '') and FileExists(FileName) then
       fText.Hint := FileName + ' - Ctrl+Click for more info'
     else
@@ -1986,12 +2024,12 @@ var
   begin
     // Add to list
     if devData.WatchHint then
-      MainForm.Debugger.AddWatchVar(s);
+      MainUi.AddWatchVar(s);
 
     // Evaluate s
     fCurrentEvalWord := s; // remember name when debugger finishes
-    MainForm.Debugger.OnEvalReady := OnMouseOverEvalReady;
-    MainForm.Debugger.SendCommand('print', s);
+    MainUi.SetEvalReadyHandler(OnMouseOverEvalReady);
+    MainUi.SendDebuggerCommand('print', s);
   end;
 
   procedure ShowParserHint;
@@ -2000,13 +2038,13 @@ var
     M := TMemoryStream.Create;
     try
       fText.Lines.SaveToStream(M);
-      st := MainForm.CppParser.FindStatementOf(fFileName, s, p.Line, M);
+      st := TCppParser(MainUi.SharedCppParser).FindStatementOf(fFileName, s, p.Line, M);
     finally
       M.Free;
     end;
 
     if Assigned(st) then begin
-      fText.Hint := MainForm.CppParser.PrettyPrintStatement(st) + ' - ' + ExtractFileName(st^._FileName) + ' (' +
+      fText.Hint := TCppParser(MainUi.SharedCppParser).PrettyPrintStatement(st) + ' - ' + ExtractFileName(st^._FileName) + ' (' +
         IntToStr(st^._Line) + ') - Ctrl+Click for more info';
       fText.Hint := StringReplace(fText.Hint, '|', #5, [rfReplaceAll]);
       // vertical bar is used to split up short and long hint versions...
@@ -2015,7 +2053,7 @@ var
 
   procedure CancelHint;
   begin
-    MainForm.Debugger.OnEvalReady := nil;
+    MainUi.SetEvalReadyHandler(nil);
 
     // disable editor hint
     Application.CancelHint;
@@ -2023,7 +2061,7 @@ var
     fText.Hint := '';
 
     // disable page control hint
-    MainForm.CurrentPageHint := '';
+    MainUi.SetCurrentPageHint('');
     fTabSheet.PageControl.Hint := '';
   end;
 begin
@@ -2031,13 +2069,13 @@ begin
   // 移到新字符则: 移出符号 Range 立刻关闭 + 重启 400ms 驻留计时
   if Assigned(LspHoverManager) and Assigned(fHoverTimer) then
   begin
-    HoverBC := fText.DisplayToBufferPos(fText.PixelsToRowColumn(X, Y));
+    HoverBC := GetAdapter.ScreenPixelsToBuffer(MakePixelCoord(X, Y));
     if (not fHoverCoordValid) or (HoverBC.Line <> fHoverCoord.Line) or
       (HoverBC.Char <> fHoverCoord.Char) then
     begin
       fHoverCoord := HoverBC;
       fHoverCoordValid := True;
-      LspHoverManager.DismissIfOutside(fText, HoverBC);
+      LspHoverManager.DismissIfOutside(GetAdapter, HoverBC);
       fHoverTimer.Enabled := False;
       fHoverTimer.Enabled := True;
     end;
@@ -2052,12 +2090,12 @@ begin
     // When hovering above a preprocessor line, determine if we want to show an include or a identifier hint
     hprPreprocessor: begin
         s := fText.Lines[p.Line - 1];
-        IsIncludeLine := MainForm.CppParser.IsIncludeLine(s); // show filename hint
+        IsIncludeLine := TCppParser(MainUi.SharedCppParser).IsIncludeLine(s); // show filename hint
         if not IsIncludeLine then
           s := fText.GetWordAtRowCol(p);
       end;
     hprIdentifier: begin
-        if MainForm.Debugger.Executing then
+        if MainUi.DebuggerExecuting then
           s := GetWordAtPosition(p, wpEvaluation) // debugging
         else if devEditor.ParserHints and not fCompletionBox.Visible then
           s := GetWordAtPosition(p, wpInformation) // information during coding
@@ -2096,7 +2134,7 @@ begin
           ShowParserHint;
       end;
     hprIdentifier, hprSelection: begin
-        if MainForm.Debugger.Executing then
+        if MainUi.DebuggerExecuting then
           ShowDebugHint
         else if devEditor.ParserHints and not fCompletionBox.Visible then
           ShowParserHint;
@@ -2141,14 +2179,14 @@ begin
 
       // Try to open the header
       line := fText.Lines[p.Row - 1];
-      if MainForm.CppParser.IsIncludeLine(Line) then begin
-        FileName := MainForm.CppParser.GetHeaderFileName(fFileName, line);
-        e := MainForm.EditorList.GetEditorFromFileName(FileName);
+      if TCppParser(MainUi.SharedCppParser).IsIncludeLine(Line) then begin
+        FileName := TCppParser(MainUi.SharedCppParser).GetHeaderFileName(fFileName, line);
+        e := TEditor(MainUi.FindEditorByFileName(FileName));
         if Assigned(e) then begin
           e.SetCaretPosAndActivate(1, 1);
         end;
       end else if not TryLspGotoDefinitionAtMouse(X, Y) then
-        MainForm.actGotoImplDeclEditorExecute(self);
+        MainUi.GotoImplDeclInEditor(Self);
     end;
   end;
 end;
@@ -2289,7 +2327,7 @@ begin
   Result := True;
 
   // We will be changing files. Stop monitoring
-  MainForm.FileMonitor.BeginUpdate;
+  MainUi.FileMonitorBeginUpdate;
   try
     // Is this file read-only?
     if FileExists(fFileName) and (FileGetAttr(fFileName) and faReadOnly <> 0) then begin
@@ -2321,12 +2359,12 @@ begin
         Result := False;
       end;
 
-      MainForm.CppParser.ParseFile(fFileName, InProject);
+      TCppParser(MainUi.SharedCppParser).ParseFile(fFileName, InProject);
     end else if fNew then
       Result := SaveAs; // we need a file name, use dialog
 
   finally
-    MainForm.FileMonitor.EndUpdate;
+    MainUi.FileMonitorEndUpdate;
   end;
 end;
 
@@ -2363,8 +2401,8 @@ begin
       FilterIndex := 4; // .h
       DefaultExt := 'h';
     end else begin
-      if Assigned(MainForm.Project) and fInProject then begin
-        if MainForm.Project.Options.useGPP then begin
+      if Assigned(TProject(MainUi.CurrentProject)) and fInProject then begin
+        if TProject(MainUi.CurrentProject).Options.useGPP then begin
           FilterIndex := 3; // .cpp
           DefaultExt := 'cpp';
         end else begin
@@ -2382,8 +2420,8 @@ begin
     FileName := ExtractFileName(fFileName);
     if (fFileName <> '') then
       InitialDir := ExtractFilePath(fFileName)
-    else if Assigned(MainForm.Project) then
-      InitialDir := MainForm.Project.Directory;
+    else if Assigned(TProject(MainUi.CurrentProject)) then
+      InitialDir := TProject(MainUi.CurrentProject).Directory;
 
     // Open the save box
     if Execute then
@@ -2403,7 +2441,7 @@ begin
   end;
 
   // Remove *old* file from statement list
-  MainForm.CppParser.InvalidateFile(FileName);
+  TCppParser(MainUi.SharedCppParser).InvalidateFile(FileName);
 
   // Try to save to disk
   try
@@ -2419,23 +2457,23 @@ begin
   devEditor.AssignEditor(fText, SaveFileName);
 
   // Update project information
-  if Assigned(MainForm.Project) and Self.InProject then begin
-    UnitIndex := MainForm.Project.Units.IndexOf(FileName); // index of *old* filename
+  if Assigned(TProject(MainUi.CurrentProject)) and Self.InProject then begin
+    UnitIndex := TProject(MainUi.CurrentProject).Units.IndexOf(FileName); // index of *old* filename
     if UnitIndex <> -1 then
-      MainForm.Project.SaveUnitAs(UnitIndex, SaveFileName); // save as new filename
+      TProject(MainUi.CurrentProject).SaveUnitAs(UnitIndex, SaveFileName); // save as new filename
   end else
     fTabSheet.Caption := ExtractFileName(SaveFileName) + CTAB_PADDING;
 
   // Update window captions
-  MainForm.UpdateAppTitle;
+  MainUi.RefreshAppTitle;
 
   // Update class browser, redraw once
-  MainForm.ClassBrowser.BeginUpdate;
+  MainUi.ClassBrowserBeginUpdate;
   try
-    MainForm.CppParser.ParseFile(SaveFileName, InProject);
-    MainForm.ClassBrowser.CurrentFile := SaveFileName;
+    TCppParser(MainUi.SharedCppParser).ParseFile(SaveFileName, InProject);
+    MainUi.SetClassBrowserFile(SaveFileName);
   finally
-    MainForm.ClassBrowser.EndUpdate;
+    MainUi.ClassBrowserEndUpdate;
   end;
 
   // Set new file name
