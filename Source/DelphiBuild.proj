@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Wrapper that lets `dotnet msbuild` drive the Delphi build.
+
+  WHY THIS FILE EXISTS
+  ====================
+  The roadmap assumed front-line A ("compile in a real Delphi environment")
+  needed a separate host machine with an IDE. This box already has Embarcadero
+  Studio 37.0, but two things block the obvious routes:
+
+    1. `dcc32` refuses command-line work on this install:
+         "This version of the product does not support command line compiling."
+       That is a licensing/edition limit, not a missing binary: dcc32.exe and
+       dcc64.exe are both present.
+
+    2. `dotnet msbuild devcpp.dproj -t:Build` fails with MSB4057, because the
+       .dproj does not bring in CodeGear's targets. They live in
+       bin/CodeGear.Delphi.Targets and are normally injected by the IDE's own
+       project system (bds.exe), which is exactly what we do not have.
+
+  So this wrapper imports CodeGear.Delphi.Targets explicitly and then delegates
+  to the real project. It adds no settings of its own: if this file ever needed
+  its own compiler options, that would be a second source of truth next to
+  devcpp.dproj, which is the failure mode this whole toolchain tries to avoid.
+
+  Usage (from Source/):
+      dotnet msbuild DelphiBuild.proj -t:Build -p:Config=Debug -p:Platform=Win32
+
+  Note: if the CodeGear import below turns out to be insufficient on another
+  machine, the fallback is running the build from bds.exe (IDE) or from
+  RAD Studio's "Build > command prompt". Report that rather than patching
+  settings here.
+-->
+<Project DefaultTargets="Build" ToolsVersion="Current"
+         xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <StudioBin Condition="'$(StudioBin)'==''">C:\Program Files (x86)\Embarcadero\Studio\37.0\bin</StudioBin>
+    <Config Condition="'$(Config)'==''">Debug</Config>
+    <Platform Condition="'$(Platform)'==''">Win32</Platform>
+  </PropertyGroup>
+
+  <Import Project="$(StudioBin)\CodeGear.Common.Targets" Condition="Exists('$(StudioBin)\CodeGear.Common.Targets')" />
+  <Import Project="$(StudioBin)\CodeGear.Group.Targets" Condition="Exists('$(StudioBin)\CodeGear.Group.Targets')" />
+  <Import Project="$(StudioBin)\CodeGear.Delphi.Targets" Condition="Exists('$(StudioBin)\CodeGear.Delphi.Targets')" />
+  <Import Project="$(StudioBin)\CodeGear.Profiles.Targets" Condition="Exists('$(StudioBin)\CodeGear.Profiles.Targets')" />
+  <Import Project="$(StudioBin)\CodeGear.Deployment.Targets" Condition="Exists('$(StudioBin)\CodeGear.Deployment.Targets')" />
+
+  <Import Project="devcpp.dproj" />
+
+  <Target Name="CheckTargets" BeforeTargets="Build">
+    <Error Condition="'$(DCC_Namespace)'==''"
+           Text="CodeGear.Delphi.Targets did not load (DCC_Namespace empty). StudioBin=$(StudioBin)" />
+  </Target>
+</Project>
