@@ -1,0 +1,14 @@
+{
+  "_comment": "F1 decoupling ratchet. Regenerate with `python tools/mainform_baseline.py` after a unit is intentionally decoupled. Caps must never be raised.",
+  "_facade": "Sanctioned anti-corruption layers: the only units allowed to reference MainForm.*. Keep the list as short as possible -- every entry is a future migration seam.",
+  "_owner_refs": "Bare `MainForm` used as a dialog owner (no member access). Invisible to the `refs` regex, fatal to the build once `main` leaves the uses clause.",
+  "measured": "2026-09-27",
+  "total_refs": 0,
+  "facade_refs": 161,
+  "facade": [
+    "Source/UI/MainUi.pas"
+  ],
+  "refs": {},
+  "owner_refs": {},
+  "uses_main": {}
+}

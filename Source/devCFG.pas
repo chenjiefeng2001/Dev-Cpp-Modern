@@ -791,7 +791,7 @@ var
 implementation
 
 uses
-  MultiLangSupport, DataFrm, StrUtils, Forms, main, compiler, Controls, version, utils, SynEditMiscClasses,
+  MultiLangSupport, DataFrm, StrUtils, Forms, MainUi, compiler, Controls, version, utils, SynEditMiscClasses,
   FileAssocs, TypInfo, DateUtils, Types, System.IOUtils, Vcl.ExtDlgs;
 
 procedure CreateOptions;
@@ -1938,18 +1938,7 @@ end;
 
 function TdevCompilerSets.GetCompilationSetIndex: Integer;
 begin
-  Result := -1;
-  if Assigned(MainForm) then begin
-    case MainForm.GetCompileTarget of
-      ctNone:
-        Result := fDefaultIndex;
-      ctFile:
-        Result := fDefaultIndex;
-      ctProject:
-        Result := MainForm.Project.Options.CompilerSet;
-    end;
-  end else
-    Result := fDefaultIndex;
+  Result := MainUi.ProjectCompilerSetIndex(fDefaultIndex);
 end;
 
 function TdevCompilerSets.GetDefaultSet: TdevCompilerSet;

@@ -164,7 +164,7 @@ type
 implementation
 
 uses
-  devcfg, version, Graphics, StrUtils, MultiLangSupport, main, editor, ShlObj, ActiveX, System.IOUtils, CharUtils, Vcl.Styles.Utils.SysControls, Winapi.CommCtrl, Vcl.Themes;
+  devcfg, version, Graphics, StrUtils, MultiLangSupport, editor, ShlObj, ActiveX, System.IOUtils, CharUtils, Vcl.Styles.Utils.SysControls, Winapi.CommCtrl, Vcl.Themes, MainUi;
 
 function FastStringReplace(const S, OldPattern, NewPattern: String; Flags: TReplaceFlags): String;
 var
@@ -473,14 +473,14 @@ end;
 
 function ExecuteFile(const FileName, Params, DefaultDir: String; ShowCmd: Integer): THandle;
 begin
-  Result := ShellExecute(Application.MainForm.Handle, nil,
+  Result := ShellExecute(MainUi.MainFormHandle, nil,
     PChar(FileName), PChar(Params),
     PChar(DefaultDir), ShowCmd);
 end;
 
 function ExecuteFileAsAdmin(const FileName, Params, DefaultDir: String; ShowCmd: Integer): THandle;
 begin
-  Result := ShellExecute(Application.MainForm.Handle, 'runas',
+  Result := ShellExecute(MainUi.MainFormHandle, 'runas',
     PChar(FileName), PChar(Params),
     PChar(DefaultDir), ShowCmd);
 end;
@@ -1004,10 +1004,10 @@ begin
   if (Length(Result) < 4) or not ((LowerCase(Result)[1] in TSetOfChar(['A'..'Z'])) and (Result[2] = ':')) then begin
     // It's not
     if Length(Directory) = 0 then begin
-      if Assigned(MainForm.Project) then
-        Result := ExpandFileTo(Result, MainForm.Project.Directory)
+      if Assigned(MainUi.CurrentProject) then
+        Result := ExpandFileTo(Result, MainUi.ProjectDirectory)
       else begin
-        e := MainForm.EditorList.GetEditor;
+        e := TEditor(MainUi.EditorByIndex(-1, nil));
         if (Assigned(e)) and (Length(ExtractFileDir(e.FileName)) > 0) then
           Result := ExpandFileTo(Result, ExtractFileDir(e.FileName))
         else

@@ -218,7 +218,7 @@ implementation
 
 uses
   System.Types, Vcl.ExtDlgs, shlobj, MultiLangSupport, devcfg, version, utils, math, CommCtrl, DateUtils, CodeInsList, DataFrm, IniFiles, editor,
-  main;
+  MainUi;
 
 {$R *.dfm}
 const
@@ -844,17 +844,10 @@ begin
     ParseGlobalHeaders := chkCBParseGlobalH.Checked;
   end;
 
-  // Only create the timer if autosaving is enabled
-  if devEditor.EnableAutoSave then begin
-    if not Assigned(MainForm.AutoSaveTimer) then
-      MainForm.AutoSaveTimer := TTimer.Create(nil);
-    MainForm.AutoSaveTimer.Interval := devEditor.Interval * 60 * 1000; // miliseconds to minutes
-    MainForm.AutoSaveTimer.Enabled := devEditor.EnableAutoSave;
-    MainForm.AutoSaveTimer.OnTimer := MainForm.EditorSaveTimer;
-  end else begin
-    MainForm.AutoSaveTimer.Free;
-    MainForm.AutoSaveTimer := nil;
-  end;
+  // Only create the timer if autosaving is enabled. Create, reconfigure and
+  // tear down are one decision, so they are one call: devEditor still
+  // supplies the settings, the facade still owns the timer.
+  MainUi.ApplyEditorAutoSave(devEditor.EnableAutoSave, devEditor.Interval);
 
   SaveOptions;
   dmMain.LoadDataMod;

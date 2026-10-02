@@ -74,7 +74,7 @@ type
 implementation
 
 uses
-  System.UItypes, main, MultiLangSupport, DataFrm;
+  System.UItypes, MainUi, MultiLangSupport, DataFrm;
 
 function TEditorList.GetPageCount: integer;
 begin
@@ -341,11 +341,11 @@ begin
   try
     // We're allowed to close...
     Result := True;
-    if Editor.InProject and Assigned(MainForm.Project) then begin
-      projindex := MainForm.Project.Units.IndexOf(Editor);
+    if Editor.InProject and Assigned(MainUi.CurrentProject) then begin
+      projindex := MainUi.ProjectUnitIndexOf(Editor.FileName);
       if projindex <> -1 then
       begin
-        MainForm.Project.CloseUnit(projindex); // calls ForceCloseEditor
+        MainUi.CloseProjectUnitOfEditor(Editor); // calls ForceCloseEditor
       end;
     end else begin
       dmMain.AddtoHistory(Editor.FileName);
@@ -454,10 +454,10 @@ begin
   end;
 
   // Then check the project...
-  if Assigned(MainForm.Project) then begin
-    I := MainForm.Project.GetUnitFromString(FullFileName);
+  if Assigned(MainUi.CurrentProject) then begin
+    I := MainUi.ProjectUnitIndexOf(FullFileName);
     if I <> -1 then begin
-      result := MainForm.Project.OpenUnit(I);
+      result := MainUi.OpenProjectUnit(I);
       Exit;
     end;
   end;
