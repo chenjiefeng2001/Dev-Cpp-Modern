@@ -559,3 +559,66 @@ RESULT: the generated LFM loads and its icons are drawn
 | 8 | 探针按位置索引期望值 → 报告与被测代码无关的失败 | 一个只含单个列表的片段 |
 
 **第 5 条最值得记**：它是一个**静默的空操作**——代码成功返回、文件保留、`if not svg_nodes` 把它吞掉，而磁盘上的旧文件**带着一张声称规则已生效的表头**。与 §9 记的“缺陷 3”同族：**修复代码内部原样复现了它要消灭的 bug**。
+
+---
+
+## 13. 分支 2：C 批解阻路线图（2026-10-06，实测重算）
+
+上一节结束时"SVG 解锁 13 个窗体"这句话缺一个数：解完之后，**还剩几个真的能编译，剩几个被别的控件挡着**。本节用 `tools/f3_load_routes.py` 从树上重算，替代此前 13 / 15 / 9 三个互相矛盾的手算答案。
+
+### 13.1 关键结论：15 个消费端里，**9 个已无任何阻塞**
+
+```
+  converted .lfm in total     : 49
+  of which SVG consumers      : 15
+  CLEARED by the SVG work     : 9
+  still blocked by other code : 6
+```
+
+**「9」不是估计，是交叉验证出来的**：`f3_form_survey.py` 独立报「convertible AND svg-independent = 34/53」与「convertible as-is = 43/53」，二者相减 **43 − 34 = 9**，与本工具从 `_generated.json` 侧算出的 9 完全一致。两个工具走不同代码路径得到同一个数，这是本项目一贯要求的交叉校验。
+
+### 13.2 下一块最便宜的证据：把这 9 个**加载**出来
+
+`AStyleFormatterOptionsFrm` / `AboutFrm` / `ClangFormatterOptionsFrm` / `FormatterOptionsFrm` / `IconFrm` / `NewTemplateFrm` / `ParamsFrm` / `ToolEditFrm` / `ToolFrm`
+
+这 9 个**无阻塞控件 + 图标列表已是真列表**，即 `f3_lfm_check.py` 之后没有任何东西挡着编译。它们是全计划里**最便宜的剩余证据**——不需要新写任何控件，只需要像 `SvgLfmProbe` 那样把 LFM 喂给真实 LCL 读取器。**这应当优先于任何新控件的编写。**
+
+### 13.3 阻断项按「退役一个能解锁几个」排序
+
+| 阻断控件 | 归属 | 解锁窗体 | 目标窗体 |
+|---|---|---|---|
+| `TVirtualImage` | **external**（LCL 有等价物） | **3** | EnviroFrm, LangFrm, main |
+| `TCompOptionsFrame` | own | 2 | CompOptionsFrm, ProjectOptionsFrm |
+| `TCompOptionsList` | vendored | 2 | CompOptionsFrm, ProjectOptionsFrm |
+| `TSynCppSyn` | vendored | 1 | EditorOptFrm |
+| `TClassBrowser` `TCodeCompletion` `TControlBar` `TCppParser` `TCppPreprocessor` `TCppTokenizer` `TdevFileMonitor` `TdevShortcuts` | vendored/external | **各 1** | **全部是 main.dfm** |
+
+**排期结论有两层，第二层比第一层重要：**
+
+- **单点最优是 `TVirtualImage`**（3 个窗体），而且它是 **external** —— LCL 侧有对应物，属于**字段级替换**，不需要写控件。这是投入产出比最高的一刀。
+- **`main.dfm` 的 8 个阻断项，每一个都只值 1 个窗体**，而且 8 个里有 5 个是 vendored 自研解析器（`TCppParser` / `TCppPreprocessor` / `TCppTokenizer` / `TClassBrowser` / `TCodeCompletion`）。**把 `main.dfm` 当作一个目标去"清空阻断"，成本是 8 次控件移植；而它本身只有 1 个窗体的收益。** 正确做法是把它**排除出近期排期**，而不是让它绑架整条路线。
+
+### 13.4 生产端缺口（缺的是控件，不是窗体）
+
+```
+Tools/Packman/Main.dfm: TSVGIconImageCollection, TSVGIconVirtualImageList  -- 无 LCL 对应物
+DataFrm.dfm / NewProjectFrm.dfm: SVG 类已全部转换，但没有窗体级 .lfm，原因在本方案 SVG 范围之外
+```
+
+> 第一版的这一节把 `DataFrm.dfm:` 和 `NewProjectFrm.dfm:` **印成了空行**——因为它们唯一声明的 SVG 类正是已退役的 `TSVGIconImageList`，减完就空了。**空行读起来像「没有缺口」，而真实原因是完全不同的阻断项。** 现改为必须带原因打印。
+
+### 13.5 路线图自身的反空转验证
+
+工具的价值全在"会重算"。摘掉一个已转换窗体再跑：
+
+| | SVG 消费端 | 仍阻断 | `TVirtualImage` 覆盖面 |
+|---|---|---|---|
+| 基线 | 15 | 6 | **3** (EnviroFrm, LangFrm, main) |
+| 扰动（摘掉 LangFrm） | 14 | 5 | **2** (EnviroFrm, main) |
+| 还原 | 15 | 6 | **3** |
+
+`_generated.json` 还原后 MD5 一致，`f3_lfm_check.py` 仍 exit=0。
+
+### 13.6 一条方法论
+
+> **"还有几个窗体被挡着"是情绪指标，"退役哪一个能解锁几个"才是排期指标。** 前者回答一次就过期，后者每次都能重算。这个区别就是 `f3_batch_plan.py`（批次）与本工具（路线）并存的理由：批次回答"能不能转"，路线回答"先动哪个"。
