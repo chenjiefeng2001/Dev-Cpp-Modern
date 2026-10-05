@@ -22,8 +22,26 @@ unit ToolchainConfig;
 interface
 
 uses
+  {$IFDEF FPC}
+  SysUtils, Classes, SyncObjs,
+  // FPC has no `Winapi` tree (measured across all 8603 shipped sources: the
+  // directory does not exist) and refuses to compile a unit whose NAME contains
+  // a dot, so an alias shim cannot bridge it in any layout -- the same finding
+  // that drove tools/fpc_uses_rewrite.py. The equivalent unit is `Windows`.
+  // Every identifier this unit uses was verified present in that RTL before the
+  // spelling was changed: CreatePipe, CreateProcess, GetStdHandle, SW_HIDE,
+  // SetHandleInformation, THandle, WaitForSingleObject, CloseHandle.
+  //
+  // This branch had never been compiled before 2026-10-05: the FPC builds ran
+  // the PORTABLE variant, where TEST_TOOLCHAIN is undefined, so this uses clause
+  // was never handed to the parser. It surfaced as
+  //     ToolchainConfig.pas(30,3) Fatal: Can't find unit Winapi.Windows
+  // only once the Windows variant was actually built.
+  Windows,
+  {$ELSE}
   System.SysUtils, System.Classes, System.SyncObjs,
   Winapi.Windows,
+  {$ENDIF}
   Core.Services;
 
 // Toolchain Profile Types
@@ -117,6 +135,41 @@ type
   end;
 
 implementation
+
+uses
+  // SplitString. Delphi reaches it through the implicit StrUtils in System, so
+  // listing it again is redundant there but legal; FPC has no implicit unit and
+  // refused the bare name outright:
+  //     ToolchainConfig.pas(437,17) Error: Identifier not found "SplitString"
+  // Verified present with an identical signature: rtl/objpas/strutils.pp:80.
+  //
+  // Deliberately NOT wrapped in {$IFDEF FPC}. An empty uses list cannot be
+  // followed by a bare `;` -- FPC reports
+  //     ToolchainConfig.pas(152,3) Fatal: Syntax error, "identifier" expected
+  //                                    but ";" found
+  // and a unit that BOTH compilers accept is simpler than a conditional one.
+  // TStringDynArray (the type SplitString returns) is declared in
+  // rtl/objpas/types.pp:66, not in StrUtils. Verified there rather than
+  // assumed, after StrUtils alone left the name unresolved.
+  Types,
+  StrUtils;
+// Delphi's SysUtils.GetEnvironmentVariable(const Name: string): string and FPC's
+// are the SAME function (rtl/objpas/sysutils.pp:246 and siblings). The call sites
+// below stopped resolving only because this unit also uses the Windows unit,
+// which declares a DIFFERENT, PChar-based one in the same namespace and wins the
+// unqualified lookup under Delphi's last-unit-wins rule:
+//
+//     ToolchainConfig.pas(419,16) Error: Wrong number of parameters specified
+//                                      for call to "GetEnvironmentVariable"
+//     ascdef.inc(75,10) Error: Found declaration:
+//       GetEnvironmentVariable(PChar;PChar;LongWord):DWord;
+//
+// A unit-qualified call pins the intended overload and compiles unchanged under
+// both trees, so no {$IFDEF} copy of those call sites is needed.
+function EnvVar(const AName: String): String;
+begin
+  Result := SysUtils.GetEnvironmentVariable(AName);
+end;
 
 { TToolchainService }
 
@@ -270,7 +323,22 @@ begin
     CmdLine := '"' + AExe + '" ' + AArgs;
     UniqueString(CmdLine);
     FillChar(PI, SizeOf(PI), 0);
+    // The cast WIDTH is a property of the compiler, so it cannot be spelled
+    // unconditionally -- an earlier attempt at `PAnsiChar` for both trees fixed
+    // FPC and would have broken Delphi, whose Winapi.Windows.CreateProcess takes
+    // the WIDE entry point and whose PChar is therefore the correct argument
+    // (Lsp.Process.Win32.pas:124 uses exactly that and compiles today).
+    //
+    // FPC disagrees: its Windows unit binds the bare name to the ANSI entry
+    // point (rtl/win/ascdef.inc:359 -> LPCSTR/LPSTR), while -Mdelphiunicode
+    // makes PChar PWideChar, so the original cast reported
+    //     Incompatible type for arg no. 2: Got "PWideChar", expected "PChar"
+    // with the CALLEE's PChar being the 8-bit one. Hence the conditional.
+    {$IFDEF FPC}
+    if not CreateProcess(nil, PAnsiChar(CmdLine), nil, nil, True,
+    {$ELSE}
     if not CreateProcess(nil, PChar(CmdLine), nil, nil, True,
+    {$ENDIF}
       CREATE_NO_WINDOW, nil, nil, SI, PI) then
       Exit;
     try
@@ -358,7 +426,18 @@ end;
 // 多级探测: 程序目录 -> 环境变量 -> 系统标准路径 -> PATH
 function TToolchainService.DetectToolchainPaths(out Paths: TDetectedToolchainPaths): Boolean;
 var
+  // SplitString returns TStringDynArray. Delphi makes that the SAME type as
+  // TArray<string>; FPC keeps them distinct and reports
+  //     Incompatible types: got "TStringDynArray" expected
+  //     "TArray$1$crc8147D24F"
+  // so the local is declared with the type SplitString actually returns.
+  {$IFDEF FPC}
+  // types.pp:66 declares TStringDynArray = array of AnsiString under this
+  // mode, which is why the assignment is not merely a rename.
+  Candidates: TStringDynArray;
+  {$ELSE}
   Candidates: TArray<string>;
+  {$ENDIF}
   ExeDir, Home: string;
 
   function TryBin(const ABinDir, AMakeName: string): Boolean;
@@ -398,11 +477,11 @@ begin
   if TryBin(ExeDir + 'mingw64\bin', 'mingw32-make.exe') then Exit(True);
 
   // Level 2: 环境变量
-  Home := Trim(GetEnvironmentVariable('MINGW_HOME'));
+  Home := Trim(EnvVar('MINGW_HOME'));
   if (Home <> '') then
     if TryBin(IncludeTrailingPathDelimiter(Home) + 'bin', 'mingw32-make.exe') then
       Exit(True);
-  Home := Trim(GetEnvironmentVariable('LLVM_HOME'));
+  Home := Trim(EnvVar('LLVM_HOME'));
   if (Home <> '') then
     if TryBin(IncludeTrailingPathDelimiter(Home) + 'bin', 'mingw32-make.exe') then
       Exit(True);
@@ -411,12 +490,12 @@ begin
   if TryBin('C:\msys64\ucrt64\bin', 'mingw32-make.exe') then Exit(True);
   if TryBin('C:\msys64\mingw64\bin', 'mingw32-make.exe') then Exit(True);
   if TryBin('C:\msys64\clang64\bin', 'mingw32-make.exe') then Exit(True);
-  Home := Trim(GetEnvironmentVariable('USERPROFILE')) +
+  Home := Trim(EnvVar('USERPROFILE')) +
     '\scoop\apps\mingw-w64\current\bin';
   if TryBin(Home, 'mingw32-make.exe') then Exit(True);
 
   // Level 4: PATH (仅取 gcc.exe; make/gdb 同目录顺带)
-  Candidates := SplitString(Trim(GetEnvironmentVariable('PATH')), ';');
+  Candidates := SplitString(Trim(EnvVar('PATH')), ';');
   for Home in Candidates do
   begin
     if Trim(Home) = '' then

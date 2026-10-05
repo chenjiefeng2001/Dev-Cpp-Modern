@@ -22,8 +22,16 @@ unit LSP.Transport;
 interface
 
 uses
+  {$IFDEF FPC}
+  SysUtils, Classes, Generics.Collections, SyncObjs,
+  {$ELSE}
   System.SysUtils, System.Classes, System.Generics.Collections, System.SyncObjs,
-  System.Types, System.IOUtils, Winapi.Windows, Vcl.Forms;
+  {$ENDIF}
+  {$IFDEF FPC}
+  Types, Lsp.JsonRpc, Lsp.Process, Lsp.Process.Factory;
+  {$ELSE}
+  System.Types, System.IOUtils, LSP.JsonRpc, LSP.Process, LSP.Process.Factory;
+  {$ENDIF}
 
 // JSON-RPC 2.0 消息结构
 type
@@ -62,29 +70,67 @@ type
 
 // LSP 传输客户端
 type
+{$IFDEF FPC}
+  // Carries the read loop as a real thread body. Declared here, ahead of
+  // TLspTransport, so no forward declaration is needed; the owner is held
+  // as TObject and cast at the single use site.
+  //
+  // Needed because TThread.CreateAnonymousThread accepts only a TProcedure
+  // (a routine with no Self) and FPC cannot express one inline:
+  //     Got "...procedure of object...", expected "...procedure..."
+  TLspReadThread = class(TThread)
+  private
+    FOwner: TObject;
+  protected
+    procedure Execute; override;
+  public
+    constructor Create(AOwner: TObject);
+  end;
+{$ENDIF}
+
   TLspTransport = class
   private
     FState: TLspTransportState;
-    FProcessHandle: THandle;
-    FProcessInfo: TProcessInformation;
-    FStdinRead, FStdinWrite: THandle;   // 子进程 stdin 管道
-    FStdoutRead, FStdoutWrite: THandle; // 子进程 stdout/stderr 管道
+    FProcess: ILspProcess;         // 子进程（clangd）句柄, 抽象见 LSP.Process
+    FProcessFactory: ILspProcessFactory;
     FReadThread: TThread;
     FLock: TCriticalSection;
     FOnMessage: TLspMessageEvent;
     FMessageSubs: TList<TLspMessageEvent>;
+{$IFDEF FPC}
+    // Pending notification payloads for the queued sender. A LIST, not a
+    // single field pair: two posts before the queue drains would
+    // otherwise overwrite each other and send the first message twice.
+    FPendingSends: TList<string>;
+{$ENDIF}
     FOnError: TLspErrorEvent;
     FOnConnection: TLspConnectionEvent;
     FUri: String;
     FInitialized: Boolean;
     FClangdPath: string;
     FWorkDir: string;
-    FReadBuf: TBytes; // 读线程累积的裸字节
+    FDecoder: TLspFrameDecoder;   // LSP 帧解码器（纯 Pascal, 见 LSP.JsonRpc）
     FLastBody: String;        // 最近一条已派发的 JSON (供诊断/回读)
     FNextRequestId: Integer;
     FLastActivity: TDateTime;
     FTimeout: Integer;
+{$IFDEF FPC}
+    // TInterlocked has no FPC equivalent. The increment happens under FLock,
+    // the lock this class already takes for counter access.
+    //
+    // Declared AFTER every field, not at the top of `private`: Pascal rejects
+    // a field that follows a method
+    //     Error: Fields cannot appear after a method or property definition
+    // and under an IFDEF so the Delphi build gains no member that cannot be
+    // compile-checked on a machine with no Delphi compiler.
+    function NextRequestId: Integer;
+{$ENDIF}
+{$IFDEF FPC}
+    procedure SendNotificationQueued;
+{$ENDIF}
+{$IFDEF FPC}
     procedure DoReadThread;
+{$ENDIF}
     procedure HandleMessage(const AMessage: String);
     procedure HandleError(const AError: String);
     procedure SetState(const AState: TLspTransportState);
@@ -172,9 +218,14 @@ begin
   FState := tsDisconnected;
   FLock := TCriticalSection.Create;
   FMessageSubs := TList<TLspMessageEvent>.Create;
+{$IFDEF FPC}
+  FPendingSends := TList<string>.Create;
+{$ENDIF}
   FClangdPath := AClangdPath;
   FWorkDir := AWorkDir;
-  FReadBuf := nil;
+  FProcess := nil;
+  FProcessFactory := CreateDefaultLspProcessFactory;
+  FDecoder := TLspFrameDecoder.Create;
   FLastBody := '';
   FNextRequestId := 0;
   FTimeout := 60;
@@ -190,79 +241,56 @@ begin
   try
     Disconnect;
   finally
+    FProcess := nil;
+    FProcessFactory := nil;
+    FreeAndNil(FDecoder);
     FreeAndNil(FMessageSubs);
+{$IFDEF FPC}
+  FreeAndNil(FPendingSends);
+{$ENDIF}
     FLock.Free;
     inherited;
   end;
 end;
 
 function TLspTransport.Connect: Boolean;
-var
-  StartupInfo: TStartupInfo;
-  Security: TSecurityAttributes;
-  CmdLine: string;
 begin
   Result := False;
   SetState(tsConnecting);
   FLastActivity := Now;
 
   try
-    // 可继承句柄的安全属性 (子进程需继承 stdin/stdout 管道)
-    FillChar(Security, SizeOf(Security), 0);
-    Security.nLength := SizeOf(Security);
-    Security.lpSecurityDescriptor := nil;
-    Security.bInheritHandle := True;
-
-    // stdin 管道: 父进程写 FStdinWrite, 子进程读 FStdinRead
-    if not CreatePipe(FStdinRead, FStdinWrite, @Security, 0) then
+    // 启动 clangd 子进程。进程/管道实现按编译器选择:
+    // Delphi -> Win32 管道, FPC -> RTL TProcess（见 LSP.Process.Factory）。
+    FProcess := FProcessFactory.Start(FClangdPath,
+      '--background-index --clang-tidy --completion-style=detailed ' +
+      '--header-insertion=iwyu --pch-storage=memory ' +
+      '--compile-commands-dir="' + FWorkDir + '" --log-level=error',
+      FWorkDir);
+    if FProcess = nil then
     begin
-      HandleError('Failed to create stdin pipe');
-      Exit;
-    end;
-    // 父进程不可把写端继承给子进程
-    SetHandleInformation(FStdinWrite, HANDLE_FLAG_INHERIT, 0);
-
-    // stdout 管道: 子进程写 FStdoutWrite, 父进程读 FStdoutRead
-    if not CreatePipe(FStdoutRead, FStdoutWrite, @Security, 0) then
-    begin
-      HandleError('Failed to create stdout pipe');
-      Exit;
-    end;
-    SetHandleInformation(FStdoutRead, HANDLE_FLAG_INHERIT, 0);
-
-    // 启动信息: 接管子进程 stdio
-    FillChar(StartupInfo, SizeOf(StartupInfo), 0);
-    StartupInfo.cb := SizeOf(StartupInfo);
-    StartupInfo.hStdInput := FStdinRead;
-    StartupInfo.hStdOutput := FStdoutWrite;
-    StartupInfo.hStdError := FStdoutWrite;
-    StartupInfo.dwFlags := STARTF_USESTDHANDLES or STARTF_USESHOWWINDOW;
-    StartupInfo.wShowWindow := SW_HIDE;
-
-    CmdLine := Format('"%s" --background-index --clang-tidy --completion-style=detailed --header-insertion=iwyu --pch-storage=memory --compile-commands-dir="%s" --log-level=error',
-      [FClangdPath, FWorkDir]);
-
-    if not CreateProcess(nil, PChar(CmdLine), nil, nil, True, CREATE_NO_WINDOW,
-      nil, PChar(FWorkDir), StartupInfo, FProcessInfo) then
-    begin
-      HandleError('Failed to start clangd: ' + SysErrorMessage(GetLastError));
+      HandleError('Failed to start clangd: ' + FClangdPath);
       Disconnect;
       Exit;
     end;
-    FProcessHandle := FProcessInfo.hProcess;
-
-    // 父进程关闭子进程侧的句柄
-    CloseHandle(FStdinRead);
-    FStdinRead := 0;
-    CloseHandle(FStdoutWrite);
-    FStdoutWrite := 0;
 
     // 启动读线程
+{$IFDEF FPC}
+    // A real TThread, not CreateAnonymousThread: that takes a TProcedure --
+    // a routine with NO Self -- and a class method is `procedure of
+    // object`, which the compiler rejects outright:
+    //     Got "...procedure of object...", expected "...procedure..."
+    // FPC has no nested procedures, so a plain one cannot be produced from
+    // a method, and a forwarder class method has the same shape. The long
+    // form is the way: the subclass supplies Execute.
+    FReadThread := TLspReadThread.Create(Self);
+{$ELSE}
     FReadThread := TThread.CreateAnonymousThread(
       procedure
       begin
         DoReadThread;
       end);
+{$ENDIF}
     FReadThread.FreeOnTerminate := False;
     FReadThread.Start;
 
@@ -289,11 +317,12 @@ procedure TLspTransport.Disconnect;
 begin
   SetState(tsShuttingDown);
 
-  // 先关读端, 解除读线程的 ReadFile 阻塞
-  if FStdoutRead <> 0 then
+  // 先结束子进程：实现会先关闭读端, 从而解除读线程的阻塞读
+  // (Win32: CloseHandle 读端; FPC: 子进程退出后管道到达 EOF)
+  if Assigned(FProcess) then
   begin
-    CloseHandle(FStdoutRead);
-    FStdoutRead := 0;
+    FProcess.Terminate;
+    FProcess := nil;
   end;
 
   if Assigned(FReadThread) then
@@ -302,20 +331,6 @@ begin
     FReadThread.WaitFor;
     FreeAndNil(FReadThread);
   end;
-
-  // 结束子进程
-  if FProcessHandle <> 0 then
-  begin
-    TerminateProcess(FProcessHandle, 0);
-    CloseHandle(FProcessInfo.hThread);
-    CloseHandle(FProcessInfo.hProcess);
-    FProcessHandle := 0;
-  end;
-
-  // 关闭残留管道句柄
-  if FStdinWrite <> 0 then begin CloseHandle(FStdinWrite); FStdinWrite := 0; end;
-  if FStdinRead <> 0 then begin CloseHandle(FStdinRead); FStdinRead := 0; end;
-  if FStdoutWrite <> 0 then begin CloseHandle(FStdoutWrite); FStdoutWrite := 0; end;
 
   SetState(tsDisconnected);
   if Assigned(FOnConnection) then
@@ -334,7 +349,11 @@ begin
     '"completion":{"completionItem":{"snippetSupport":false,"documentationFormat":["plaintext"]}},' +
     '"signatureHelp":{"signatureInformation":{"documentationFormat":["plaintext"]}},' +
     '"hover":{"contentFormat":["plaintext"]}}}}}',
+{$IFDEF FPC}
+    [NextRequestId, FUri]);
+{$ELSE}
     [TInterlocked.Increment(FNextRequestId), FUri]);
+{$ENDIF}
 
   SendInternal(Request);
   // 握手响应异步到达并交给订阅者处理; 此处不阻塞等待.
@@ -372,7 +391,11 @@ function TLspTransport.SendRequest(const AMethod: String; const AParams: String;
 var
   Request: String;
 begin
+{$IFDEF FPC}
+  AId := NextRequestId;
+{$ELSE}
   AId := TInterlocked.Increment(FNextRequestId);
+{$ENDIF}
   AResult := '';
   Request := Format('{"jsonrpc":"2.0","id":%d,"method":"%s","params":%s}',
     [AId, AMethod, AParams]);
@@ -400,33 +423,87 @@ begin
     ParamsStr := AParams
   else
     ParamsStr := '{}';
+{$IFDEF FPC}
+  // FPC has no nested procedures, and this one captured two values. Both are
+  // parameters of this method, not locals of its body, so they can simply be
+  // passed on. ParamsStr is computed once here and the queued call formats the
+  // identical string it did before -- the closure became an argument list, not a
+  // behaviour change.
+  // FPC has no nested procedures, and the inline procedure in the Delphi
+  // branch captured two values. The payload therefore travels in
+  // FPendingSends rather than in a closure: the queued call runs after this
+  // frame is gone, so a captured reference would dangle by then.
+  if not Assigned(FPendingSends) then
+    FPendingSends := TList<string>.Create;
+  FPendingSends.Add(Format('{"jsonrpc":"2.0","method":"%s","params":%s}',
+    [AMethod, ParamsStr]));
+  // See the receiver note above: nil is rejected, and in this
+  // project's -Mdelphiunicode mode the bound form is `O.P` with NO @.
+  // @Method is the objfpc spelling and is an error here.
+  TThread.Queue(TThread.CurrentThread, SendNotificationQueued);
+{$ELSE}
   TThread.Queue(nil,
     procedure
     begin
       SendInternal(Format('{"jsonrpc":"2.0","method":"%s","params":%s}', [AMethod, ParamsStr]));
     end);
+{$ENDIF}
 end;
+
+{$IFDEF FPC}
+procedure TLspTransport.SendNotificationQueued;
+var
+  Payload: string;
+begin
+  if not Assigned(FPendingSends) or (FPendingSends.Count = 0) then
+    Exit;
+  Payload := FPendingSends[0];
+  FPendingSends.Delete(0);
+  SendInternal(Payload);
+end;
+{$ENDIF}
+
+{$IFDEF FPC}
+function TLspTransport.NextRequestId: Integer;
+begin
+  FLock.Enter;
+  try
+    Inc(FNextRequestId);
+    Result := FNextRequestId;
+  finally
+    FLock.Leave;
+  end;
+end;
+{$ENDIF}
+
+{$IFDEF FPC}
+constructor TLspReadThread.Create(AOwner: TObject);
+begin
+  inherited Create(True);
+  FreeOnTerminate := False;
+  FOwner := AOwner;
+end;
+
+procedure TLspReadThread.Execute;
+begin
+  TLspTransport(FOwner).DoReadThread;
+end;
+{$ENDIF}
 
 procedure TLspTransport.DoReadThread;
 var
   Chunk: TBytes;
-  BytesRead: DWORD;
-  OldLen: Integer;
-  HeaderEnd: Integer;
-  ContentLength: Integer;
-  I: Integer;
-  HeaderStr: string;
-  ClPos: Integer;
-  ClValue: string;
+  N: Integer;
   BodyStr: string;
-  Remaining: Integer;
 begin
-  SetLength(Chunk, 8192);
   try
     while FState <> tsShuttingDown do
     begin
-      BytesRead := 0;
-      if not ReadFile(FStdoutRead, Chunk[0], Length(Chunk), BytesRead, nil) or (BytesRead = 0) then
+      if not Assigned(FProcess) then
+        Break;
+      // 阻塞读: 有数据即返回, 0 = EOF, -1 = 硬错误
+      N := FProcess.Read(Chunk);
+      if N <= 0 then
       begin
         if FState = tsShuttingDown then
           Break;
@@ -434,57 +511,15 @@ begin
         Continue;
       end;
 
-      // 按字节累积
-      OldLen := Length(FReadBuf);
-      SetLength(FReadBuf, OldLen + Integer(BytesRead));
-      Move(Chunk[0], FReadBuf[OldLen], BytesRead);
+      // 交给纯 Pascal 的帧解码器 (LSP.JsonRpc, 已被 FPC headless 单测覆盖)
+      FDecoder.Feed(Chunk);
 
-      // 解析一或多条 Content-Length 帧
-      repeat
-        // 定位 "\r\n\r\n" (13 10 13 10)
-        HeaderEnd := -1;
-        for I := 0 to Length(FReadBuf) - 4 do
-          if (FReadBuf[I] = 13) and (FReadBuf[I + 1] = 10) and
-             (FReadBuf[I + 2] = 13) and (FReadBuf[I + 3] = 10) then
-          begin
-            HeaderEnd := I;
-            Break;
-          end;
-        if HeaderEnd < 0 then
-          Break;
-
-        HeaderStr := TEncoding.UTF8.GetString(FReadBuf, 0, HeaderEnd);
-        ContentLength := 0;
-        ClPos := Pos('Content-Length:', HeaderStr);
-        if ClPos > 0 then
-        begin
-          ClValue := Trim(Copy(HeaderStr, ClPos + Length('Content-Length:'), MaxInt));
-          ContentLength := StrToIntDef(ClValue, 0);
-        end;
-
-        if ContentLength <= 0 then
-        begin
-          // 畸形头: 丢弃头部块, 继续扫描
-          Remaining := Length(FReadBuf) - (HeaderEnd + 4);
-          if Remaining > 0 then
-            Move(FReadBuf[HeaderEnd + 4], FReadBuf[0], Remaining);
-          SetLength(FReadBuf, Remaining);
-          Continue;
-        end;
-
-        if Length(FReadBuf) < HeaderEnd + 4 + ContentLength then
-          Break; // 正文不完整, 等待更多字节
-
-        BodyStr := TEncoding.UTF8.GetString(FReadBuf, HeaderEnd + 4, ContentLength);
+      // 解析出所有已完整的 Content-Length 帧
+      while FDecoder.TryPopBody(BodyStr) do
+      begin
         FLastBody := BodyStr;
-
-        Remaining := Length(FReadBuf) - (HeaderEnd + 4 + ContentLength);
-        if Remaining > 0 then
-          Move(FReadBuf[HeaderEnd + 4 + ContentLength], FReadBuf[0], Remaining);
-        SetLength(FReadBuf, Remaining);
-
         TThread.Queue(nil, TLspQueuedMessage.Create(Self, BodyStr).Dispatch);
-      until False;
+      end;
     end;
   finally
     SetLength(Chunk, 0);
@@ -593,20 +628,16 @@ end;
 
 procedure TLspTransport.SendInternal(const AMessage: String);
 var
-  BytesWritten: DWORD;
-  Utf8Body: UTF8String;
-  Header: UTF8String;
-  Utf8Full: UTF8String;
+  Frame: TBytes;
 begin
-  if (AMessage = '') or (FStdinWrite = 0) then
+  if (AMessage = '') or (not Assigned(FProcess)) then
     Exit;
 
-  // LSP 帧: "Content-Length: <bytes>\r\n\r\n<json>"; 长度按 UTF-8 字节计
-  Utf8Body := UTF8String(AMessage);
-  Header := UTF8String(Format('Content-Length: %d'#13#10#13#10, [Length(Utf8Body)]));
-  Utf8Full := Header + Utf8Body;
+  // LSP 帧: "Content-Length: <bytes>\r\n\r\n<json>", 长度按 UTF-8 字节计
+  // (组帧逻辑已抽到 LSP.JsonRpc, 与 FPC 侧单测共用同一实现)
+  Frame := BuildLspFrameBytes(AMessage);
 
-  if not WriteFile(FStdinWrite, Utf8Full[1], Length(Utf8Full), BytesWritten, nil) then
+  if not FProcess.Write(Frame) then
     HandleError('Failed to write to LSP pipe');
 
   FLastActivity := Now;

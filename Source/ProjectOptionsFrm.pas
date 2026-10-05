@@ -23,7 +23,7 @@ interface
 
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
-  ExtDlgs, StdCtrls, ExtCtrls, Buttons, ComCtrls, main, project,
+  ExtDlgs, StdCtrls, ExtCtrls, Buttons, ComCtrls, project,
   ProjectTypes, Spin, ValEdit, CompOptionsFrame, ShellApi, Grids,DataFrm;
 
 type
@@ -589,8 +589,7 @@ begin
   fOldIndex := -1;
 
   // Create file tree
-  lvFiles.Images := MainForm.ProjectView.Images;
-  lvFiles.Items.Assign(MainForm.ProjectView.Items);
+  MainUi.CopyProjectViewTo(lvFiles);
   lvFiles.Items[0].Expand(False);
 end;
 

@@ -86,7 +86,7 @@ type
 implementation
 
 uses
-  utils, IconFrm, devcfg, version, Templates, main, MultiLangSupport, ProjectTypes;
+  utils, IconFrm, devcfg, version, Templates, MultiLangSupport, ProjectTypes, MainUi;
 
 {$R *.dfm}
 
@@ -94,7 +94,7 @@ procedure TNewTemplateForm.FormShow(Sender: TObject);
 begin
   LoadText;
 
-  cmbName.Text := MainForm.Project.Name;
+  cmbName.Text := MainUi.ProjectName;
   txtDescr.Text := 'This is a custom project.';
 
   ReadCategories;

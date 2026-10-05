@@ -43,7 +43,7 @@
 interface
 
 uses
-  System.SysUtils, System.Classes, Vcl.Graphics, SynEdit, SynEditTypes,
+  System.SysUtils, System.Classes, Winapi.Windows, Vcl.Graphics, SynEdit, SynEditTypes,
   Lsp.Editor.Types, Lsp.Editor.Interfaces;
 
 type

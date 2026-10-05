@@ -103,7 +103,7 @@ implementation
 
 uses
   ToolEditFrm, inifiles, devcfg, utils, MultiLangSupport, DataFrm,
-  version, main;
+  version;
 
 {$R *.dfm}
 

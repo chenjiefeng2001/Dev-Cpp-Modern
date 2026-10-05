@@ -1,0 +1,329 @@
+name: FPC Core CI (Phase-F / F0)
+
+# Purpose: prove that the UI-independent core of Dev-Cpp-Modern builds and
+# passes its smoke tests under Free Pascal on both Windows and Linux, with
+# zero Embarcadero / commercial toolchain involvement. This is the executable
+# form of the F0 milestone in doc/FPC-Lazarus渐进式移植实施方案.md.
+#
+# Exit criteria of F0:
+#   * fpc-core (ubuntu-latest)     -> portable core compiles + tests pass
+#   * fpc-core (windows-latest)   -> same, plus the Win32-only toolchain unit
+#   * qa-gate-profiles            -> Delphi and FPC dialect gates both green
+#   * lcl-svg-runtime (windows)   -> the converted LFM LOADS and its 116 icons draw
+#   * f3-form-ratchet             -> the 53 forms do not become less convertible
+#
+# f3-form-ratchet is text analysis only -- no Lazarus, no Pascal compiler. It
+# answers the question the F3 estimate depends on: of the 53 self-authored .dfm,
+# how many can a DFM converter read without a control it has never heard of.
+#
+# lcl-svg-runtime is the odd one out and the reason this workflow exists in
+# this shape: it is the only job that RUNS converted output. Every other check
+# here parses text, and this project has been caught three times by text that
+# parses perfectly and does nothing -- an extractor that lost 12x of the icon
+# data, a control whose LoadSvgLists never loaded anything, and a converted
+# .lfm set whose provenance header made every file unreadable to the LCL.
+
+on:
+  push:
+    branches: [master, main, phase4-lsp-modernize]
+    paths:
+      - "Source/Core/**"
+      - "Source/Debugger/**"
+      - "Source/Toolchain/**"
+      - "Source/Fpc/**"
+      - "Tests/FpcCoreTests/**"
+      - "tools/qa_check.py"
+      - "tools/f3_form_survey.py"
+      - "tools/f3_form_ratchet.py"
+      - "tools/f3_form_baseline.txt"
+      - "tools/f3_svg_extract.py"
+      - "tools/lcl_svg_struct_check.py"
+      - "tools/f3_imageindex_audit.py"
+      - "tools/f3_removed_controls.py"
+      - "tools/f3_svg_semantics.py"
+      - "tools/f3_lfm_check.py"
+      - "tools/f3_dfm_to_lfm.py"
+      - "tools/build_svg_probe.ps1"
+      - "Tests/FpcCoreTests/svg/**"
+      - "Source/**/*.dfm"
+      - ".github/workflows/fpc_ci.yml"
+  pull_request:
+    paths:
+      - "Source/Core/**"
+      - "Source/Debugger/**"
+      - "Source/Toolchain/**"
+      - "Source/Fpc/**"
+      - "Tests/FpcCoreTests/**"
+      - "tools/qa_check.py"
+      - "tools/f3_form_survey.py"
+      - "tools/f3_form_ratchet.py"
+      - "tools/f3_form_baseline.txt"
+      - "tools/f3_svg_extract.py"
+      - "tools/lcl_svg_struct_check.py"
+      - "tools/f3_imageindex_audit.py"
+      - "tools/f3_removed_controls.py"
+      - "tools/f3_svg_semantics.py"
+      - "tools/f3_lfm_check.py"
+      - "tools/f3_dfm_to_lfm.py"
+      - "tools/build_svg_probe.ps1"
+      - "Tests/FpcCoreTests/svg/**"
+      - "Source/**/*.dfm"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  LAZ_VERSION: "4.4"
+
+jobs:
+  fpc-core:
+    name: FPC core (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Lazarus / Free Pascal
+        uses: gcarreno/setup-lazarus@v3
+        with:
+          laz-version: ${{ env.LAZ_VERSION }}
+
+      - name: Build portable core (lazbuild)
+        shell: bash
+        run: lazbuild --build-all --no-write-project Tests/FpcCoreTests/FpcCorePortable.lpi
+
+      - name: Run core smoke tests
+        shell: bash
+        run: |
+          set -e
+          BIN=$(find Tests/FpcCoreTests/lib -maxdepth 2 -type f \
+                \( -name 'FpcCoreTests' -o -name 'FpcCoreTests.exe' \) | head -n 1)
+          if [ -z "$BIN" ]; then
+            echo "::error::core test binary not found"
+            find Tests/FpcCoreTests/lib -type f || true
+            exit 1
+          fi
+          echo "running $BIN"
+          "$BIN"
+
+  fpc-toolchain:
+    name: FPC core + Win32 toolchain (windows)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Lazarus / Free Pascal
+        uses: gcarreno/setup-lazarus@v3
+        with:
+          laz-version: ${{ env.LAZ_VERSION }}
+
+      - name: Build Windows variant (ToolchainConfig uses Win32 pipes)
+        shell: bash
+        run: lazbuild --build-all --no-write-project Tests/FpcCoreTests/FpcCoreWin.lpi
+
+      - name: Run Windows-variant smoke tests
+        shell: bash
+        run: |
+          set -e
+          BIN=$(find Tests/FpcCoreTests/lib -maxdepth 2 -type f \
+                \( -name 'FpcCoreTestsWin' -o -name 'FpcCoreTestsWin.exe' \) | head -n 1)
+          if [ -z "$BIN" ]; then
+            echo "::error::win test binary not found"
+            find Tests/FpcCoreTests/lib -type f || true
+            exit 1
+          fi
+          "$BIN"
+
+  qa-gate-profiles:
+    name: QA gate (delphi + fpc profiles)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: "Delphi profile (must stay green: no FPC traces in the Delphi tree)"
+        run: python3 tools/qa_check.py --profile delphi
+
+      - name: "FPC profile (allows TProcess / LCL idioms in migration work)"
+        run: python3 tools/qa_check.py --profile fpc
+
+      - name: "F0 artifact structure check (no Lazarus needed)"
+        run: python3 tools/fpc_artifact_check.py
+
+      # Both of these need no compiler, so they belong in the gate job rather
+      # than waiting on the Lazarus jobs. The first verifies the extracted SVG
+      # data still round-trips from DataFrm.dfm; the second verifies the STRUCTURE
+      # of the LCL control that will consume it.
+      #
+      # The --self-test step comes first deliberately: it asserts that each of
+      # that gate's checks can actually FAIL. The first version of the gate had
+      # only ever printed OK -- over a file that contained six defects no compiler
+      # would have accepted -- so a check that has never failed is treated as
+      # unproven until it is shown to fail on a deliberately broken input.
+      - name: "SVG data round-trip from the DFM (no Lazarus needed)"
+        run: python3 tools/f3_svg_extract.py --verify
+
+      - name: "LCL SVG structural gate -- prove the checks can fail"
+        run: python3 tools/lcl_svg_struct_check.py --self-test
+
+      - name: "LCL SVG structural gate"
+        run: python3 tools/lcl_svg_struct_check.py
+
+      # ImageIndex topology: every ImageIndex in the tree, classified, with the
+      # SVG-bound ones range-asserted against the extracted icon counts. Fails on
+      # an out-of-bounds index, a negative that is not the -1 sentinel, or an
+      # Images assignment naming a list the extractor never saw.
+      #
+      # Deliberately NOT applied to all 188 sites. 57 bind an SVG list; the rest
+      # are -1 "no icon" markers or belong to non-SVG lists, and asserting those
+      # would bury the 57 that matter in 123 false alarms.
+      - name: "ImageIndex topology ledger (no out-of-bounds)"
+        run: python3 tools/f3_imageindex_audit.py
+
+      # Negative assertion: TAnimate and TDdeServerConv must STAY removed. A
+      # deletion is not a property -- a merge or a revert can undo it, and the
+      # F3 ratchet only notices when the convertible count drops, which one
+      # reintroduced control in one form would not do.
+      - name: "Removed-control guard (TAnimate / TDdeServerConv stay gone)"
+        run: python3 tools/f3_removed_controls.py
+
+      # Icon SEMANTICS: one action must use one icon, everywhere it appears.
+      # Separate from the range audit on purpose -- that one proves in-range, this
+      # one proves the 57 sites are internally consistent. Exits 0 and reports
+      # rather than fails, because a shared CONTROL NAME across two unrelated
+      # forms (btnBrowse picking a compiler path vs a project icon) is ordinary
+      # Delphi practice and predates the port.
+      - name: "SVG icon semantic consistency"
+        run: python3 tools/f3_svg_semantics.py
+
+      # LFM conversion: no residual VCL-only properties, object tree identical to
+      # the source, CRLF and no BOM, no comment header (TParser accepts no
+      # comment syntax -- see f3_dfm_to_lfm.py), every file accounted for in
+      # _generated.json, and every SVG list a consumer form binds to actually
+      # declared by a generated fragment.
+      - name: "LFM conversion + SVG binding check"
+        run: python3 tools/f3_lfm_check.py
+
+  # ---------------------------------------------------------------------------
+  # The SVG work is the only part of F3 that has ever been RUN rather than
+  # parsed. It needs a compiled LCL and fpvectorial, which the stock Lazarus
+  # install does not ship: `lcl/units/` contains the IDE's own 288 units and
+  # neither graphics.ppu nor fpvectorial.ppu. Both packages are built first --
+  # measured locally, both exit 0 and both are required (doc F3-SVG section
+  # 11.1). Without them every probe below fails to compile, and the message
+  # ("Can't find unit Interfaces") reads as "Lazarus is not installed".
+  #
+  # Windows-only, and that is a stated limitation rather than a choice: the
+  # probe build is tools/build_svg_probe.ps1, which hard-codes the win32 unit
+  # directories and the x86_64-win64 fpc. Porting it is a separate piece of work
+  # that has NOT been done, so no green Linux badge is claimed here.
+  # ---------------------------------------------------------------------------
+  lcl-svg-runtime:
+    name: LCL SVG runtime (lcm loads the generated LFM)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Lazarus / Free Pascal
+        uses: gcarreno/setup-lazarus@v3
+        with:
+          laz-version: ${{ env.LAZ_VERSION }}
+
+      - name: Build the LCL (win32 widgetset)
+        shell: pwsh
+        run: lazbuild --ws=win32 C:\lazarus\lcl\interfaces\lcl.lpk
+        continue-on-error: false
+
+      - name: Build fpvectorial (the SVG parser and canvas renderer)
+        shell: pwsh
+        run: lazbuild C:\lazarus\components\fpvectorial\fpvectorialpkg.lpk
+
+      # Regenerates SvgData.pas + svg_manifest.json and rewrites every .lfm,
+      # so this job also proves the converters are reproducible from a clean
+      # checkout rather than depending on committed artefacts.
+      - name: "Regenerate the SVG data and the converted LFM"
+        shell: pwsh
+        run: |
+          python tools/f3_svg_extract.py --verify
+          python tools/f3_dfm_to_lfm.py --only batch-a
+          python tools/f3_dfm_to_lfm.py --only svg --emit-svg-lists
+          # Packman/Main.dfm carries TSVGIconImageCollection and
+          # TSVGIconVirtualImageList, which have no LCL counterpart, so the
+          # converter refuses it and exits 1 BY DESIGN. Assert that rather than
+          # letting a working gate look like a red one.
+          if ($LASTEXITCODE -ne 1) { throw "expected the Packman/Main refusal, got $LASTEXITCODE" }
+
+      - name: "Build the SVG probes"
+        shell: pwsh
+        run: ./tools/build_svg_probe.ps1 -Target all
+
+      # Three questions, three programs. DataProbe: do the 116 payloads reach
+      # the program at all. ListProbe: does the control rasterise them (0
+      # failures is a hard assertion, not a reported ceiling). LfmProbe: does
+      # the file the CONVERTER wrote stream through the real LCL reader with
+      # every icon drawn -- the check no structural gate could stand in for.
+      - name: "SVG data arrives (5 lists / 116 payloads)"
+        shell: pwsh
+        run: ./Tests/FpcCoreTests/svg/SvgDataProbe.exe
+
+      - name: "TLclSvgImageList rasterises every icon (expect 0 failures)"
+        shell: pwsh
+        run: ./Tests/FpcCoreTests/svg/SvgListProbe.exe
+
+      - name: "the generated .svg-lists.lfm loads and draws (expect PASS)"
+        shell: pwsh
+        run: ./Tests/FpcCoreTests/svg/SvgLfmProbe.exe
+
+      # RasterProbe deliberately BYPASSES the control and feeds SvgData straight
+      # to fpvectorial, so it still reports the 7 zero-chord failures. That is
+      # the design (the control normalises them in Rasterise), and it is the
+      # reason this job runs all four: a RasterProbe that started reporting 0
+      # would mean somebody "fixed" the data and silently moved the invariant.
+      - name: "RasterProbe still reports 7 raw fpvectorial failures (by design)"
+        shell: pwsh
+        run: |
+          $out = ./Tests/FpcCoreTests/svg/RasterProbe.exe 2>&1 | Out-String
+          $out
+          if ($out -notmatch 'rendered ok : 109') {
+            throw "expected 109/116 to render when bypassing the control"
+          }
+          if ($out -notmatch 'RESULT: INCOMPLETE') {
+            throw "RasterProbe must still report INCOMPLETE; it bypasses the normaliser"
+          }
+
+  f3-form-ratchet:
+    name: F3 form-conversion ratchet
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Pure text analysis: no Lazarus, no Pascal compiler, no form designer.
+      # It answers the question F3's estimate depends on and nothing else --
+      # how many of the 53 forms a converter can read unaided.
+      - name: "F3 form survey (informational)"
+        run: python3 tools/f3_form_survey.py
+
+      # The gate. Fails if the convertible count drops below the recorded
+      # baseline, i.e. if a control appears that the Lazarus converter cannot
+      # place. Rises are reported but never auto-accepted: recording a higher
+      # baseline is a deliberate act, not a side effect.
+      - name: "F3 form ratchet (must not regress)"
+        run: python3 tools/f3_form_ratchet.py

@@ -151,7 +151,7 @@ type
 implementation
 
 uses
-  System.UItypes, main, devcfg, CPUFrm, multilangsupport, debugger, utils, Controls, Math;
+  System.UItypes, devcfg, CPUFrm, multilangsupport, debugger, utils, Controls, Math, MainUi;
 
 // macro for all the things that need to be done when we are finished parsing the current block
 
@@ -166,25 +166,25 @@ begin
   // GDB determined that the source code is more recent than the executable. Ask the user if he wants to rebuild.
   if doreceivedsfwarning then begin
     if MessageDlg(Lang[ID_MSG_SOURCEMORERECENT], mtConfirmation, [mbYes, mbNo], 0) = mrYes then begin
-      MainForm.Debugger.Stop;
-      MainForm.actCompileExecute(nil);
+      MainUi.StopDebugSession;
+      MainUi.RunCompileAction;
       Exit;
     end;
   end;
 
   // The program to debug has stopped. Stop the debugger
   if doprocessexited then begin
-    MainForm.Debugger.Stop;
+    MainUi.StopDebugSession;
     Exit;
   end;
 
   // An evaluation variable has been processed. Forward the results
-  if doevalready and Assigned(MainForm.Debugger.OnEvalReady) then
-    MainForm.Debugger.OnEvalReady(fEvalValue);
+  if doevalready then
+    MainUi.FireEvalReady(fEvalValue);
 
   // Delete unimportant stuff to reduce clutter
   fOutput := StringReplace(fOutput, #26, '->', [rfReplaceAll]);
-  MainForm.DebugOutput.Lines.Add(fOutput);
+  MainUi.AppendDebugOutput(fOutput);
 
   // Some part of the CPU form has been updated
   if Assigned(CPUForm) and not doreceivedsignal then begin
@@ -199,8 +199,8 @@ begin
   end;
 
   if doupdateexecution then begin
-    MainForm.GotoBreakpoint(fBreakPointFile, fBreakPointLine); // set active line
-    MainForm.Debugger.RefreshWatchVars; // update variable information
+    MainUi.NavigateToFileAndLine(fBreakPointFile, fBreakPointLine); // set active line
+    MainUi.RefreshWatchVars; // update variable information
   end;
 
   if doreceivedsignal then begin
@@ -225,7 +225,7 @@ begin
     if SignalDialog.ShowModal = ID_OK then begin
       devData.ShowCPUSignal := SignalCheck.Checked;
       if SignalCheck.Checked and not Assigned(CPUForm) then begin
-        MainForm.ViewCPUItemClick(nil);
+        MainUi.OpenCpuWindow;
         spawnedcpuform := true;
       end;
     end;
@@ -235,9 +235,9 @@ begin
 
   // CPU form updates itself when spawned, don't update twice!
   if (doupdatecpuwindow and not spawnedcpuform) and Assigned(CPUForm) then begin
-    MainForm.Debugger.SendCommand('disas', '');
-    MainForm.Debugger.SendCommand('info registers', '');
-    MainForm.Debugger.SendCommand('backtrace', '');
+    MainUi.SendDebuggerCommand('disas', '');
+    MainUi.SendDebuggerCommand('info registers', '');
+    MainUi.SendDebuggerCommand('backtrace', '');
   end;
 end;
 

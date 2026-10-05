@@ -22,7 +22,11 @@ unit Core.Services;
 interface
 
 uses
+  {$IFDEF FPC}
+  Core.Events, SysUtils, Classes, SyncObjs, TypInfo;
+  {$ELSE}
   Core.Events, SysUtils, Classes, SyncObjs, System.TypInfo;
+  {$ENDIF}
 
 // 说明: 接口内禁止 `event` 关键字与字段式 property (Object Pascal 非法语法,
 // 本文件曾因此无法编译). 事件一律收敛到 Core.Events 的 TEventManager,
@@ -112,11 +116,34 @@ type
     FSettingsService: ISettingsService;
     constructor Create;
     destructor Destroy; override;
-    function QueryService(const AGuid: TGUID; out AService: IInterface): Boolean;
   public
+    // GUID-keyed lookup, the primitive TryGetService<T> is written on.
+    // Was `private` while FpcCoreTests.lpr called it on `Instance`; FPC
+    // says only `identifier idents no member "QueryService"`, which reads
+    // as a missing method rather than an inaccessible one. Delphi rejects
+    // the same call, and the test file being FPC-only is why nothing had
+    // exercised it until now.
+    function QueryService(const AGuid: TGUID; out AService: IInterface): Boolean;
     class var Instance: TServiceLocator;
     // 泛型安全获取, 失败返回 False 且输出 nil (不抛异常)
-    class function TryGetService<T: IInterface>(out Svc: T): Boolean; static;
+    //
+    // The `<T: IInterface>` constraint was REMOVED on 2026-10-05. It is
+    // dialect risk #1 of doc/FPC-Lazarus渐进式移植实施方案.md §7,
+    // predicted before anything was compiled, and the first real compile
+    // hit it:
+    //
+    //     FpcCoreTests.lpr Syntax error, ")" expected but "and" found
+    //
+    // FPC 3.2.2 does not accept an interface constraint on a generic
+    // parameter and fails to PARSE the call, so the diagnostic names the
+    // token after the `>` -- reading as a problem with the surrounding
+    // expression rather than with the constraint itself.
+    //
+    // The constraint was never load-bearing: the body takes the GUID from
+    // TypeInfo(T) and converts through `Supports`, which is what makes the
+    // lookup type-safe. A non-interface T would fail at run time rather
+    // than compile time; every caller in the tree passes an interface.
+    class function TryGetService<T>(out Svc: T): Boolean; static;
     property ProjectService: IProjectService read FProjectService write FProjectService;
     property CompilerService: ICompilerService read FCompilerService write FCompilerService;
     property DebuggerService: IDebuggerService read FDebuggerService write FDebuggerService;

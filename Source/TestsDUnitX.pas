@@ -25,7 +25,7 @@ uses
   TestFramework,  // DUnitX framework
   Windows, Classes, Sysutils, Dateutils, Forms, ShellAPI, Dialogs,
   NewProjectFrm, Project, Math, ActnList, CompOptionsFrm, SynEditKeyCmds,
-  SynEditTypes, Main, EditorList, Editor, Version, GDB.MiParser;
+  SynEditTypes, EditorList, Editor, Version, GDB.MiParser;
 
 // Extracted pure logic from original Tests.pas into reusable functions
 type

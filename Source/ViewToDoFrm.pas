@@ -74,7 +74,7 @@ type
 implementation
 
 uses
-  System.UItypes, main, editor, project, StrUtils, MultiLangSupport, devcfg;
+  System.UItypes, editor, project, StrUtils, MultiLangSupport, devcfg, MainUi;
 
 {$R *.dfm}
 
@@ -162,8 +162,8 @@ var
 begin
   sl := TStringList.Create;
   try
-    for I := 0 to MainForm.EditorList.PageCount - 1 do begin
-      e := MainForm.EditorList.Editors[i];
+    for I := 0 to MainUi.EditorPageCount - 1 do begin
+      e := TEditor(MainUi.EditorAt(I));
       if Assigned(e) then begin
         if e.FileName = Filename then
           sl.Assign(e.Text.Lines)
@@ -202,21 +202,21 @@ var
   I: integer;
 begin
   if Current then begin
-    e := MainForm.EditorList.GetEditor;
+    e := TEditor(MainUi.EditorByIndex(-1, nil));
     if Assigned(e) then
       AddToDo(e.FileName);
     Exit;
   end;
 
   if InProject and not OpenOnly then begin
-    if Assigned(MainForm.Project) then
-      for I := 0 to pred(MainForm.Project.Units.Count) do
-        AddToDo(MainForm.Project.Units[I].filename);
+    if Assigned(MainUi.CurrentProject) then
+      for I := 0 to pred(MainUi.ProjectUnitCount) do
+        AddToDo(MainUi.ProjectUnitFileName(I));
   end;
 
   if OpenOnly then begin
-    for I := 0 to pred(MainForm.EditorList.PageCount) do begin
-      e := MainForm.EditorList[i];
+    for I := 0 to pred(MainUi.EditorPageCount) do begin
+      e := TEditor(MainUi.EditorAt(I));
       if Assigned(e) then
         if InProject and e.InProject then
           AddToDo(e.FileName)
@@ -224,8 +224,8 @@ begin
   end;
 
   if NotInProject then begin
-    for I := 0 to pred(MainForm.EditorList.PageCount) do begin
-      e := MainForm.EditorList[i];
+    for I := 0 to pred(MainUi.EditorPageCount) do begin
+      e := TEditor(MainUi.EditorAt(I));
       if Assigned(e) and not e.InProject then
           AddToDo(e.FileName);
     end;
@@ -330,7 +330,7 @@ begin
   if not Assigned(Item.Data) then
     Exit;
 
-  e := MainForm.EditorList.GetEditorFromFileName(PToDoRec(Item.Data)^.Filename);
+  e := TEditor(MainUi.FindEditorByFileName(PToDoRec(Item.Data)^.Filename));
   if Assigned(e) then begin
     PToDoRec(Item.Data)^.IsDone := Item.Checked;
     if Item.Checked then begin
@@ -380,11 +380,9 @@ begin
   if not Assigned(lv.Selected.Data) then
     Exit;
 
-  e := MainForm.EditorList.GetEditorFromFilename(PToDoRec(lv.Selected.Data)^.Filename);
-  if Assigned(e) then begin
-    e.SetCaretPosAndActivate(PToDoRec(lv.Selected.Data)^.Line + 1, 1);
+  if MainUi.NavigateToFileAndLine(PToDoRec(lv.Selected.Data)^.Filename,
+    PToDoRec(lv.Selected.Data)^.Line + 1) then
     Close;
-  end;
 end;
 
 procedure TViewToDoForm.chkNoDoneClick(Sender: TObject);

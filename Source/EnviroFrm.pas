@@ -125,8 +125,8 @@ type
 implementation
 
 uses
-  System.UITypes, ShellAPI, Filectrl, devcfg, MultiLangSupport, version, DataFrm, utils, FileAssocs, ImageTheme, main,
-  StrUtils;
+  System.UITypes, ShellAPI, Filectrl, devcfg, MultiLangSupport, version, DataFrm, utils, FileAssocs, ImageTheme,
+  StrUtils, MainUi;
 
 {$R *.dfm}
 
@@ -209,8 +209,7 @@ begin
       TStyleManager.TrySetStyle(cDelphiStyle[Style]);
   end;
 
-  MainForm.Font.Name := devData.InterfaceFont;
-  MainForm.Font.Size := devData.InterfaceFontSize;
+  MainUi.ApplyIdeFont(devData.InterfaceFont, devData.InterfaceFontSize);
 
   try
 

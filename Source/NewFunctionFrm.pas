@@ -59,7 +59,7 @@ type
 implementation
 
 uses
-  System.UITypes, editor, main, MultiLangSupport, devcfg;
+  System.UITypes, editor, MultiLangSupport, devcfg, MainUi;
 
 {$R *.dfm}
 
@@ -81,13 +81,13 @@ begin
 
   sl := TStringList.Create;
   try
-    MainForm.CppParser.GetClassesList(sl);
+    MainUi.ListClassNames(sl);
     cmbClass.Items.Assign(sl);
   finally
     sl.Free;
   end;
 
-  cmbClass.ItemIndex := cmbClass.Items.IndexOf(PStatement(MainForm.ClassBrowser.Selected.Data)^._Command);
+  cmbClass.ItemIndex := cmbClass.Items.IndexOf(PStatement(MainUi.ClassBrowserSelectedClass)^._Command);
 
   txtType.SetFocus;
 end;
@@ -113,14 +113,14 @@ begin
   end;
 
   // We need a CPP file if we want to define it over there
-  MainForm.CppParser.GetSourcePair(st^._DefinitionFileName, CppFname, fName);
+  MainUi.ClassSourcePair(st^._DefinitionFileName, CppFname, fName);
   if not chkInline.Checked and not FileExists(CppFname) then begin
     MessageDlg(Lang[ID_NEWVAR_MSG_NOIMPL], mtError, [mbOk], 0);
     Exit;
   end;
 
   // Open header file
-  e := MainForm.EditorList.GetEditorFromFileName(fName);
+  e := TEditor(MainUi.FindEditorByFileName(fName));
   if not Assigned(e) then
     Exit;
 
@@ -132,7 +132,7 @@ begin
   else
     VarScope := scsNone; // shut up compiler
   end;
-  Line := MainForm.CppParser.SuggestMemberInsertionLine(st, VarScope, AddScopeStr);
+  Line := MainUi.SuggestMemberInsertionLine(st, VarScope, AddScopeStr);
   if Line = -1 then begin
     MessageDlg(Lang[ID_NEWVAR_MSG_NOLINE], mtError, [mbOk], 0);
     Exit;
@@ -184,7 +184,7 @@ begin
     Exit;
   end;
 
-  e := MainForm.EditorList.GetEditorFromFileName(CppFname);
+  e := TEditor(MainUi.FindEditorByFileName(CppFname));
   if not Assigned(e) then
     Exit;
 

@@ -73,7 +73,7 @@ type
 implementation
 
 uses
-  System.IOUtils, System.UITypes, ShellAPI, Main, FileCtrl, version, devcfg, utils, MultiLangSupport, DataFrm;
+  System.IOUtils, System.UITypes, ShellAPI, FileCtrl, version, devcfg, utils, MultiLangSupport, DataFrm, MainUi;
 
 {$R *.dfm}
 
@@ -163,7 +163,7 @@ var
   FileName: String;
 begin
   // Create a rough copy of the current file
-  e := MainForm.EditorList.GetEditor;
+  e := TEditor(MainUi.EditorByIndex(-1, nil));
   if Assigned(e) then begin
     FileName := e.FileName;
     synExample.Text := e.Text.Text;

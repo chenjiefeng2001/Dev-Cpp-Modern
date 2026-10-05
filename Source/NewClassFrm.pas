@@ -69,7 +69,7 @@ type
 implementation
 
 uses
-  System.UITypes, main, CppParser, MultiLangSupport, version, editor, devcfg;
+  System.UITypes, CppParser, MultiLangSupport, version, editor, devcfg, MainUi;
 
 {$R *.dfm}
 
@@ -81,12 +81,13 @@ end;
 procedure TNewClassForm.FormShow(Sender: TObject);
 var
   sl: TStringList;
+  SelectedClass: PStatement;
 begin
   LoadText;
 
   sl := TStringList.Create;
   try
-    MainForm.CppParser.GetClassesList(sl);
+    MainUi.ListClassNames(sl);
     cmbClass.Items.Assign(sl);
   finally
     sl.Free;
@@ -96,12 +97,11 @@ begin
   cmbScope.ItemIndex := cmbScope.Items.IndexOf('public');
 
   // Check if the statement the user selected is a class...
-  if Assigned(MainForm.ClassBrowser.Selected) and
-    Assigned(MainForm.ClassBrowser.Selected.Data) and
-    (PStatement(MainForm.ClassBrowser.Selected.Data)^._Kind = skClass) then begin
+  SelectedClass := PStatement(MainUi.ClassBrowserSelectedClass);
+  if Assigned(SelectedClass) then begin
 
     // If we are spawned from the class browser, set inheritcance to selected class
-    cmbClass.ItemIndex := cmbClass.Items.IndexOf(PStatement(MainForm.ClassBrowser.Selected.Data)^._Command);
+    cmbClass.ItemIndex := cmbClass.Items.IndexOf(SelectedClass^._Command);
     if cmbClass.ItemIndex <> -1 then
       chkInherit.Checked := True;
   end else begin
@@ -122,8 +122,8 @@ end;
 procedure TNewClassForm.txtNameChange(Sender: TObject);
 begin
   if txtName.Text <> '' then begin
-    txtCppFile.Text := MainForm.Project.Directory + txtName.Text + '.cpp';
-    txtHFile.Text := MainForm.Project.Directory + txtName.Text + '.h';
+    txtCppFile.Text := MainUi.ProjectDirectory + txtName.Text + '.cpp';
+    txtHFile.Text := MainUi.ProjectDirectory + txtName.Text + '.h';
 
     // Make sure one can actually see what is going on
     txtCppFile.SelStart := Length(txtCppFile.Text) - 1;
@@ -169,8 +169,6 @@ end;
 
 procedure TNewClassForm.btnCreateClick(Sender: TObject);
 var
-  Node: PStatementNode;
-  Statement, InheritStatement: PStatement;
   idx: integer;
   e, headere: TEditor;
   hfName: String;
@@ -178,8 +176,8 @@ var
 begin
   // HEADER FILE IMPLEMENTATION
   if chkAddToProject.Checked then begin
-    idx := MainForm.Project.NewUnit(False, nil, txtHFile.Text);
-    e := MainForm.Project.OpenUnit(idx);
+    idx := MainUi.AddProjectUnit(txtHFile.Text);
+    e := TEditor(MainUi.OpenProjectUnit(idx));
     if idx = -1 then begin
       MessageDlg('Cannot add header file to project...', mtError, [mbOk], 0);
       Exit;
@@ -188,7 +186,7 @@ begin
     hFile := FileCreate(txtHFile.Text);
     if hFile > 0 then begin
       FileClose(hFile);
-      e := MainForm.EditorList.GetEditorFromFileName(txtHFile.Text);
+      e := TEditor(MainUi.FindEditorByFileName(txtHFile.Text));
     end else begin
       MessageDlg('Cannot create header file...', mtError, [mbOk], 0);
       Exit;
@@ -214,21 +212,10 @@ begin
     // Add inherited piece ": public foo"
     if chkInherit.Checked and (txtIncFile.Text <> '') then begin
 
-      InheritStatement := nil;
-
-      // Find class we inherit from
-      Node := MainForm.CppParser.Statements.FirstNode;
-      while Assigned(Node) do begin
-        Statement := Node^.Data;
-        if (Statement^._Kind = skClass) and (Statement^._Command = cmbClass.Text) and
-          (MainForm.Project.Units.Indexof(Statement^._DefinitionFileName) <> -1) then begin
-          InheritStatement := Statement;
-          break;
-        end;
-        Node := Node^.NextNode;
-      end;
-
-      if Assigned(InheritStatement) then
+      // Find class we inherit from. The facade answers the whole question
+      // (is the named base class declared in a file of THIS project?) so
+      // neither the parser node chain nor the unit list reaches here.
+      if MainUi.IsClassInCurrentProject(cmbClass.Text) then
         e.Text.Lines.Add('#include "' + txtIncFile.Text + '"')
       else
         e.Text.Lines.Add('#include <' + txtIncFile.Text + '>');
@@ -264,8 +251,8 @@ begin
 
   // CPP FILE IMPLEMENTATION
   if chkAddToProject.Checked then begin
-    idx := MainForm.Project.NewUnit(False, nil, txtCppFile.Text);
-    e := MainForm.Project.OpenUnit(idx);
+    idx := MainUi.AddProjectUnit(txtCppFile.Text);
+    e := TEditor(MainUi.OpenProjectUnit(idx));
     if idx = -1 then begin
       MessageDlg('Cannot add implementation file to project...', mtError, [mbOk], 0);
       Exit;
@@ -274,7 +261,7 @@ begin
     hFile := FileCreate(txtCppFile.Text);
     if hFile > 0 then begin
       FileClose(hFile);
-      e := MainForm.EditorList.GetEditorFromFileName(txtCppFile.Text);
+      e := TEditor(MainUi.FindEditorByFileName(txtCppFile.Text));
     end else begin
       MessageDlg('Cannot create implementation file...', mtError, [mbOk], 0);
       Exit;

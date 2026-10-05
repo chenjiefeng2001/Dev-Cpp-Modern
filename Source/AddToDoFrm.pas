@@ -53,7 +53,7 @@ type
 implementation
 
 uses
-  main, editor, devcfg, MultiLangSupport;
+  editor, devcfg, MultiLangSupport, MainUi;
 
 {$R *.dfm}
 
@@ -77,7 +77,7 @@ var
   Hdr: String;
   Prepend: String;
 begin
-  e := MainForm.EditorList.GetEditor;
+  e := TEditor(MainUi.EditorByIndex(-1, nil));
   if not Assigned(e) then begin
     Close;
     Exit;

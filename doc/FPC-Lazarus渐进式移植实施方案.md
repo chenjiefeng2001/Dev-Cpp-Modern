@@ -227,7 +227,7 @@
 - 门面 **89 声明 / 89 实现，双向零漂移**。
 - 23 条替换**逐条命中数断言通过**；CRLF 完整性：MainUi 927 / FindFrm 585 / ProfileAnalysisFrm 460，**0 裸 LF**，末尾 `end.` 完整。
 - `ratchet_reinject.py`：**六个脱壳单元全部 `ratchet armed`**（本批新增 FindFrm、ProfileAnalysisFrm；后者需显式 `--anchor`，因其无默认锚点行），**字节级还原后 MD5 不变**。
-- 新增 `tools/_f1h_selfcheck.py`：本机无 Delphi/FPC，故以结构自检替代编译——`begin`/`end` **差值与迁移前逐文件比对**（`case` 分支与 `class` 体天然不配对，故断言"差值不变"而非"差值为零"，这是第一次把"编译验证"降级为"结构验证"并明确其边界）。
+- 新增 `tools/f1_struct_selfcheck.py`：本机无 Delphi/FPC，故以结构自检替代编译——`begin`/`end` **差值与迁移前逐文件比对**（`case` 分支与 `class` 体天然不配对，故断言"差值不变"而非"差值为零"，这是第一次把"编译验证"降级为"结构验证"并明确其边界）。
 
 > **本批的诚实边界**：以上全部为**静态/结构验证**，`devcpp.exe` 的真实编译与 GUI 冒烟（`Find` 对话框四个页签、`Gprof` 平面/调用图两页）**仍需在装有 Delphi 10.2 的机器上执行**。
 
@@ -1538,7 +1538,197 @@ QA gate OK（0/0、0/0、owner 0/0）· 棘轮 violations 0 · CONTRACT CHECK OK
 - 第三批（低频）：关于页、格式化配置、图标选择器。
 - 国际化：保留 `Lang/*.lng` 文本格式；`MultiLangSupport.pas` 改为 UTF-8 原生读取（去掉 Delphi codepage 转换层）。
 
-### F4：现代视觉补偿（3–4 周）
+
+### F3 实测基线（2026-10-04，53 个 DFM 的可转换性）
+
+原方案用一句话给出 F3「8–10 周」，但没有任何东西测量过 DFM 转换器实际能否读懂这些窗体。现已建立基线（工具：`tools/f3_form_survey.py` + `tools/f3_form_ratchet.py`，纯文本分析，无需 Lazarus）。
+
+**53 个自研 DFM 中 43 个可直接转换，10 个需人工介入。**
+
+| 阻塞来源 | 窗体实例数 | 含义 |
+|---|---|---|
+| **vendored**（`Source/VCL` 第三方 Pascal） | 18 | `ClassBrowsing`、`devShortcuts`、`SynEdit` 高亮器、`SVGIconImageList`、`CompOptionsList` —— 窗体本身可转换，但这些类需要 LCL 等价物 |
+| **external**（仓库内**无声明**，来自 Delphi RTL / 二进制包） | 9 | `TVirtualImage`(3)、`TImageCollection`(4)、`TVirtualImageList`(1)、`TControlBar`(1)、`TAnimate`(1)、`TDdeServerConv`(1) |
+| **own**（自研） | 2 | `TCompOptionsFrame` |
+
+**这组数字改写了 F3 的成本结构**，原因有三点：
+
+1. **12 个阻塞窗体中，只有 2 个卡在自研代码上。** 方案原本按「53 个窗体都要重做」估算，实际绝大多数窗体的 DFM 转换是机械工作。
+2. **external 类被误当成「要转换的控件」会高估工作量。** `TVirtualImage` 等只作为字段类型出现（`viThemePreview: TVirtualImage;`），窗体本身照常转换，需要替换的只是那个字段。
+   **实测印证**：`TToolButton` 曾被漏入 widgetset 清单，误判阻塞了 **50 个字段**（占 external 的 82%）。补入后基线由 41 升至 **42**，external 由 12 类降至 6 类 ——「一个清单条目」换来了「五成的 external 工作量归零」。
+3. **main.dfm（566 控件，11 个自有/外部类）是唯一的重灾区**，印证了方案「第一批不直接转换 main.dfm，改用 LCL 停靠体系重建」的判断。
+
+**据此修正 F3 批次划分**（原方案第一批为骨架重建，第二批高频弹窗）：
+
+| 批次 | 范围 | 依据 |
+|---|---|---|
+| 批量转换 | **41 个无阻塞 DFM** | 已实测可直接转换，无需人工 |
+| 字段替换 | 涉及 external 类的窗体 | 窗体转换 + 替换 1–2 个字段 |
+| 重建 | `main.dfm` + `ProjectOptionsFrm` + `EditorOptFrm` | 控件数与自有类密度最高 |
+
+**门禁**：`f3_form_ratchet.py` 以 43 为基线，任何使可转换数下降的改动都会失败；上升需显式 `--write-baseline` 确认，不会自动接受。已接入 `fpc_ci.yml` 的第 4 个作业 `f3-form-ratchet`。
+#### External 控件平替矩阵（2026-10-04 实测，`tools/f3_external_matrix.py`）
+
+「external」= 仓库内**无声明**、来自 Delphi RTL 或二进制包的控件。工具逐个读取其**真实用法**（字段声明 + 代码中每一处读写），再给出可执行的处置判定。
+
+| 类型 | 字段数 | 出现窗体 | 代码使用 | LCL 平替 | 判定 |
+|---|---|---|---|---|---|
+| `TToolButton` | **50** | `main.dfm`, `Main.dfm` | Caption/ImageIndex/Enabled | `TToolButton`（LCL 原生） | **已修正为可转换**（曾误列） |
+| `TImageCollection` | 4 | `DataFrm.dfm`, `Main.dfm` | 声明后未驱动 | `TImageList` 或仓库已有的 `TSVGIconImageList` | REPLACE |
+| `TVirtualImage` | 3 | `EnviroFrm`, `LangFrm`, `main` | `ImageIndex`/`Visible` | `TImage` + `TImageList` | REPLACE |
+| `TVirtualImageList` | 1 | `Main.dfm` | `ToolBar1.Images`、`MainMenu1.Images` | `TImageList` | REPLACE |
+| `TControlBar` | 1 | `main.dfm` | 仅 `Visible` | `TToolBar`/`TPanel` 停靠（LCL 停靠语义不同，需设计） | REPLACE |
+| `TAnimate` | 1 | `RemoveForms.dfm` | 仅 `Active := False` | **无等价物**（AVI 播放控件） | **需决策** |
+| `TDdeServerConv` | 1 | `main.dfm` | `DDETopic := ...Name` | **LCL 无**（Windows 专属 IPC） | **需决策** |
+
+**结论与两个决策点**：
+
+1. **`TAnimate`** 仅用于 `RemoveForms.dfm` 的 AVI 装饰动画，代码只做 `Active := False`。LCL 无等价控件。**建议直接删除该控件与其 DFM 组件**（纯装饰，不影响功能）。
+2. **`TDdeServerConv`** 用于 Dev-C++ 经典的「DDE 把文件交给已运行实例打开」。现代做法是命名管道或 `CreateMutex` 单实例。**建议按 F3 范围先删除 DDE 单实例通道**，改由 M2 的单实例实现承接；跨平台目标本就要求移除 Windows 专属 IPC。
+
+**判定纪律**：工具只在字段「声明后从未被驱动」时才建议 DELETE；凡有属性读写或方法调用一律判 REPLACE，因为删除会改变行为。上表 4 个 `TImageCollection` 字段正属此类 —— 声明后无使用，但它们是 `uses` 里的运行时组件，删除需连带清理 `uses`。
+
+#### 批次执行清单（2026-10-04 实测，`tools/f3_batch_plan.py`）
+
+**45 / 53 个窗体无需重写任何组件**，仅 8 个需要。这是可执行的批次划分：
+
+| 批次 | 窗体数 | 组件数 | 处置 |
+|---|---|---|---|
+| **A 机械转换** | **42** | 744 | 无阻塞控件，直接转换。含 `FindFrm`、`FilePropertiesFrm`、`CPUFrm`、`ProfileAnalysisFrm`、`ToolEditFrm`、`ExceptionsAnalyzer`、`InstallWizards` 等绝大多数窗体 |
+| **B 字段级** | **3** | 109 | 仅被 external 类阻塞且均有 LCL 等价：`RemoveForms`(TAnimate)、`LangFrm` + `EnviroFrm`(TVirtualImage) |
+| **C 需重建** | **8** | 950 | 被 vendored / 自研类阻塞，须先写 LCL 对应物 |
+
+**C 批的 8 个窗体**（真正的排期风险，且高度集中）：
+
+| 窗体 | 组件 | 阻塞类来源 |
+|---|---|---|
+| `Source/main.dfm` | 566 | `ClassBrowsing`(4) + `devShortcuts` + `devFileMonitor` + `TControlBar` + `TDdeServerConv` + `TVirtualImage` |
+| `EditorOptFrm.dfm` | 124 | `TSynCppSyn`（SynEdit 高亮器） |
+| `ProjectOptionsFrm.dfm` | 112 | `TCompOptionsList` + `TCompOptionsFrame` |
+| `Tools/Packman/Main.dfm` | 58 | `SVGIconImageList`(3) + `TImageCollection` + `TVirtualImageList` |
+| `CompOptionsFrm.dfm` | 54 | `TCompOptionsList` + `TCompOptionsFrame` |
+| `DataFrm.dfm` | 19 | `TSynCppSyn` + `TSynRCSyn` + `SVGIconImageList` + `TImageCollection` |
+| `NewProjectFrm.dfm` | 14 | `TSVGIconImageList` |
+| `CompOptionsFrame.dfm` | 3 | `TCompOptionsList` |
+
+**由此得出的执行顺序**：
+
+1. **先做 A 批 42 个** —— 它们不依赖任何新代码，可立即批量转换并验证，是 F3 的主体工作量。
+2. **B 批 3 个** —— 随 A 批顺带完成，只需换字段类型。
+3. **C 批 8 个** —— 集中在 4 个 vendored 库（`ClassBrowsing` / `devShortcuts` / `devFileMonitor` / `SynEdit` 高亮器）与 1 个自研（`CompOptionsList`）。**其中 `SynEdit` 高亮器最关键**：`TSynCppSyn` / `TSynRCSyn` 是 C++/RC 语法高亮，LCL 的 `TSynCPPSyn` 已有等价物，优先替换。
+
+> 注意 `Source/main.dfm`、`Tools/PackMaker/main.dfm`、`Tools/Packman/Main.dfm` **三者是不同文件**（333KB / 90KB / 129KB），但 Windows 大小写不敏感，列表里极易混淆 —— 清单工具已改为输出相对 `Source/` 的完整路径。
+#### Sprint F3-2 执行结果（2026-10-04）
+
+**① 外部类物理清除（按裁定）**
+
+| 目标 | 文件 | 实际删除 |
+|---|---|---|
+| `TAnimate` | `Tools/Packman/RemoveForms.pas/.dfm` | 字段 1 + 调用 3 + DFM 组件块 9 行 |
+| `TDdeServerConv` | `main.pas/.dfm` | 字段 1 + 接口声明 1 + 宏处理器实现 26 行 + `DDETopic` 赋值 1 + `uses` 中 `DdeMan` |
+
+**直接效果**：F3 基线 **42 → 43**，external 类型 **6 类 → 4 类**，A 批 42 → 43、B 批 3 → 2（`RemoveForms` 升入 A 批）。
+
+> **遗留能力（诚实记录）**：DDE 的 `[Open(...)]` 宏实现了「Dev-C++ 已运行时，双击文件交给已有实例打开」。该能力随 DDE 一并移除，**须由 M2 的跨平台单实例服务（命名管道 / `CreateMutex` + IPC）重新承接**。这不是遗漏，是跨平台目标的必然取舍。
+>
+> `DDE1117906...` 一类十六进制行**未删除** —— 它们是二进制属性流中的巧合字节序列，不是 DDE 组件属性。
+
+**② Lazarus 安装：受阻，原因已实测记录**
+
+| 尝试 | 结果 |
+|---|---|
+| `sourceforge.net/.../download` | HTTP 200，但返回 `text/html` 引导页 |
+| 10 个 `*.dl.sourceforge.net` 镜像 | 同上，均为 HTML |
+| `curl.exe` 同一 URL | 同上（首字节 `3C 68` = `<h`） |
+| `ftp.freepascal.org` | TLS 握手被代理拒绝 |
+| GitHub `FPCSource/releases` | 可达，但无 Windows 安装包 |
+
+SourceForge 对非浏览器客户端强制 HTML 中转，**这是网络策略而非失效链接，重试无用**。交付 `tools/f3_lazarus_setup.ps1`：内置上述实测原因、成功后校验 `lazbuild --version`，并在拿到安装包后拒绝继续（检测 PE magic `MZ`，HTML 页直接报错并给出替代方案）。
+
+> **版本一致性**：CI 固定 `LAZ_VERSION: "4.4"`，本地必须同版本。否则会出现「本地能转、CI 不能」或反之的假信号。
+
+**③ 在无 Lazarus 条件下推进转换**
+
+`tools/f3_dfm_to_lfm.py` 完成 **43 个 A 批窗体的结构转换，零失败**，输出至 `Tests/FpcCoreTests/lfm/`。每个文件带显式头部声明「仅结构转换，未经 LCL 运行时加载验证」。
+
+**该工具自身修正一次**：`DROP_PROPS` 首版误将 `TabOrder`(339)、`ParentFont`(102)、`Default`(9)、`BorderStyle`、`ParentColor` 当作 Delphi-only 删除 —— 它们**都是 LCL 有效属性**，合计占 455 处删除中的 453。修正后仅剩 `ExplicitHeight`(2) 真正删除。
+
+> 教训：**静默删除一个真实属性，比留下一个未知属性更糟** —— LCL 加载器会抱怨它不认识的属性，而被提前删掉的属性则永远不会被检查到。
+
+**④ 当前状态**
+
+| 批次 | 窗体 | 组件 | 状态 |
+|---|---|---|---|
+| A 机械转换 | **43** | 757 | ✅ 已生成 LFM，**待 lazbuild 验证** |
+| B 字段级 | 2 | 95 | 待处理（`TVirtualImage` × 2 窗体） |
+| C 需重建 | 8 | 949 | 待处理（集中在 4 个 vendored 库） |
+
+**F3 的最后未知项已收敛为单一问题**：这 43 个 LFM 能否被真实 LCL 反序列化。答案只能在有 Lazarus 的环境（CI 或可下载的机器）获得。
+#### C 批 vendored 阻塞类等价性分析（2026-10-04，`tools/f3_vendored_equivalence.py`）
+
+C 批 8 个窗体被 14 个 vendored 类阻塞。工具读取每个类的**自身声明**（基类、行数、位置）后判定，**不按类名猜测**：
+
+| 判定 | 数量 | 含义 |
+|---|---|---|
+| **REPLACE** | 2 | LCL 已有同类件，删掉 vendored 单元换 LCL 即可 |
+| **ADAPT** | 8 | 基类是 LCL 核心类，子类可原样对 LCL 重编译，无需适配层 |
+| **PORT** | **4** | 基类无 LCL 对应，**需先写适配层** —— 唯一形态的真工作 |
+
+**REPLACE（2）**：`TSynCppSyn`(211 行)、`TSynRCSyn`(62 行) —— 基类 `TSynCustomHighlighter`，而 **LCL SynEdit 自带 `TSynCPPSyn` / `TSynRCSyn`**，覆盖同样语言。**直接换用 LCL 版本即可，211 行代码可弃用。**
+
+**ADAPT（8）**：`TCompOptionsList`(9 行, base `TValueListEditor`)、`TCompOptionsFrame`(9 行, base `TFrame`)、`TCppPreprocessor`(62 行)、`TCppTokenizer`(53 行)、`TCodeCompletion`(55 行)、`TCppParser`、`TClassBrowser`(62 行, base `TCustomTreeView`)、`TdevShortcuts` —— 基类全部是 LCL 核心类。
+
+**PORT（4）—— 全部集中在矢量图标系统**：
+
+| 类 | 行数 | 基类 |
+|---|---|---|
+| `TSVGIconImageList` | 43 | `TCustomImageList` |
+| `TSVGIconImageCollection` | 64 | `TCustomImageCollection` |
+| `TSVGIconVirtualImageList` | 36 | `TSVGIconImageListBase` |
+| `TdevFileMonitor` | 20 | `TWinControl` |
+
+> **`TSVGIconImageList` 的 base 判定需修正**：它的 base `TCustomImageList` **是** LCL 核心类，工具首版因此误判「无 LCL 对应」。真正无对应的是它的**两个派生类**（`TCustomImageCollection`、`TSVGIconImageListBase`）。
+>
+> **结论**：SVG 图标系统是 C 批唯一的真工作项，且它同时是 **F4「矢量图标」阶段的核心目标**。因此 C 批不应单独排期 —— 它与 F4 是同一件事的两面：**F4 要做 LCL 原生 SVG 支持，C 批就依赖它**。
+
+**这重新定义了 F3/F4 的关系**（原方案视为两个独立阶段）：
+
+> C 批 8 个窗体中，4 个因 SVG 图标阻塞。若 F4 先完成 SVG 支持，这 4 个窗体随即降为 ADAPT；反之 C 批必然等待。**建议将 SVG 图标能力提前，作为 F3-C 的前置。**
+>
+> 另 4 个 C 批窗体（`EditorOptFrm` 的 `TSynCppSyn`、`ProjectOptionsFrm` / `CompOptionsFrm` / `CompOptionsFrame` 的 `TCompOptionsList`+`TCompOptionsFrame`、`DataFrm` 的 Syn 高亮器）**不含 SVG 依赖，可先行处理** —— 其中 Syn 高亮器还是 REPLACE 级（改用 LCL 自带版本）。
+
+**合计阻塞代码 862 行**，其中 530 行（`TSynCppSyn` 211 + `TSynRCSyn` 62 + ClassBrowsing 系列）属可直接弃用或机械适配。
+#### 关键修正：43 个「可转换」中，9 个转换后仍不可用（2026-10-04）
+
+在推进 B 批时发现的事实，它修正了此前所有结论中的一个**实质性错误**：
+
+**一个 DFM 可以「转换器读得懂」，却在运行时空白。** 形如 `Images = dmMain.SVGImageListMenuStyle` 的属性行转换后完全合法，但 `dmMain.SVGImageListMenuStyle` 的类型是 `TSVGIconImageList` —— 正是 C 批的 PORT 阻塞项。转换产物能编译，窗口能打开，**图标全是空的**。
+
+**实测影响面**：15 个窗体从 SVG 图像列表取图，其中 **9 个落在 A 批**（此前被计为「已完成」）。
+
+| 口径 | 数量 | 含义 |
+|---|---|---|
+| 结构可转换 | 43 | 转换器能读（**不能据此认为可用**） |
+| **可转换且 SVG 无关** | **34** | 转换后即可用 —— 这才是真正的 A 批 |
+
+**工具已同步修正**（三处口径不一致，均已对齐并交叉验证 34/34/34）：
+
+- `f3_form_survey.py` 新增独立的 **RUNTIME VALIDITY** 维度，不并入「可转换」总数——并进去这 9 个就被藏起来了
+- `f3_batch_plan.py` 拆出 **`A-svg` 批次**（9 个），标签明写「转换后空白，排在 SVG 工作之后做：**转换后空白的窗体比不转换更糟**」
+- `f3_dfm_to_lfm.py` 改用 `survey.survey()` 单一事实源。首版自行推导 `custom` 漏了 root 类排除，且把 C 批误归 A，多产出 4 个 LFM
+
+**SVG 依赖优先级高于批次分类**：`LangFrm` / `EnviroFrm` 按字母测试属 B 批（唯一阻塞是 `TVirtualImage`，有 LCL 等价物），但该控件的图源是 `dmMain.SVGImageListMenuStyle` —— 因此它们同样归入 SVG 依赖，**B 批归零**。
+
+**最终批次划分**
+
+| 批次 | 窗体 | 组件 | 说明 |
+|---|---|---|---|
+| **A** | **34** | 567 | 无阻塞控件 + 无 SVG 依赖。转换即可用，已生成 LFM |
+| **A-svg** | **9** | 190 | 转换后空白，**须排在 SVG 工作之后** |
+| B | 0 | — | 原 2 个窗体经核实均依赖 SVG，已并入 A-svg |
+| C | 10 | — | 需 vendored/own 类重建 |
+
+> **B 批归零是一次有价值的负面结果**：它说明「字段级替换即可」的乐观估计不成立 —— 那两个窗体表面上只需换 `TVirtualImage`，实际图源在 SVG 链路上。**若按原计划先做 B 批，会得到两个看起来转好了、实际预览区空白的窗体。**### F4：现代视觉补偿（3–4 周）
 - 矢量图标：LCL 原生 SVG 或 BGRAControls 替代 `SVGIconImageList`，工具栏 200%/4K 清晰。
 - 深色主题：全局调色板映射 + 主控 OwnerDraw，落地 One Dark / VS Code Dark+ 预设，编辑器与外壳一体化（无 3D 边框、无白边）。
 - 标题栏：Windows 10/11 调 `DwmSetWindowAttribute(DWMWA_USE_IMMERSIVE_DARK_MODE)` 保持沉浸式深色标题栏。
@@ -1600,3 +1790,111 @@ python tools\fpc_artifact_check.py    # F0 产物结构自检
 - 零 VCL 可直迁模块：`Core/Events.pas`(431 行)、`Core/Services.pas`(197)、`GdbMiParser.pas`(190)、`GdbMiTypes.pas`(67)、`ToolchainConfig.pas`(460，实现为 Windows 专属)。
 - 深绑 VCL 不可直迁模块：`LSP/Client/*`（约 5,300 行，签名均以 `TCustomSynEdit` 为核心）、`Theme/Theme.pas`、`UI/Theme/Theme.Manager.pas`。
 - 治理现状：`tools/qa_check.py` 默认 profile 仍禁止 FPC/LCL 痕迹；`.github/workflows/phase0_baseline.yml` 的 Delphi 构建为"有则跑"，无法无头自动构建主程序——这正是 F0 之后要逐步消除的锁定点。
+
+---
+
+## 9. F2-c：首次真实构建的证伪结果（2026-10-05）
+
+> 本节记录的是**接上 FPC 3.2.2 之后**发生的事。此前 F0 的"已交付"只经过结构校验；
+> 本节是第一次**真正把编译器跑起来**，结论与 §7 的三个风险点预测对照。
+
+### 9.1 起点：4 项失败，且其中一项是真缺陷
+
+首次完整编译（FPC 3.2.2，`tools/build_fpc_core.ps1`）通过，但冒烟测试 **46 项中 4 项失败**。逐项定位后，**只有 1 项是产品缺陷**：
+
+| # | 失败检查 | 性质 | 根因 |
+|---|---|---|---|
+| 1 | `partial frame is not emitted` | **测试缺陷** | `out ABody: string` 由**编译器**在进入被调方前清空，`'untouched'` 哨兵对**任何实现**都不可满足 |
+| 2 | `a lone malformed header yields nothing` | **测试缺陷** | 同上（同一个 `out` 误解） |
+| 3 | `child stdout is readable` | **产品缺陷** | `Parameters.Add(AParams)` 把整串当作**一个** argv 元素传入 |
+| 4 | `unsubscribed handler stops…` | **测试缺陷** | 通用订阅表**不按类型过滤**，绝对计数 `(1,2)` 是错的算术 |
+
+**#1/#2 的教训**：`out` 对**托管类型**（string）的语义是编译器行为，不是被调方可以拒绝的。所以这条断言测的是**语言**，不是解码器——它永远不可能通过。
+
+**#3 才是最严重的一条，因为它影响真实产品**：`Lsp.Transport.Connect` 给 clangd 传的是**七个** flag：
+
+```
+'--background-index --clang-tidy --completion-style=detailed ' +
+'--header-insertion=iwyu --pch-storage=memory ' +
+'--compile-commands-dir="' + FWorkDir + '" --log-level=error'
+```
+
+`Parameters.Add(AParams)` 会让这**七个 flag 变成一个** argv 元素。冒烟测试以
+`n=72 text=usage: …FpcCoreTests.exe [run]` 暴露它——子进程看不懂参数，直接打印了用法横幅。
+**若不修，FPC 版 clangd 根本起不来。** 修复用 RTL 自带的 `CommandToList`
+（`fcl-process/src/processbody.inc:171`，`process` 单元公开，RTL 自己也在用）。
+
+> **验证没有停在"测试变绿"**：冒烟测试只传了两个不含空格的 token，因此额外用**真实
+> clangd 字符串**跑了一遍 `CommandToList`，实测得到 **7 个独立参数**，顺序正确，
+> 且含空格的引号路径 `--compile-commands-dir="C:\work dir"` 仍是**一个** token。
+> **一个 2-token 的绿灯，不足以证明 7-flag 的产品是对的。**
+
+### 9.2 我自己制造并修复的一次事故（必须留档）
+
+修 #3 时我一度把 `PChar(CmdLine)` **无条件**改成 `PAnsiChar(CmdLine)`。这修好了 FPC，
+却会**打断 Delphi 构建**：`Lsp.Process.Win32.pas:124` 用的是同一个
+`PChar(CmdLine)` 调同一个 Win32 API 且**今天能编译**——Delphi 的 `Winapi.Windows.CreateProcess`
+取**宽字符**入口，`PChar` 正是正确实参；只有 FPC 把这个名字绑到 **ANSI** 入口
+（`rtl/win/ascdef.inc:359` → `LPCSTR/LPSTR`）。
+
+> **根因**：转换的**宽度是编译器的属性**，不是 API 的属性。我把"某个编译器下正确"当成了
+> "普遍正确"。**判据不是"能不能编过"，而是"另一棵树原本是什么写法"**——
+> `Lsp.Process.Win32.pas:124` 这个**既有**调用点就是现成的反证。
+> 现改为 `{$IFDEF FPC}` 分支，`{$ELSE}` 分支保持 `PChar` 原样。
+
+### 9.3 一个从未被编译过的变体：`-Win`
+
+此前只跑过 **portable** 变体。`-Win` 变体（定义 `TEST_TOOLCHAIN`，额外含 `ToolchainConfig`）
+**在本机首次编译**，一次性暴露 4 处全新缺陷，**没有一处与 #3 相关**：
+
+| 缺陷 | 编译器原话 |
+|---|---|
+| 一个 program 只能有**一个** `uses` 子句（`{$IFDEF TEST_TOOLCHAIN}` 另起了一个） | `Fatal: Syntax error, "BEGIN" expected but "USES" found` |
+| `Winapi.Windows` 在 FPC 不存在（无 `Winapi` 目录，且带点单元名不被接受） | `Fatal: Can't find unit Winapi.Windows` |
+| `SplitString` 需要显式 `StrUtils`；`TStringDynArray` 在 **`Types`** 而非 `StrUtils` | `Error: Identifier not found "SplitString"` |
+| `-Mdelphiunicode` 下 `PChar`=`PWideChar`，与 FPC 的 ANSI `CreateProcess` 不匹配 | `Incompatible type for arg no. 2: Got "PWideChar"` |
+| `SplitString` 返回 `TStringDynArray`，与局部变量声明的 `TArray<string>` **是两个类型** | `Incompatible types: got "TStringDynArray"` |
+
+> **这 4 处此前"全部通过"是因为它们从未被编译过。** 门禁、结构自检、双 profile QA 全绿
+> ——**因为它们检查的是"文件存在且没有 VCL 依赖"，而不是"能编译"**。
+> 这与本项目已记录两次的问题同族：**断言覆盖不到未走的路径**。
+> **一个只有开关打开时才编译的分支，等于没有门禁。**
+
+`Windows` 单元里的 `GetEnvironmentVariable(PChar;PChar;LongWord)` 与
+`SysUtils.GetEnvironmentVariable(const Name: string): string` **同名**，前者按
+"最后一个单元优先"胜出，导致 4 处调用全部失配。用 `SysUtils.` 限定即可**一行同时服务两棵树**，
+不必为 4 个调用点各复制一份 `{$IFDEF}`（复制就会漂移）。
+
+### 9.4 一条被实测纠正的诊断
+
+失败信息里的 `pending=14` 一度让我判断"解码器没丢弃畸形头"。**实测推翻了它**：用一个
+带副作用的探针测出 FPC 的**实参求值顺序**——
+
+```
+order-probe cond=TRUE detail=value=0
+```
+
+即 `ADetail` 在**条件参数之前**求值，所以那个 `14` 是 **调用前**的状态；先 pop 再读
+`PendingBytes` 得到 **0**，解码器行为本来就是对的。
+
+> **教训**：诊断字符串里的数字不一定是"事情发生之后"的状态。把它当作事实写进注释，
+> 等于把一条**猜测**固化成**文档**。本项目日志里已记过两次"测量结果被重新推导"，
+> 这是第三次，形态不同：**被污染的是诊断信息，不是被诊断的代码**。
+
+### 9.5 当前状态
+
+| 项 | 状态 |
+|---|---|
+| portable 变体 | ✅ 编译通过，**46/46** 检查全绿（此前 42/46） |
+| Windows 变体（`-Win`） | ✅ **首次编译通过**，**51/51** 检查全绿 |
+| 双 profile QA gate | ✅ OK |
+| `fpc_artifact_check` | ✅ OK |
+| `lcl_svg_struct_check --self-test` | ✅ OK |
+| Delphi 构建 | ⚠️ **本机无 Delphi，未编译验证**；改动均以 `{$IFDEF}` 隔离，`{$ELSE}` 分支保持原写法 |
+
+> **`§7` 三个风险点的实测结论**：① 泛型接口约束——`TryGetService<T>` 调用点确实编不过
+> （FPC 编译器崩溃 `Internal error 2010122901`），已按预案改走 `QueryService`；
+> ② 点号单元名——**风险成立**，需逐单元改写（`tools/fpc_uses_rewrite.py`）；
+> ③ 匿名方法——**风险成立且更严重**：`reference to` 在**所有**模式（`-Mdelphi` /
+> `-Mdelphiunicode` / `-Mfpc` / `-Mobjfpc`，含 `{$modeswitch anonymousfunctions}`）
+> 一律报 `Error: Identifier not found "reference"`，已按预案降级为 `of object`。

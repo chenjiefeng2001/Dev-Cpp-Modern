@@ -34,7 +34,7 @@ const
 implementation
 
 uses
-  main, Dialogs;
+  Dialogs;
 
 var
   PreviousInstance: THandle; // return value for GetPreviousInstanceCallback
@@ -90,7 +90,7 @@ begin
   WindowClassName := Buffer;
 
   // Class names match
-  if WindowClassName = TMainForm.ClassName then begin
+  if WindowClassName = MainUi.MainWindowClassName then begin
     WindowModule := GetWindowLong(Handle, GWL_HINSTANCE);
     if WindowModule = 0 then
       Exit;

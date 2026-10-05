@@ -1,0 +1,14 @@
+object ConsoleAppHost: TConsoleAppHost
+  Left = 0
+  Top = 0
+  Align = alClient
+  BorderStyle = bsNone
+  Caption = 'ConsoleAppHost'
+  ClientHeight = 450
+  ClientWidth = 868
+  Color = clBtnFace
+  Font.Color = clWindowText
+  Font.Height = -11
+  Font.Name = 'Tahoma'
+  Font.Style = []
+end

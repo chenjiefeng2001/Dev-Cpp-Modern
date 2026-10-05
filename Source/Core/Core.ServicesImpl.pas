@@ -22,7 +22,11 @@ unit Core.ServicesImpl;
 interface
 
 uses
+  {$IFDEF FPC}
+  SysUtils, Classes,
+  {$ELSE}
   System.SysUtils, System.Classes,
+  {$ENDIF}
   Core.Services, Compiler, Debugger, EditorList, Project, editor, Version;
 
 // Concrete backends for the Core.Services interfaces.

@@ -63,7 +63,7 @@ type
 implementation
 
 uses
-  FileCtrl, MultiLangSupport, devcfg, utils, main;
+  FileCtrl, MultiLangSupport, devcfg, utils, MainUi;
 
 {$R *.dfm}
 
@@ -101,8 +101,8 @@ begin
   with TOpenDialog.Create(self) do try
     Filter := 'Applications (*.exe;*.bat;*.com;)|*.exe;*.bat;*.com|All files (*.*)|*.*';
 
-    if Assigned(MainForm.Project) then
-      InitialDir := MainForm.Project.Directory;
+    if Assigned(MainUi.CurrentProject) then
+      InitialDir := MainUi.ProjectDirectory;
 
     if Execute then begin
       edProgram.Text := FileName;

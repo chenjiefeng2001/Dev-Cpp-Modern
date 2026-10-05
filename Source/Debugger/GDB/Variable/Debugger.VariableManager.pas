@@ -22,8 +22,16 @@ unit Debugger.VariableManager;
 interface
 
 uses
+  {$IFDEF FPC}
+  SysUtils, Classes, SyncObjs,
+  {$ELSE}
   System.SysUtils, System.Classes, System.SyncObjs,
+  {$ENDIF}
+  {$IFDEF FPC}
+  Generics.Collections,
+  {$ELSE}
   System.Generics.Collections,
+  {$ENDIF}
   GDB.MiParser, GDB.MiTypes, Debugger.Scheduler;
 
 // GDB Variable Objects manager (-var-create / -var-update / -var-delete).

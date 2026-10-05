@@ -94,7 +94,7 @@ type
 implementation
 
 uses
-  SynEditHighlighter, main, MultiLangSupport, DataFrm, project, editor, devcfg;
+  SynEditHighlighter, MultiLangSupport, DataFrm, project, editor, devcfg, MainUi;
 
 {$R *.dfm}
 
@@ -222,7 +222,7 @@ var
   e: TEditor;
 begin
   if fFilename = '' then begin
-    e := MainForm.EditorList.GetEditor;
+    e := TEditor(MainUi.EditorByIndex(-1, nil));
     if Assigned(e) then
       fFilename := e.FileName;
   end;
@@ -266,8 +266,8 @@ begin
     end;
 
     edProject.Text := '-';
-    edAbsolute.Text := MainForm.Project.FileName;
-    edRelative.Text := ExtractRelativePath(MainForm.Project.Directory, Filename);
+    edAbsolute.Text := MainUi.ProjectFileName;
+    edRelative.Text := MainUi.ProjectRelativePath(Filename);
 
     if fFileDate = 0 then
       edTimestamp.Text := '(Project file only) -'
@@ -287,9 +287,9 @@ begin
       end;
 
     // Check if it is in our project
-    if Assigned(MainForm.Project) and (MainForm.Project.Units.IndexOf(FileName) <> -1) then begin
-      edProject.Text := MainForm.Project.Name;
-      edRelative.Text := ExtractRelativePath(MainForm.Project.Directory, Filename)
+    if MainUi.IsProjectFile(FileName) then begin
+      edProject.Text := MainUi.ProjectName;
+      edRelative.Text := MainUi.ProjectRelativePath(FileName)
     end else begin
       edProject.Text := '-';
       edRelative.Text := '-';
@@ -329,24 +329,24 @@ begin
   cmbFiles.Clear;
 
   // add all project files
-  if Assigned(MainForm.Project) then begin
+  if Assigned(MainUi.CurrentProject) then begin
 
     // Add project file itself
-    FullFileName := MainForm.Project.FileName;
+    FullFileName := MainUi.ProjectFileName;
     ShortFileName := ExtractFileName(FullFileName);
     cmbFiles.Items.AddObject(ShortFileName, Pointer(FullFileName));
 
     // Add files belonging to project
-    for I := 0 to MainForm.Project.Units.Count - 1 do begin
-      FullFileName := MainForm.Project.Units[I].FileName;
+    for I := 0 to MainUi.ProjectUnitCount - 1 do begin
+      FullFileName := MainUi.ProjectUnitFileName(I);
       ShortFileName := ExtractFileName(FullFileName);
       cmbFiles.Items.AddObject(ShortFileName, Pointer(FullFileName));
     end;
   end;
 
   // add all open editor files not in project (they don't have that object)
-  for I := 0 to MainForm.EditorList.PageCount - 1 do begin
-    e := MainForm.EditorList[I];
+  for I := 0 to MainUi.EditorPageCount - 1 do begin
+    e := TEditor(MainUi.EditorAt(I));
     if Assigned(e) and not e.InProject then begin
       FullFileName := e.FileName;
       ShortFileName := ExtractFileName(FullFileName);

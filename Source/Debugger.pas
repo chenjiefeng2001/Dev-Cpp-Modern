@@ -84,7 +84,7 @@ type
 implementation
 
 uses
-  System.UItypes, main, devcfg, utils, cpufrm;
+  System.UItypes, devcfg, utils, cpufrm, MainUi;
 
 constructor TDebugger.Create;
 begin
@@ -175,7 +175,7 @@ begin
   Reader.DebugView := DebugView;
   Reader.Start;
 
-  MainForm.UpdateAppTitle;
+  MainUi.RefreshAppTitle;
 
   Application.HintHidePause := 5000;
 end;
@@ -186,7 +186,7 @@ begin
     Executing := false;
 
     if WatchVarList.Count = 0 then // nothing worth showing, restore view
-      MainForm.LeftPageControl.ActivePageIndex := LeftPageIndexBackup;
+      MainUi.RestoreLeftPageIndex(LeftPageIndexBackup);
 
     // Close CPU window
     if Assigned(CPUForm) then
@@ -205,9 +205,9 @@ begin
     if not CloseHandle(fInputread) then
       Exit;
 
-    MainForm.RemoveActiveBreakpoints;
+    MainUi.ClearBreakpointMarks;
 
-    MainForm.UpdateAppTitle;
+    MainUi.RefreshAppTitle;
 
     Application.HintHidePause := 2500;
   end;
@@ -226,14 +226,8 @@ begin
       MessageDlg(Lang[ID_ERR_WRITEGDB], mtError, [mbOK], 0);
 
     if ViewInUI then
-      if (not CommandChanged) or (MainForm.edGdbCommand.Text = '') then begin
-        // Convert command to C string
-        if Length(params) > 0 then
-          MainForm.edGdbCommand.Text := Command + ' ' + params
-        else
-          MainForm.edGdbCommand.Text := Command;
-
-        CommandChanged := false;
+      if (not CommandChanged) or (not MainUi.GdbCommandIsUserOwned) then begin
+        MainUi.EchoGdbCommand(Command, params);
       end;
   end;
 end;

@@ -93,7 +93,7 @@ var
 implementation
 
 uses
-  Main, Dialogs, MultiLangSupport, devcfg, utils, SynEditMiscClasses, Math;
+  Dialogs, MultiLangSupport, devcfg, utils, SynEditMiscClasses, Math, MainUi;
 
 {$R *.dfm}
 
@@ -236,17 +236,17 @@ begin
   if actiontype in [faFindFiles, faReplaceFiles] then
     Include(fSearchOptions, ssoReplaceAll);
 
-  MainForm.FindOutput.Items.BeginUpdate;
+  MainUi.BeginFindOutputUpdate;
   try
     // Find the first one, then quit
     if actiontype = faFind then begin
-      e := MainForm.EditorList.GetEditor;
+      e := TEditor(MainUi.EditorByIndex(-1, nil));
       if Assigned(e) then
         Inc(findcount, Execute(e.Text, faFind));
 
       // Replace first, find to next
     end else if actiontype = faReplace then begin
-      e := MainForm.EditorList.GetEditor;
+      e := TEditor(MainUi.EditorByIndex(-1, nil));
 
       if Assigned(e) then begin
         Inc(findcount, Execute(e.Text, faReplace));
@@ -261,14 +261,14 @@ begin
 
       // Enumerate results in message view when finding in files
       if actiontype = faFindFiles then
-        MainForm.FindOutput.Clear;
+        MainUi.ClearFindOutput;
 
       // loop through pagecontrol
       if rbOpenFiles.Checked then begin
 
         // loop through editors, add results to message control
-        for I := 0 to MainForm.EditorList.PageCount - 1 do begin
-          e := MainForm.EditorList[i];
+        for I := 0 to MainUi.EditorPageCount - 1 do begin
+          e := TEditor(MainUi.EditorAt(I));
           if Assigned(e) then begin
             fCurFile := e.FileName;
 
@@ -282,9 +282,9 @@ begin
 
         // loop through project
       end else if rbProjectFiles.Checked then begin
-        for I := 0 to MainForm.Project.Units.Count - 1 do begin
-          e := MainForm.Project.Units[i].Editor;
-          fCurFile := MainForm.Project.Units[i].FileName;
+        for I := 0 to MainUi.ProjectUnitCount - 1 do begin
+          e := TEditor(MainUi.ProjectUnitEditor(I));
+          fCurFile := MainUi.ProjectUnitFileName(I);
 
           // file is already open, use memory
           if Assigned(e) then begin
@@ -302,7 +302,7 @@ begin
 
               // we have to open an editor...
               if ssoPrompt in fSearchOptions then begin
-                e := MainForm.EditorList.GetEditorFromFileName(fCurFile);
+                e := TEditor(MainUi.FindEditorByFileName(fCurFile));
                 if Assigned(e) then begin
                   e.Activate;
 
@@ -310,7 +310,7 @@ begin
 
                   // Save and close
                   e.Save;
-                  MainForm.Project.CloseUnit(MainForm.Project.Units.Indexof(e));
+                  MainUi.CloseProjectUnitOfEditor(e);
                 end;
               end else begin
 
@@ -330,7 +330,7 @@ begin
 
         // Don't loop, only pass single file
       end else if rbCurFile.Checked then begin
-        e := MainForm.EditorList.GetEditor;
+        e := TEditor(MainUi.EditorByIndex(-1, nil));
 
         if Assigned(e) then begin
 
@@ -341,14 +341,11 @@ begin
       end;
     end;
   finally
-    MainForm.FindOutput.Items.EndUpdate;
+    MainUi.EndFindOutputUpdate;
   end;
 
   if actiontype = faFindFiles then begin
-    MainForm.MessageControl.ActivePageIndex := 4; // Find Tab
-    if findcount > 0 then
-      MainForm.FindSheet.Caption := Lang[ID_SHEET_FIND] + ' (' + IntToStr(findcount) + ')';
-    MainForm.OpenCloseMessageSheet(TRUE);
+    MainUi.ShowFindResults(findcount);
   end else if findcount = 0 then begin
     MessageBox(
       Self.Handle,
@@ -370,8 +367,8 @@ begin
   q := TCustomSynEdit(Sender).BufferToDisplayPos(p);
 
   // Convert to display coords
-  MainForm.AddFindOutputItem(IntToStr(Line), IntToStr(Column), fCurFile, TCustomSynEdit(Sender).Lines[Line - 1],
-    aSearch);
+  MainUi.AddFindOutputItem(IntToStr(Line), IntToStr(Column), fCurFile,
+    TCustomSynEdit(Sender).Lines[Line - 1], aSearch);
   action := raSkip;
 end;
 
@@ -423,8 +420,8 @@ begin
   // grpOption is always visible
 
   // Disable project search option when none is open
-  rbProjectFiles.Enabled := Assigned(MainForm.Project);
-  if not Assigned(MainForm.Project) then
+  rbProjectFiles.Enabled := Assigned(MainUi.CurrentProject);
+  if not Assigned(MainUi.CurrentProject) then
     rbOpenFiles.Checked := true;
 
   // Disable prompt when doing finds

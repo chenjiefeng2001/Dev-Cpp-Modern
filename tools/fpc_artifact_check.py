@@ -57,8 +57,8 @@ check(not banned, "portable runner uses no VCL/LCL/Win32 units")
 
 # 5. Every unit referenced by the .lpi files must exist, and the portable
 #    project must carry the Phase-F portable set (headless FPC coverage).
-PORTABLE_SET = ("Core/Events.pas", "Core/Services.pas",
-                "Debugger/GDB/GdbMiTypes.pas", "Debugger/GDB/GdbMiParser.pas",
+PORTABLE_SET = ("Core/Core.Events.pas", "Core/Core.Services.pas",
+                "Debugger/GDB/GDB.MiTypes.pas", "Debugger/GDB/GDB.MiParser.pas",
                 "LSP/JsonRpc/Lsp.JsonRpc.pas",
                 "LSP/Process/Lsp.Process.pas",
                 "LSP/Process/Lsp.Process.Fpc.pas",

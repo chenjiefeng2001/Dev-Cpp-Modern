@@ -66,9 +66,6 @@ function devExecutor: TdevExecutor;
 
 implementation
 
-uses
-  main;
-
 { TExecThread }
 
 procedure TExecThread.Execute;

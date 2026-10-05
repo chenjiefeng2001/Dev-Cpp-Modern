@@ -77,7 +77,7 @@ type
 implementation
 
 uses
-  Windows, Forms, SysUtils, version, utils, Dialogs, MultiLangSupport;
+  Windows, Forms, SysUtils, version, utils, Dialogs, MultiLangSupport, MainUi;
 
 resourcestring
  cTemplate = 'Template';
@@ -108,7 +108,7 @@ begin
    end
   else
    begin
-     MessageBox(Application.mainform.handle,
+     MessageBox(MainUi.MainFormHandle,
        PChar(Format(Lang[ID_ERR_TEMPFNF], [fFileName])),
        PChar(Lang[ID_INFO]), MB_OK or MB_ICONINFORMATION);
      exit;
@@ -261,7 +261,7 @@ procedure TTemplate.SetOldData(value: TTemplateRec);
 begin
   if not assigned(fTemplate) then
    begin
-     MessageBox(Application.MainForm.Handle,
+     MessageBox(MainUi.MainFormHandle,
       PChar(Lang[ID_ERR_NOTEMPLATE]), PChar(Lang[ID_INFO]), MB_OK or MB_ICONWARNING);
      exit;
    end;

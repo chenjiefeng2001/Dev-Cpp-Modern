@@ -22,7 +22,11 @@ unit GDB.MiParser;
 interface
 
 uses
+  {$IFDEF FPC}
+  SysUtils, Classes,
+  {$ELSE}
   System.SysUtils, System.Classes,
+  {$ENDIF}
   Core.Events, GDB.MiTypes;
 
 // GDB Machine Interface (MI) parser.

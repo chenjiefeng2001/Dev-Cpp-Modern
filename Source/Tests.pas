@@ -41,7 +41,14 @@ type
 implementation
 
 uses
-  Main, EditorList, Editor, Version;
+  MainUi, Editor, Version;
+
+// Migration note: the five `GetEditor` call sites needed five distinct rewrites
+// (i/PageControl, no-args, -1/PageControl, -1/inline-PageControl, and the one
+// nested inside SwapEditor). An earlier pass covered only four and left the
+// -1/inline form holding a live `MainForm.*` reference. The hit-count asserts
+// could not catch it -- no pattern had been written for that shape at all --
+// so it was tools/main_symbols.py (the leak detector) that reported it.
 
 procedure TTestClass.ShowUpdate(Delay: Integer);
 begin
@@ -63,7 +70,7 @@ var
     else
       StartCount := 0;
     for I := 1 to Count do begin
-      MainForm.EditorList.NewEditor('', False, True, PageControl);
+      MainUi.CreateEditorInPage('', False, True, PageControl);
       if Assigned(PageControl) then
         // make sure property PageCount is correct
         Assert(PageControl.PageCount = StartCount + I);
@@ -76,11 +83,11 @@ var
     e: TEditor;
   begin
     for I := PageControl.PageCount - 1 downto 0 do begin
-      e := MainForm.EditorList.GetEditor(i, PageControl);
+      e := TEditor(MainUi.EditorByIndex(i, PageControl));
       // if this fails the deleted editor will be acivated after
       // closing
-      Assert(e <> MainForm.EditorList.GetPreviousEditor(e));
-      MainForm.EditorList.CloseEditor(e);
+      Assert(e <> TEditor(MainUi.PreviousEditor(e)));
+      MainUi.TryCloseEditor(e);
       // make sure property PageCount is correct
       Assert(PageControl.PageCount = I);
       ShowUpdate(0);
@@ -88,13 +95,13 @@ var
   end;
   procedure CloseAllEditors;
   begin
-    CloseEditors(MainForm.EditorList.LeftPageControl);
-    CloseEditors(MainForm.EditorList.RightPageControl);
+    CloseEditors(TPageControl(MainUi.LeftPageControl));
+    CloseEditors(TPageControl(MainUi.RightPageControl));
   end;
   procedure SwapEditors(PageControl: TPageControl);
   begin
     while PageControl.PageCount > 0 do begin
-      MainForm.EditorList.SwapEditor(MainForm.EditorList.GetEditor(-1, PageControl));
+      MainUi.SwapEditor(TEditor(MainUi.EditorByIndex(-1, PageControl)));
       ShowUpdate(0);
     end;
   end;
@@ -104,10 +111,10 @@ var
     e: TEditor;
   begin
     for I := 0 to PageControl.PageCount - 1 do begin
-      e := MainForm.EditorList.GetEditor(i, PageControl);
+      e := TEditor(MainUi.EditorByIndex(i, PageControl));
       e.Activate;
       // Make sure property FocusedPageControl is correct
-      Assert(MainForm.EditorList.FocusedPageControl = e.PageControl);
+      Assert(TPageControl(MainUi.FocusedPageControl) = e.PageControl);
       ShowUpdate(0);
     end;
   end;
@@ -116,14 +123,14 @@ var
     I: integer;
     FocusedPageControl: TPageControl;
   begin
-    FocusedPageControl := MainForm.EditorList.FocusedPageControl;
-    for I := 0 to MainForm.EditorList.FocusedPageControl.PageCount - 1 do begin
+    FocusedPageControl := TPageControl(MainUi.FocusedPageControl);
+    for I := 0 to TPageControl(MainUi.FocusedPageControl).PageCount - 1 do begin
       if GoForward then
-        MainForm.EditorList.SelectNextPage
+        MainUi.SelectNextEditorPage
       else
-        MainForm.EditorList.SelectPrevPage;
+        MainUi.SelectPrevEditorPage;
       // Make sure PageControl focus does not change
-      Assert(FocusedPageControl = MainForm.EditorList.FocusedPageControl);
+      Assert(FocusedPageControl = TPageControl(MainUi.FocusedPageControl));
       ShowUpdate(0);
     end;
   end;
@@ -132,14 +139,14 @@ var
     I: Integer;
     e: TEditor;
   begin
-    while MainForm.EditorList.PageCount > 0 do begin
-      I := RandomRange(0, MainForm.EditorList.PageCount - 1);
-      e := MainForm.EditorList.Editors[I];
+    while MainUi.EditorPageCount > 0 do begin
+      I := RandomRange(0, MainUi.EditorPageCount - 1);
+      e := TEditor(MainUi.EditorAt(I));
       if RandomRange(1, 5) = 1 then // test closing active editors too in 1/5 on cases
         e.Activate;
       // if this fails the deleted editor will be acivated after closing
-      Assert(e <> MainForm.EditorList.GetPreviousEditor(e));
-      MainForm.EditorList.CloseEditor(e);
+      Assert(e <> TEditor(MainUi.PreviousEditor(e)));
+      MainUi.TryCloseEditor(e);
       ShowUpdate(0);
     end;
   end;
@@ -147,110 +154,110 @@ begin
   EditorCount := 10;
   CloseEditorCount := 50;
   try
-    MainForm.SetStatusbarMessage('Open editors in the default page control (left)');
+    MainUi.SetStatusbarMessage('Open editors in the default page control (left)');
     OpenEditors(EditorCount, nil);
-    Assert(MainForm.EditorList.PageCount = 1 * EditorCount);
-    Assert(MainForm.EditorList.Layout = lstLeft);
-    Assert(MainForm.EditorList.FocusedPageControl = MainForm.EditorList.LeftPageControl);
+    Assert(MainUi.EditorPageCount = 1 * EditorCount);
+    Assert(MainUi.EditorLayoutIsLeft);
+    Assert(TPageControl(MainUi.FocusedPageControl) = TPageControl(MainUi.LeftPageControl));
 
-    MainForm.SetStatusbarMessage('Open explicitly in the left page control');
-    OpenEditors(EditorCount, MainForm.EditorList.LeftPageControl);
-    Assert(MainForm.EditorList.PageCount = 2 * EditorCount);
-    Assert(MainForm.EditorList.Layout = lstLeft);
-    Assert(MainForm.EditorList.FocusedPageControl = MainForm.EditorList.LeftPageControl);
+    MainUi.SetStatusbarMessage('Open explicitly in the left page control');
+    OpenEditors(EditorCount, TPageControl(MainUi.LeftPageControl));
+    Assert(MainUi.EditorPageCount = 2 * EditorCount);
+    Assert(MainUi.EditorLayoutIsLeft);
+    Assert(TPageControl(MainUi.FocusedPageControl) = TPageControl(MainUi.LeftPageControl));
 
-    MainForm.SetStatusbarMessage('Open explicitly in the right page control');
-    OpenEditors(EditorCount, MainForm.EditorList.RightPageControl);
-    Assert(MainForm.EditorList.PageCount = 3 * EditorCount);
-    Assert(MainForm.EditorList.Layout = lstBoth);
-    Assert(MainForm.EditorList.FocusedPageControl = MainForm.EditorList.RightPageControl);
+    MainUi.SetStatusbarMessage('Open explicitly in the right page control');
+    OpenEditors(EditorCount, TPageControl(MainUi.RightPageControl));
+    Assert(MainUi.EditorPageCount = 3 * EditorCount);
+    Assert(MainUi.EditorLayoutIsBoth);
+    Assert(TPageControl(MainUi.FocusedPageControl) = TPageControl(MainUi.RightPageControl));
 
-    MainForm.SetStatusbarMessage('Close left editors');
-    CloseEditors(MainForm.EditorList.LeftPageControl);
-    Assert(MainForm.EditorList.PageCount = 1 * EditorCount);
-    Assert(MainForm.EditorList.Layout = lstRight);
-    Assert(MainForm.EditorList.FocusedPageControl = MainForm.EditorList.RightPageControl);
+    MainUi.SetStatusbarMessage('Close left editors');
+    CloseEditors(TPageControl(MainUi.LeftPageControl));
+    Assert(MainUi.EditorPageCount = 1 * EditorCount);
+    Assert(MainUi.EditorLayoutIsRight);
+    Assert(TPageControl(MainUi.FocusedPageControl) = TPageControl(MainUi.RightPageControl));
 
-    MainForm.SetStatusbarMessage('Close right editors');
-    CloseEditors(MainForm.EditorList.RightPageControl);
-    Assert(MainForm.EditorList.PageCount = 0);
-    Assert(MainForm.EditorList.Layout = lstNone);
-    Assert(MainForm.EditorList.FocusedPageControl = nil);
+    MainUi.SetStatusbarMessage('Close right editors');
+    CloseEditors(TPageControl(MainUi.RightPageControl));
+    Assert(MainUi.EditorPageCount = 0);
+    Assert(MainUi.EditorLayoutIsNone);
+    Assert(TPageControl(MainUi.FocusedPageControl) = nil);
 
-    MainForm.SetStatusbarMessage('Open lots of editors');
+    MainUi.SetStatusbarMessage('Open lots of editors');
     OpenEditors(5 * EditorCount, nil);
-    Assert(MainForm.EditorList.PageCount = 5 * EditorCount);
-    Assert(MainForm.EditorList.Layout = lstLeft);
-    Assert(MainForm.EditorList.FocusedPageControl = MainForm.EditorList.LeftPageControl);
+    Assert(MainUi.EditorPageCount = 5 * EditorCount);
+    Assert(MainUi.EditorLayoutIsLeft);
+    Assert(TPageControl(MainUi.FocusedPageControl) = TPageControl(MainUi.LeftPageControl));
 
-    MainForm.SetStatusbarMessage('Close all');
-    CloseEditors(MainForm.EditorList.LeftPageControl);
-    Assert(MainForm.EditorList.PageCount = 0);
-    Assert(MainForm.EditorList.Layout = lstNone);
-    Assert(MainForm.EditorList.FocusedPageControl = nil);
+    MainUi.SetStatusbarMessage('Close all');
+    CloseEditors(TPageControl(MainUi.LeftPageControl));
+    Assert(MainUi.EditorPageCount = 0);
+    Assert(MainUi.EditorLayoutIsNone);
+    Assert(TPageControl(MainUi.FocusedPageControl) = nil);
 
-    MainForm.SetStatusbarMessage('Editor activating');
-    OpenEditors(EditorCount, MainForm.EditorList.LeftPageControl);
-    Assert(MainForm.EditorList.PageCount = 1 * EditorCount);
-    Assert(MainForm.EditorList.Layout = lstLeft);
-    Assert(MainForm.EditorList.FocusedPageControl = MainForm.EditorList.LeftPageControl);
-    ActivateEditors(MainForm.EditorList.LeftPageControl);
+    MainUi.SetStatusbarMessage('Editor activating');
+    OpenEditors(EditorCount, TPageControl(MainUi.LeftPageControl));
+    Assert(MainUi.EditorPageCount = 1 * EditorCount);
+    Assert(MainUi.EditorLayoutIsLeft);
+    Assert(TPageControl(MainUi.FocusedPageControl) = TPageControl(MainUi.LeftPageControl));
+    ActivateEditors(TPageControl(MainUi.LeftPageControl));
     CloseAllEditors;
-    Assert(MainForm.EditorList.PageCount = 0);
-    Assert(MainForm.EditorList.Layout = lstNone);
-    Assert(MainForm.EditorList.FocusedPageControl = nil);
+    Assert(MainUi.EditorPageCount = 0);
+    Assert(MainUi.EditorLayoutIsNone);
+    Assert(TPageControl(MainUi.FocusedPageControl) = nil);
 
-    MainForm.SetStatusbarMessage('Editor swapping');
-    OpenEditors(EditorCount, MainForm.EditorList.LeftPageControl);
-    Assert(MainForm.EditorList.Layout = lstLeft);
-    Assert(MainForm.EditorList.PageCount = 1 * EditorCount);
-    SwapEditors(MainForm.EditorList.LeftPageControl);
-    Assert(MainForm.EditorList.Layout = lstRight);
-    Assert(MainForm.EditorList.PageCount = 1 * EditorCount);
-    SwapEditors(MainForm.EditorList.RightPageControl);
-    Assert(MainForm.EditorList.Layout = lstLeft);
-    Assert(MainForm.EditorList.PageCount = 1 * EditorCount);
-    CloseEditors(MainForm.EditorList.LeftPageControl);
-    CloseEditors(MainForm.EditorList.RightPageControl);
-    Assert(MainForm.EditorList.Layout = lstNone);
-    Assert(MainForm.EditorList.PageCount = 0);
+    MainUi.SetStatusbarMessage('Editor swapping');
+    OpenEditors(EditorCount, TPageControl(MainUi.LeftPageControl));
+    Assert(MainUi.EditorLayoutIsLeft);
+    Assert(MainUi.EditorPageCount = 1 * EditorCount);
+    SwapEditors(TPageControl(MainUi.LeftPageControl));
+    Assert(MainUi.EditorLayoutIsRight);
+    Assert(MainUi.EditorPageCount = 1 * EditorCount);
+    SwapEditors(TPageControl(MainUi.RightPageControl));
+    Assert(MainUi.EditorLayoutIsLeft);
+    Assert(MainUi.EditorPageCount = 1 * EditorCount);
+    CloseEditors(TPageControl(MainUi.LeftPageControl));
+    CloseEditors(TPageControl(MainUi.RightPageControl));
+    Assert(MainUi.EditorLayoutIsNone);
+    Assert(MainUi.EditorPageCount = 0);
 
-    MainForm.SetStatusbarMessage('Editor zapping');
-    OpenEditors(EditorCount, MainForm.EditorList.LeftPageControl);
-    OpenEditors(EditorCount, MainForm.EditorList.RightPageControl);
-    Assert(MainForm.EditorList.Layout = lstBoth);
+    MainUi.SetStatusbarMessage('Editor zapping');
+    OpenEditors(EditorCount, TPageControl(MainUi.LeftPageControl));
+    OpenEditors(EditorCount, TPageControl(MainUi.RightPageControl));
+    Assert(MainUi.EditorLayoutIsBoth);
     ZapEditors(True); // zap right page control
     ZapEditors(False); // idem
-    e := MainForm.EditorList.GetEditor(-1, MainForm.EditorList.LeftPageControl);
+    e := TEditor(MainUi.EditorByIndex(-1, TPageControl(MainUi.LeftPageControl)));
     e.Activate; // should work
     ZapEditors(True); // zap left page control
     ZapEditors(False); // idem
     CloseAllEditors;
 
-    MainForm.SetStatusbarMessage('Close random editors in the left page control');
-    OpenEditors(CloseEditorCount, MainForm.EditorList.LeftPageControl);
-    Assert(MainForm.EditorList.Layout = lstLeft);
-    Assert(MainForm.EditorList.PageCount = CloseEditorCount);
+    MainUi.SetStatusbarMessage('Close random editors in the left page control');
+    OpenEditors(CloseEditorCount, TPageControl(MainUi.LeftPageControl));
+    Assert(MainUi.EditorLayoutIsLeft);
+    Assert(MainUi.EditorPageCount = CloseEditorCount);
     CloseEditorsRandom;
-    Assert(MainForm.EditorList.Layout = lstNone);
-    Assert(MainForm.EditorList.PageCount = 0);
+    Assert(MainUi.EditorLayoutIsNone);
+    Assert(MainUi.EditorPageCount = 0);
 
-    MainForm.SetStatusbarMessage('Close random editors in the right page control');
-    OpenEditors(CloseEditorCount, MainForm.EditorList.RightPageControl);
-    Assert(MainForm.EditorList.Layout = lstRight);
-    Assert(MainForm.EditorList.PageCount = CloseEditorCount);
+    MainUi.SetStatusbarMessage('Close random editors in the right page control');
+    OpenEditors(CloseEditorCount, TPageControl(MainUi.RightPageControl));
+    Assert(MainUi.EditorLayoutIsRight);
+    Assert(MainUi.EditorPageCount = CloseEditorCount);
     CloseEditorsRandom;
-    Assert(MainForm.EditorList.Layout = lstNone);
-    Assert(MainForm.EditorList.PageCount = 0);
+    Assert(MainUi.EditorLayoutIsNone);
+    Assert(MainUi.EditorPageCount = 0);
 
-    MainForm.SetStatusbarMessage('Close random editors in both page controls');
-    OpenEditors(CloseEditorCount, MainForm.EditorList.LeftPageControl);
-    OpenEditors(CloseEditorCount, MainForm.EditorList.RightPageControl);
-    Assert(MainForm.EditorList.Layout = lstBoth);
-    Assert(MainForm.EditorList.PageCount = 2 * CloseEditorCount);
+    MainUi.SetStatusbarMessage('Close random editors in both page controls');
+    OpenEditors(CloseEditorCount, TPageControl(MainUi.LeftPageControl));
+    OpenEditors(CloseEditorCount, TPageControl(MainUi.RightPageControl));
+    Assert(MainUi.EditorLayoutIsBoth);
+    Assert(MainUi.EditorPageCount = 2 * CloseEditorCount);
     CloseEditorsRandom;
-    Assert(MainForm.EditorList.Layout = lstNone);
-    Assert(MainForm.EditorList.PageCount = 0);
+    Assert(MainUi.EditorLayoutIsNone);
+    Assert(MainUi.EditorPageCount = 0);
 
     Result := True;
   except
@@ -266,8 +273,8 @@ var
 begin
   try
     // Super annoying
-    for I := 0 to MainForm.ActionList.ActionCount - 1 do begin
-      Action := TCustomAction(MainForm.ActionList.Actions[i]);
+    for I := 0 to MainUi.ActionCount - 1 do begin
+      Action := TCustomAction(MainUi.ActionAt(i));
       if Action.Enabled and (Action.Name <> 'actRunTests') and (Action.Name <> 'actExit') then
         Action.Execute;
     end;
@@ -283,38 +290,38 @@ var
 begin
   SetCount := 1;
   try
-    MainForm.SetStatusbarMessage('Open compiler options');
+    MainUi.SetStatusbarMessage('Open compiler options');
     with TCompOptForm.Create(nil) do try // copy from actCompOptions
       Show;
 
-      MainForm.SetStatusbarMessage('Delete all compiler sets');
+      MainUi.SetStatusbarMessage('Delete all compiler sets');
       while cmbCompilerSetComp.Items.Count > 0 do
         btnDelCompilerSet.Click;
 
-      MainForm.SetStatusbarMessage('Add automagically');
+      MainUi.SetStatusbarMessage('Add automagically');
       btnFindCompilers.Click;
 
-      MainForm.SetStatusbarMessage('Rename all compiler sets');
+      MainUi.SetStatusbarMessage('Rename all compiler sets');
       for I := 0 to cmbCompilerSetComp.Items.Count - 1 do begin
         cmbCompilerSetComp.ItemIndex := I;
         btnRenameCompilerSet.Click;
       end;
 
-      MainForm.SetStatusbarMessage('Add blank compiler set');
+      MainUi.SetStatusbarMessage('Add blank compiler set');
       for I := 1 to SetCount do
         btnAddBlankCompilerSet.Click;
 
-      MainForm.SetStatusbarMessage('Add filled compiler set');
+      MainUi.SetStatusbarMessage('Add filled compiler set');
       for I := 1 to SetCount do
         btnAddFilledCompilerSet.Click;
 
-      MainForm.SetStatusbarMessage('Set current compiler set');
+      MainUi.SetStatusbarMessage('Set current compiler set');
       cmbCompilerSetComp.ItemIndex := 0;
 
-      MainForm.SetStatusbarMessage('Save compiler options');
+      MainUi.SetStatusbarMessage('Save compiler options');
       btnOk.Click;
       //  MainForm.CheckForDLLProfiling; TODO: private
-      MainForm.UpdateCompilerList;
+      MainUi.UpdateCompilerList;
     finally;
       Free;
     end;
@@ -345,13 +352,13 @@ begin
   DupeCount := 20;
   IndentCount := 3;
   try
-    MainForm.SetStatusbarMessage('Create new file');
-    MainForm.actNewSource.Execute;
-    e := MainForm.EditorList.GetEditor;
-    //  e := MainForm.EditorList.NewEditor('main.cpp', False, True, nil);
+    MainUi.SetStatusbarMessage('Create new file');
+    MainUi.ExecuteNewSource;
+    e := TEditor(MainUi.EditorByIndex(-1, nil));
+    //  e := MainUi.CreateEditorInPage('main.cpp', False, True, nil);
     e.Activate;
 
-    MainForm.SetStatusbarMessage('Add foldable code');
+    MainUi.SetStatusbarMessage('Add foldable code');
     for I := 1 to FoldCount do begin
       TypeText('{'); // + #13#10;
       e.Text.CommandProcessor(ecLineBreak, #0, nil);
@@ -362,7 +369,7 @@ begin
     end;
     Assert(e.Text.Lines.Count = 2 * FoldCount + 1);
 
-    MainForm.SetStatusbarMessage('Move folds down');
+    MainUi.SetStatusbarMessage('Move folds down');
     e.Text.CaretXY := BufferCoord(1, 1);
     for I := 1 to LineCount do begin
       e.Text.CommandProcessor(ecLineBreak, #0, nil);
@@ -370,7 +377,7 @@ begin
     end;
     Assert(e.Text.Lines.Count = 2 * FoldCount + 1 + LineCount);
 
-    MainForm.SetStatusbarMessage('Move folds up');
+    MainUi.SetStatusbarMessage('Move folds up');
     e.Text.CaretXY := BufferCoord(1, 1);
     for I := 1 to LineCount do begin
       e.Text.CommandProcessor(ecDeleteLine, #0, nil);
@@ -378,27 +385,27 @@ begin
     end;
     Assert(e.Text.Lines.Count = 2 * FoldCount + 1);
 
-    MainForm.SetStatusbarMessage('Test fold collapsing and uncollapsing');
+    MainUi.SetStatusbarMessage('Test fold collapsing and uncollapsing');
     e.Text.CollapseAll;
     ShowUpdate(50);
     e.Text.UncollapseAll;
     ShowUpdate(50);
 
-    MainForm.SetStatusbarMessage('Undo all previous actions to end up with empty editor');
+    MainUi.SetStatusbarMessage('Undo all previous actions to end up with empty editor');
     while e.Text.UndoList.CanUndo do begin
       e.Text.Undo;
       ShowUpdate(0);
     end;
     Assert(e.Text.Text.IsEmpty);
 
-    MainForm.SetStatusbarMessage('Type wall of text');
+    MainUi.SetStatusbarMessage('Type wall of text');
     for I := Ord('a') to Ord('z') do begin
       TypeText(StringOfChar(Chr(I), LineLength));
       e.Text.CommandProcessor(ecLineBreak, #0, nil);
     end;
     Assert(e.Text.Lines.Count = 26 + 1);
 
-    MainForm.SetStatusbarMessage('Move lines down');
+    MainUi.SetStatusbarMessage('Move lines down');
     for I := 0 to e.Text.Lines.Count - 1 do begin
       e.Text.CaretXY := BufferCoord(1, 1);
       for var J := 0 to e.Text.Lines.Count - 3 - I do
@@ -406,7 +413,7 @@ begin
       ShowUpdate(0);
     end;
 
-    MainForm.SetStatusbarMessage('Move lines up');
+    MainUi.SetStatusbarMessage('Move lines up');
     for I := 0 to e.Text.Lines.Count - 1 do begin
       e.Text.CaretXY := BufferCoord(1, e.Text.Lines.Count);
       for var J := 0 to e.Text.Lines.Count - 1 - I do
@@ -414,7 +421,7 @@ begin
       ShowUpdate(0);
     end;
 
-    MainForm.SetStatusbarMessage('Comment');
+    MainUi.SetStatusbarMessage('Comment');
     e.Text.SelectAll;
     for I := 1 to CommentCount do begin
       e.Text.CommandProcessor(TSynEditEx.ecComment, #0, nil);
@@ -422,7 +429,7 @@ begin
     end;
     Assert(e.Text.Lines.Count = 26 + 1);
 
-    MainForm.SetStatusbarMessage('Uncomment');
+    MainUi.SetStatusbarMessage('Uncomment');
     e.Text.SelectAll;
     for I := 1 to CommentCount do begin
       e.Text.CommandProcessor(TSynEditEx.ecUncomment, #0, nil);
@@ -430,7 +437,7 @@ begin
     end;
     Assert(e.Text.Lines.Count = 26 + 1);
 
-    MainForm.SetStatusbarMessage('Toggle comment');
+    MainUi.SetStatusbarMessage('Toggle comment');
     e.Text.SelectAll;
     for I := 1 to CommentCount do begin
       e.Text.CommandProcessor(TSynEditEx.ecToggleComment, #0, nil);
@@ -438,34 +445,34 @@ begin
     end;
     Assert(e.Text.Lines.Count = 26 + 1);
 
-    MainForm.SetStatusbarMessage('Undo all previous actions to end up with empty editor');
+    MainUi.SetStatusbarMessage('Undo all previous actions to end up with empty editor');
     while e.Text.UndoList.CanUndo do begin
       e.Text.Undo;
       ShowUpdate(0);
     end;
     Assert(e.Text.Text.IsEmpty);
 
-    MainForm.SetStatusbarMessage('Type line of text');
+    MainUi.SetStatusbarMessage('Type line of text');
     for I := Ord('a') to Ord('z') do begin
       TypeText(Chr(I));
     end;
     Assert(e.Text.Lines.Count = 1);
 
-    MainForm.SetStatusbarMessage('Duplicate lines');
+    MainUi.SetStatusbarMessage('Duplicate lines');
     for I := 1 to DupeCount do begin
       e.Text.CommandProcessor(TSynEditEx.ecDuplicateLine, #0, nil);
       ShowUpdate(50);
     end;
     Assert(e.Text.Lines.Count = 1 + DupeCount);
 
-    MainForm.SetStatusbarMessage('Delete lines');
+    MainUi.SetStatusbarMessage('Delete lines');
     for I := 1 to DupeCount do begin
       e.Text.CommandProcessor(ecDeleteLine, #0, nil);
       ShowUpdate(20);
     end;
     Assert(e.Text.Lines.Count = 1);
 
-    MainForm.SetStatusbarMessage('Undo all previous actions to end up with empty editor');
+    MainUi.SetStatusbarMessage('Undo all previous actions to end up with empty editor');
     while e.Text.UndoList.CanUndo do begin
       e.Text.Undo;
       ShowUpdate(0);
@@ -473,14 +480,14 @@ begin
 
     Assert(e.Text.Text.IsEmpty);
 
-    MainForm.SetStatusbarMessage('Type wall of text');
+    MainUi.SetStatusbarMessage('Type wall of text');
     for I := Ord('a') to Ord('z') do begin
       TypeText(StringOfChar(Chr(I), LineLength));
       e.Text.CommandProcessor(ecLineBreak, #0, nil);
     end;
     Assert(e.Text.Lines.Count = 26 + 1);
 
-    MainForm.SetStatusbarMessage('Indent');
+    MainUi.SetStatusbarMessage('Indent');
     e.Text.SelectAll;
     for I := 1 to IndentCount do begin
       e.Text.CommandProcessor(ecBlockIndent, #0, nil);
@@ -488,7 +495,7 @@ begin
     end;
     Assert(e.Text.Lines.Count = 26 + 1);
 
-    MainForm.SetStatusbarMessage('Unindent');
+    MainUi.SetStatusbarMessage('Unindent');
     e.Text.SelectAll;
     for I := 1 to IndentCount do begin
       e.Text.CommandProcessor(ecBlockUnindent, #0, nil);
@@ -496,45 +503,45 @@ begin
     end;
     Assert(e.Text.Lines.Count = 26 + 1);
 
-    MainForm.SetStatusbarMessage('Undo all previous actions to end up with empty editor');
+    MainUi.SetStatusbarMessage('Undo all previous actions to end up with empty editor');
     while e.Text.UndoList.CanUndo do begin
       e.Text.Undo;
       ShowUpdate(0);
     end;
     Assert(e.Text.Text.IsEmpty);
 
-    MainForm.SetStatusbarMessage('Type wall of text');
+    MainUi.SetStatusbarMessage('Type wall of text');
     for I := Ord('a') to Ord('a') + 9 do begin
       TypeText(StringOfChar(Chr(I), LineLength));
       e.Text.CommandProcessor(ecLineBreak, #0, nil);
     end;
     Assert(e.Text.Lines.Count = 11);
 
-    MainForm.SetStatusbarMessage('Enable bookmarks');
+    MainUi.SetStatusbarMessage('Enable bookmarks');
     for I := 1 to 9 do begin
       e.Text.CaretXY := BufferCoord(1, I);
-      MainForm.ToggleBookmarksItem.Items[i - 1].Click;
-      Assert(MainForm.ToggleBookmarksItem.Items[i - 1].Checked);
+      MainUi.ClickToggleBookmark(i);
+      Assert(MainUi.ToggleBookmarkChecked(i));
       ShowUpdate(20);
     end;
     Assert(e.Text.Lines.Count = 11);
 
-    MainForm.SetStatusbarMessage('Goto bookmarks');
+    MainUi.SetStatusbarMessage('Goto bookmarks');
     for I := 9 downto 1 do begin
-      MainForm.GotoBookmarksItem.Items[i - 1].Click;
+      MainUi.ClickGotoBookmark(i);
       ShowUpdate(20);
     end;
     Assert(e.Text.Lines.Count = 11);
 
-    MainForm.SetStatusbarMessage('Disable bookmarks');
+    MainUi.SetStatusbarMessage('Disable bookmarks');
     for I := 1 to 9 do begin
-      MainForm.ToggleBookmarksItem.Items[i - 1].Click;
-      Assert(not MainForm.ToggleBookmarksItem.Items[i - 1].Checked);
+      MainUi.ClickToggleBookmark(i);
+      Assert(not MainUi.ToggleBookmarkChecked(i));
       ShowUpdate(20);
     end;
     Assert(e.Text.Lines.Count = 11);
 
-    MainForm.SetStatusbarMessage('Undo all previous actions to end up with empty editor');
+    MainUi.SetStatusbarMessage('Undo all previous actions to end up with empty editor');
     while e.Text.UndoList.CanUndo do begin
       e.Text.Undo;
       ShowUpdate(0);
@@ -542,8 +549,8 @@ begin
 
     Assert(e.Text.Text.IsEmpty);
 
-    MainForm.SetStatusbarMessage('Close editor without saving');
-    MainForm.EditorList.CloseEditor(e);
+    MainUi.SetStatusbarMessage('Close editor without saving');
+    MainUi.TryCloseEditor(e);
 
     Result := True;
   except

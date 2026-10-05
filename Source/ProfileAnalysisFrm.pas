@@ -80,8 +80,8 @@ var
 implementation
 
 uses
-  devcfg, version, utils, main, ShellAPI, StrUtils, MultiLangSupport, CppParser,
-  editor;
+  devcfg, version, utils, ShellAPI, StrUtils, MultiLangSupport, CppParser,
+  editor, MainUi;
 
 {$R *.dfm}
 
@@ -122,19 +122,19 @@ begin
       Params := Params + ' -a';
     Params := Params + ' -m ' + spnMinCount.Text;
 
-    if Assigned(MainForm.Project) then begin
-      Dir := ExtractFilePath(MainForm.Project.Executable);
-      Params := Params + ' "' + ExtractFileName(MainForm.Project.Executable) + '"';
+    if Assigned(MainUi.CurrentProject) then begin
+      Dir := ExtractFilePath(MainUi.ProjectExecutable);
+      Params := Params + ' "' + ExtractFileName(MainUi.ProjectExecutable) + '"';
     end else begin
-      Dir := ExtractFilePath(MainForm.EditorList.GetEditor.FileName);
-      Params := Params + ' "' + ExtractFileName(ChangeFileExt(MainForm.EditorList.GetEditor.FileName, EXE_EXT)) + '"';
+      Dir := ExtractFilePath(MainUi.ActiveEditorFileName);
+      Params := Params + ' "' + ExtractFileName(ChangeFileExt(MainUi.ActiveEditorFileName, EXE_EXT)) + '"';
     end;
   end else begin
     Params := editCustom.Text + ' ' + GPROF_CMD_GENFLAT;
-    if Assigned(MainForm.Project) then
-      Dir := ExtractFilePath(MainForm.Project.Executable)
+    if Assigned(MainUi.CurrentProject) then
+      Dir := ExtractFilePath(MainUi.ProjectExecutable)
     else
-      Dir := ExtractFilePath(MainForm.EditorList.GetEditor.FileName);
+      Dir := ExtractFilePath(MainUi.ActiveEditorFileName);
   end;
 
   // Run a flat output
@@ -161,7 +161,7 @@ begin
       Phrase := Copy(addeditem.Caption, 1, Pos('(', addeditem.Caption) - 1)
     else
       Phrase := addeditem.Caption;
-    addeditem.Data := MainForm.CppParser.FindStatementOf(Phrase, nil);
+    addeditem.Data := TCppParser(MainUi.SharedCppParser).FindStatementOf(Phrase, nil);
 
     // Dive remaining part based on spaces
     Line := TrimLeft(buffer[i]);
@@ -216,19 +216,19 @@ begin
       Params := Params + ' -a';
     Params := Params + ' -m ' + spnMinCount.Text;
 
-    if Assigned(MainForm.Project) then begin
-      Dir := ExtractFilePath(MainForm.Project.Executable);
-      Params := Params + ' "' + ExtractFileName(MainForm.Project.Executable) + '"';
+    if Assigned(MainUi.CurrentProject) then begin
+      Dir := ExtractFilePath(MainUi.ProjectExecutable);
+      Params := Params + ' "' + ExtractFileName(MainUi.ProjectExecutable) + '"';
     end else begin
-      Dir := ExtractFilePath(MainForm.EditorList.GetEditor.FileName);
-      Params := Params + ' "' + ExtractFileName(ChangeFileExt(MainForm.EditorList.GetEditor.FileName, EXE_EXT)) + '"';
+      Dir := ExtractFilePath(MainUi.ActiveEditorFileName);
+      Params := Params + ' "' + ExtractFileName(ChangeFileExt(MainUi.ActiveEditorFileName, EXE_EXT)) + '"';
     end;
   end else begin
     Params := editCustom.Text + ' -q';
-    if Assigned(MainForm.Project) then
-      Dir := ExtractFilePath(MainForm.Project.Executable)
+    if Assigned(MainUi.CurrentProject) then
+      Dir := ExtractFilePath(MainUi.ProjectExecutable)
     else
-      Dir := ExtractFilePath(MainForm.EditorList.GetEditor.FileName);
+      Dir := ExtractFilePath(MainUi.ActiveEditorFileName);
   end;
 
   // Run a graph output
@@ -264,7 +264,7 @@ begin
         Phrase := Copy(addeditem.Caption, 1, Pos('(', addeditem.Caption) - 1)
       else
         Phrase := addeditem.Caption;
-      addeditem.Data := MainForm.CppParser.FindStatementOf(Phrase, nil);
+      addeditem.Data := TCppParser(MainUi.SharedCppParser).FindStatementOf(Phrase, nil);
 
       // Divide remaining part based on spaces
       Line := TrimLeft(buffer[i]);
@@ -376,7 +376,7 @@ begin
   MouseItem := ListView.GetItemAt(MousePos.X, MousePos.Y);
   if Assigned(MouseItem) and Assigned(MouseItem.Data) then begin
     Statement := PStatement(MouseItem.Data);
-    e := MainForm.EditorList.GetEditorFromFileName(Statement^._DefinitionFileName);
+    e := TEditor(MainUi.FindEditorByFileName(Statement^._DefinitionFileName));
     if Assigned(e) then begin
       e.SetCaretPosAndActivate(Statement^._DefinitionLine, 1);
     end;
@@ -428,11 +428,11 @@ var
 begin
   if not chkCustom.Checked then begin
     assembly := devCompilerSets.CompilationSet.gprofName;
-    if Assigned(MainForm.Project) then
-      assembly := assembly + ' "' + ExtractFileName(MainForm.Project.Executable) + '"'
+    if Assigned(MainUi.CurrentProject) then
+      assembly := assembly + ' "' + ExtractFileName(MainUi.ProjectExecutable) + '"'
     else
-      assembly := assembly + ' "' + ExtractFileName(ChangeFileExt(MainForm.EditorList.GetEditor.FileName, EXE_EXT)) +
-        '"';
+      assembly := assembly + ' "' + ExtractFileName(ChangeFileExt(MainUi.ActiveEditorFileName,
+        EXE_EXT)) + '"';
     if not chkHideNotCalled.Checked then
       assembly := assembly + ' -z';
     if chkSuppressStatic.Checked then

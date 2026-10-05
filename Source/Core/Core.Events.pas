@@ -22,7 +22,11 @@ unit Core.Events;
 interface
 
 uses
-  System.Classes, System.SyncObjs, System.Generics.Collections;
+{$IFDEF FPC}
+  SysUtils, Classes, SyncObjs, Generics.Collections;
+{$ELSE}
+  System.SysUtils, System.Classes, System.SyncObjs, System.Generics.Collections;
+{$ENDIF}
 
 // Event types for decoupling main forms from business logic.
 // 约定: Publish 取得事件对象所有权, 分发完毕后释放. 发布方一律 fire-and-forget,
@@ -178,8 +182,28 @@ type
 
 // 专用单播钩子 (与通用订阅并存; 发布时按类型路由)
 type
-  TCompilerProgressHandler =
-    reference to procedure(const ProgressEvent: TCompileProgressEvent);
+  // A plain METHOD POINTER, not a Delphi anonymous method.
+  //
+  // Measured 2026-10-05 with the first real FPC 3.2.2 compile: the
+  // `reference to` spelling is rejected in every mode --
+  // -Mdelphi, -Mdelphiunicode, -Mfpc, -Mobjfpc, each also with
+  // {$modeswitch anonymousfunctions} -- all reporting
+  //     Error: Identifier not found "reference"
+  // and the string `reference to` appears in NONE of the 84 shipped RTL
+  // units, while `TProcedure` does exist in system.ppu. So procedural
+  // TYPES exist and the Delphi ANONYMOUS-METHOD spelling does not.
+  //
+  // This is the fallback the port plan named for dialect risk #3:
+  // "if FPC's delphi mode does not support it, disable the switch and move
+  // to explicit class-level subscription in F1".
+  //
+  // BEHAVIOUR DIFFERENCE, stated rather than assumed: a method pointer
+  // cannot close over local state the way an anonymous method can. A
+  // subscriber must therefore be a real method, and any per-subscription
+  // payload has to travel as a parameter. The existing subscribers pass
+  // their payload through the event itself, so nothing breaks today -- but
+  // a future caller relying on closure would silently not compile.
+  TCompilerProgressHandler = procedure(const ProgressEvent: TCompileProgressEvent) of object;
 
 // Event manager - thread-safe event publishing.
 // 分发时先快照后调用 (不持锁执行订阅者代码, 防重入死锁);

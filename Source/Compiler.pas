@@ -119,7 +119,7 @@ type
 implementation
 
 uses
-  System.UITypes, MultiLangSupport, Macros, devExec, main, StrUtils, System.IOUtils;
+  System.UITypes, MultiLangSupport, Macros, devExec, MainUi, StrUtils, System.IOUtils;
 
 procedure TCompiler.DoLogEntry(const msg: String);
 begin
@@ -756,7 +756,7 @@ begin
 
   OnRunEnd;
 
-  MainForm.UpdateAppTitle;
+  MainUi.RefreshAppTitle;
 end;
 
 procedure TCompiler.Run;
@@ -780,9 +780,9 @@ begin
 
         // Check if it exists
         if not FileExists(FileToRun) then begin
-          if MainForm.actCompRun.Enabled then begin // suggest a compile
+          if MainUi.CanRunCompile then begin // suggest a compile
             if MessageDlg(Lang[ID_ERR_SRCNOTCOMPILEDSUGGEST], mtConfirmation, [mbYes, mbNo], 0) = mrYes then begin
-              MainForm.actCompRunExecute(nil);
+              MainUi.RunCompileAction;
             end;
           end else
             MessageDlg(Lang[ID_ERR_SRCNOTCOMPILED], mtWarning, [mbOK], 0);
@@ -801,16 +801,16 @@ begin
             Application.Minimize;
           devExecutor.ExecuteAndWatch(FileToRun, Parameters, ExtractFilePath(fSourceFile), True, INFINITE,
             RunTerminate);
-          MainForm.UpdateAppTitle;
+          MainUi.RefreshAppTitle;
         end;
       end;
     ctProject: begin
         if fProject.Options.typ = dptStat then
           MessageDlg(Lang[ID_ERR_NOTEXECUTABLE], mtError, [mbOK], 0)
         else if not FileExists(fProject.Executable) then begin
-          if MainForm.actCompRun.Enabled then begin // suggest a compile
+          if MainUi.CanRunCompile then begin // suggest a compile
             if MessageDlg(Lang[ID_ERR_PROJECTNOTCOMPILEDSUGGEST], mtConfirmation, [mbYes, mbNo], 0) = mrYes then begin
-              MainForm.actCompRunExecute(nil); // move this to mainform?
+              MainUi.RunCompileAction;
             end;
           end else
             MessageDlg(Lang[ID_ERR_SRCNOTCOMPILED], mtWarning, [mbOK], 0);
@@ -824,7 +824,7 @@ begin
               Application.Minimize;
             devExecutor.ExecuteAndWatch(fProject.Options.HostApplication, fRunParams,
               ExtractFileDir(fProject.Options.HostApplication), True, INFINITE, RunTerminate);
-            MainForm.UpdateAppTitle;
+            MainUi.RefreshAppTitle;
           end;
         end else begin // execute normally
           if devData.ConsolePause and ProgramHasConsole(fProject.Executable) then begin
@@ -839,7 +839,7 @@ begin
             Application.Minimize;
           devExecutor.ExecuteAndWatch(FileToRun, Parameters, ExtractFileDir(fProject.Executable), True, INFINITE,
             RunTerminate);
-          MainForm.UpdateAppTitle;
+          MainUi.RefreshAppTitle;
         end;
       end;
   end;
@@ -898,8 +898,7 @@ begin
         if not FileExists(fMakefile) then begin
           DoLogEntry(Lang[ID_ERR_NOMAKEFILE]);
           DoLogEntry(Lang[ID_ERR_CLEANFAILED]);
-          MessageBox(MainForm.Handle, PChar(Lang[ID_ERR_NOMAKEFILE]), PChar(Lang[ID_ERROR]), MB_OK or
-            MB_ICONERROR);
+          MainUi.ShowError(Lang[ID_ERR_NOMAKEFILE]);
           Exit;
         end;
 
@@ -942,8 +941,7 @@ begin
         if not FileExists(fMakefile) then begin
           DoLogEntry(Lang[ID_ERR_NOMAKEFILE]);
           DoLogEntry(Lang[ID_ERR_CLEANFAILED]);
-          MessageBox(MainForm.Handle, PChar(Lang[ID_ERR_NOMAKEFILE]), PChar(Lang[ID_ERROR]), MB_OK or
-            MB_ICONERROR);
+          MainUi.ShowError(Lang[ID_ERR_NOMAKEFILE]);
           Exit;
         end;
 
@@ -977,7 +975,7 @@ begin
     fDevRun.FreeOnTerminate := True;
     fDevRun.Start;
 
-    MainForm.UpdateAppTitle;
+    MainUi.RefreshAppTitle;
   end;
 end;
 
@@ -999,7 +997,7 @@ begin
 
   fDevRun := nil;
 
-  MainForm.UpdateAppTitle;
+  MainUi.RefreshAppTitle;
 
   EndProgressForm;
 
@@ -1245,11 +1243,9 @@ begin
       if GetFileTyp(fProject.Units[I].FileName) in [utcSrc, utcppSrc] then
         Inc(numsourcefiles);
 
-    MainForm.pbCompilation.Min := 0;
-    MainForm.pbCompilation.Max := numsourcefiles + 3; // cleaning + all project units + linking output + private resource
-    MainForm.pbCompilation.Position := 0;
+    MainUi.CompileProgressReset(numsourcefiles + 3); // cleaning + all project units + linking output + private resource
   end else
-    MainForm.pbCompilation.Max := 1; // just fSourceFile
+    MainUi.CompileProgressMax(1); // just fSourceFile
 
   // Initialize counters
   fStartTime := GetTickCount;
@@ -1275,13 +1271,13 @@ begin
       for I := 0 to fProject.Units.Count - 1 do begin
         filename := ExtractFilename(fProject.Units[I].FileName);
         if Pos(filename, Line) > 0 then begin
-          MainForm.pbCompilation.StepIt;
+          MainUi.CompileProgressStep;
           Done := true;
           break;
         end;
       end;
     end else if Pos(fSourceFile, Line) > 0 then begin
-      MainForm.pbCompilation.StepIt;
+      MainUi.CompileProgressStep;
       Done := true;
     end;
 
@@ -1292,15 +1288,15 @@ begin
         filename := fSourceFile;
 
       if ContainsStr(Line, filename) then begin
-        MainForm.pbCompilation.StepIt;
+        MainUi.CompileProgressStep;
       end;
     end;
   end else if StartsStr(CLEAN_PROGRAM + ' ', Line) then begin // Cleaning obj files
-    MainForm.pbCompilation.StepIt;
+    MainUi.CompileProgressStep;
   end else if StartsStr(fCompilerSet.windresName + ' ', Line) and Assigned(fProject) then begin // Resource files
     filename := ExtractFileName(fProject.Options.PrivateResource);
     if ContainsStr(Line, filename) then begin
-      MainForm.pbCompilation.StepIt;
+      MainUi.CompileProgressStep;
     end;
   end;
 end;
@@ -1310,7 +1306,7 @@ var
   CompileTime: Extended; // fp
   FileName: String;
 begin
-  MainForm.pbCompilation.Position := 0;
+  MainUi.CompileProgressRewind;
 
   CompileTime := (GetTickCount - fStartTime) / 1000;
 

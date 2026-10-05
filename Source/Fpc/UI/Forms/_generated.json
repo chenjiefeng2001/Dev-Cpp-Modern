@@ -1,0 +1,302 @@
+{
+  "AStyleFormatterOptionsFrm.lfm": {
+    "batch": "A-svg",
+    "rule": "dfm-to-lfm",
+    "source": "AStyleFormatterOptionsFrm.dfm",
+    "svg_lists": 0
+  },
+  "AboutFrm.lfm": {
+    "batch": "A-svg",
+    "rule": "dfm-to-lfm",
+    "source": "AboutFrm.dfm",
+    "svg_lists": 0
+  },
+  "AddToDoFrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "AddToDoFrm.dfm",
+    "svg_lists": 0
+  },
+  "CPUFrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "CPUFrm.dfm",
+    "svg_lists": 0
+  },
+  "ClangFormatterOptionsFrm.lfm": {
+    "batch": "A-svg",
+    "rule": "dfm-to-lfm",
+    "source": "ClangFormatterOptionsFrm.dfm",
+    "svg_lists": 0
+  },
+  "CompOptionsFrm.lfm": {
+    "batch": "C",
+    "rule": "dfm-to-lfm",
+    "source": "CompOptionsFrm.dfm",
+    "svg_lists": 0
+  },
+  "ConsoleAppHostFrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "ConsoleAppHostFrm.dfm",
+    "svg_lists": 0
+  },
+  "DataFrm.svg-lists.lfm": {
+    "load_tested_by": "Tests/FpcCoreTests/svg/SvgLfmProbe.lpr",
+    "rule": "svg-list-fragment",
+    "source": "D:/Git/Dev-Cpp-Modern/Source/DataFrm.dfm",
+    "svg_lists": 5
+  },
+  "EditorOptFrm.lfm": {
+    "batch": "C",
+    "rule": "dfm-to-lfm",
+    "source": "EditorOptFrm.dfm",
+    "svg_lists": 0
+  },
+  "EnviroFrm.lfm": {
+    "batch": "C",
+    "rule": "dfm-to-lfm",
+    "source": "EnviroFrm.dfm",
+    "svg_lists": 0
+  },
+  "ExceptionFrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "ExceptionFrm.dfm",
+    "svg_lists": 0
+  },
+  "FilePropertiesFrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "FilePropertiesFrm.dfm",
+    "svg_lists": 0
+  },
+  "FindFrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "FindFrm.dfm",
+    "svg_lists": 0
+  },
+  "FormatterOptionsFrm.lfm": {
+    "batch": "A-svg",
+    "rule": "dfm-to-lfm",
+    "source": "FormatterOptionsFrm.dfm",
+    "svg_lists": 0
+  },
+  "FunctionSearchFrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "FunctionSearchFrm.dfm",
+    "svg_lists": 0
+  },
+  "GotoLineFrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "GotoLineFrm.dfm",
+    "svg_lists": 0
+  },
+  "IconFrm.lfm": {
+    "batch": "A-svg",
+    "rule": "dfm-to-lfm",
+    "source": "IconFrm.dfm",
+    "svg_lists": 0
+  },
+  "ImportCBFrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "ImportCBFrm.dfm",
+    "svg_lists": 0
+  },
+  "ImportMSVCFrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "ImportMSVCFrm.dfm",
+    "svg_lists": 0
+  },
+  "IncrementalFrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "IncrementalFrm.dfm",
+    "svg_lists": 0
+  },
+  "LangFrm.lfm": {
+    "batch": "C",
+    "rule": "dfm-to-lfm",
+    "source": "LangFrm.dfm",
+    "svg_lists": 0
+  },
+  "NewClassFrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "NewClassFrm.dfm",
+    "svg_lists": 0
+  },
+  "NewFunctionFrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "NewFunctionFrm.dfm",
+    "svg_lists": 0
+  },
+  "NewTemplateFrm.lfm": {
+    "batch": "A-svg",
+    "rule": "dfm-to-lfm",
+    "source": "NewTemplateFrm.dfm",
+    "svg_lists": 0
+  },
+  "NewVarFrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "NewVarFrm.dfm",
+    "svg_lists": 0
+  },
+  "ParamsFrm.lfm": {
+    "batch": "A-svg",
+    "rule": "dfm-to-lfm",
+    "source": "ParamsFrm.dfm",
+    "svg_lists": 0
+  },
+  "PrintFrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "PrintFrm.dfm",
+    "svg_lists": 0
+  },
+  "ProcessListFrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "ProcessListFrm.dfm",
+    "svg_lists": 0
+  },
+  "ProfileAnalysisFrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "ProfileAnalysisFrm.dfm",
+    "svg_lists": 0
+  },
+  "ProjectOptionsFrm.lfm": {
+    "batch": "C",
+    "rule": "dfm-to-lfm",
+    "source": "ProjectOptionsFrm.dfm",
+    "svg_lists": 0
+  },
+  "RemoveUnitFrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "RemoveUnitFrm.dfm",
+    "svg_lists": 0
+  },
+  "TipOfTheDayFrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "TipOfTheDayFrm.dfm",
+    "svg_lists": 0
+  },
+  "ToolEditFrm.lfm": {
+    "batch": "A-svg",
+    "rule": "dfm-to-lfm",
+    "source": "ToolEditFrm.dfm",
+    "svg_lists": 0
+  },
+  "ToolFrm.lfm": {
+    "batch": "A-svg",
+    "rule": "dfm-to-lfm",
+    "source": "ToolFrm.dfm",
+    "svg_lists": 0
+  },
+  "Tools/PackMaker/Aboutfrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "Tools/PackMaker/Aboutfrm.dfm",
+    "svg_lists": 0
+  },
+  "Tools/PackMaker/actionfrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "Tools/PackMaker/actionfrm.dfm",
+    "svg_lists": 0
+  },
+  "Tools/PackMaker/buildfrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "Tools/PackMaker/buildfrm.dfm",
+    "svg_lists": 0
+  },
+  "Tools/PackMaker/filefrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "Tools/PackMaker/filefrm.dfm",
+    "svg_lists": 0
+  },
+  "Tools/PackMaker/main.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "Tools/PackMaker/main.dfm",
+    "svg_lists": 0
+  },
+  "Tools/PackMaker/menufrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "Tools/PackMaker/menufrm.dfm",
+    "svg_lists": 0
+  },
+  "Tools/Packman/AboutForms.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "Tools/Packman/AboutForms.dfm",
+    "svg_lists": 0
+  },
+  "Tools/Packman/DetailsForms.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "Tools/Packman/DetailsForms.dfm",
+    "svg_lists": 0
+  },
+  "Tools/Packman/ExceptionsAnalyzer.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "Tools/Packman/ExceptionsAnalyzer.dfm",
+    "svg_lists": 0
+  },
+  "Tools/Packman/ExtractionProgressDialog.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "Tools/Packman/ExtractionProgressDialog.dfm",
+    "svg_lists": 0
+  },
+  "Tools/Packman/InstallWizards.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "Tools/Packman/InstallWizards.dfm",
+    "svg_lists": 0
+  },
+  "Tools/Packman/RemoveForms.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "Tools/Packman/RemoveForms.dfm",
+    "svg_lists": 0
+  },
+  "Tools/Packman/VerifyForms.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "Tools/Packman/VerifyForms.dfm",
+    "svg_lists": 0
+  },
+  "ViewToDoFrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "ViewToDoFrm.dfm",
+    "svg_lists": 0
+  },
+  "WindowListFrm.lfm": {
+    "batch": "A",
+    "rule": "dfm-to-lfm",
+    "source": "WindowListFrm.dfm",
+    "svg_lists": 0
+  },
+  "main.lfm": {
+    "batch": "C",
+    "rule": "dfm-to-lfm",
+    "source": "main.dfm",
+    "svg_lists": 0
+  }
+}

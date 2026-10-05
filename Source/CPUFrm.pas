@@ -77,8 +77,8 @@ var
 implementation
 
 uses
-  main, version, MultiLangSupport, debugger, debugreader, DataFrm, utils,
-  devcfg, editor, Types;
+  version, MultiLangSupport, debugger, debugreader, DataFrm, utils,
+  devcfg, editor, Types, MainUi;
 
 {$R *.dfm}
 
@@ -97,9 +97,7 @@ begin
   fBackTrace.Free;
 
   // Clear contents of the debug reader
-  MainForm.Debugger.Reader.Registers := nil;
-  MainForm.Debugger.Reader.Disassembly := nil;
-  MainForm.Debugger.Reader.Backtrace := nil;
+  MainUi.ClearDebugOutputSinks;
 
   // Save column widths of registerbox
   devData.CPURegisterCol1 := RegisterListbox.Column[0].Width;
@@ -114,7 +112,7 @@ procedure TCPUForm.edFuncKeyPress(Sender: TObject; var Key: Char);
 var
   propercmd: String;
 begin
-  if MainForm.Debugger.Executing then begin
+  if MainUi.DebuggerExecuting then begin
     if Key = Chr(VK_RETURN) then begin
       Key := #0;
 
@@ -122,7 +120,7 @@ begin
       propercmd := edFunc.Text;
       if EndsStr('()', propercmd) then
         propercmd := ReplaceLastStr(propercmd, '()', '(void)');
-      MainForm.Debugger.SendCommand('disas', propercmd);
+      MainUi.SendDisassembly(propercmd);
       if (Length(edFunc.Text) > 0) and (edFunc.Items.IndexOf(edFunc.Text) = -1) then
         edFunc.AddItem(edFunc.Text, nil);
     end;
@@ -228,20 +226,18 @@ begin
   fAssembler := TStringList.Create;
   fBacktrace := TList.Create;
 
-  if MainForm.Debugger.Executing then begin
+  if MainUi.DebuggerExecuting then begin
 
     // Load the registers...
-    MainForm.Debugger.Reader.Registers := fRegisters;
-    MainForm.Debugger.SendCommand('info', 'registers');
+    MainUi.SetDebugOutputSinks(fRegisters, fAssembler, fBacktrace);
+    MainUi.SendDebuggerCommand('info', 'registers');
 
     // Set disassembly flavor and load the current function
-    MainForm.Debugger.Reader.Disassembly := fAssembler;
     if devData.UseATTSyntax then // gbSyntaxClick has NOT been called yet...
       gbSyntaxClick(nil);
 
     // Obtain stack trace too
-    MainForm.Debugger.Reader.Backtrace := fBacktrace;
-    MainForm.Debugger.SendCommand('backtrace', '');
+    MainUi.SendDebuggerCommand('backtrace', '');
   end;
 end;
 
@@ -251,11 +247,11 @@ var
 begin
   // Set disassembly flavor
   if RadioAtt.Checked then begin
-    MainForm.Debugger.SendCommand('set disassembly-flavor', 'att');
+    MainUi.SetDisassemblyFlavor('att');
     RadioIntel.Checked := false;
     devData.UseATTSyntax := true;
   end else if RadioIntel.Checked then begin
-    MainForm.Debugger.SendCommand('set disassembly-flavor', 'intel');
+    MainUi.SetDisassemblyFlavor('intel');
     RadioAtt.Checked := false;
     devData.UseATTSyntax := false;
   end;
@@ -323,10 +319,7 @@ var
 begin
   sel := StackTrace.Selected;
   if Assigned(sel) then begin
-    e := MainForm.EditorList.GetEditorFromFileName(sel.SubItems[0]);
-    if Assigned(e) then begin
-      e.SetCaretPosAndActivate(StrToIntDef(sel.SubItems[1], 1), 1);
-    end;
+    MainUi.NavigateToFileAndLine(sel.SubItems[0], StrToIntDef(sel.SubItems[1], 1));
   end;
 end;
 

@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectOptions>
+    <Version Value="12"/>
+    <General>
+      <Flags>
+        <MainUnitHasUses Value="True"/>
+        <MainUnitHasCreateForms Value="False"/>
+        <MainUnitHasResources Value="False"/>
+      </Flags>
+      <SessionStorageDirectory Value=""/>
+    </General>
+    <BuildMode>
+      <Flags Name="Default">
+        <IsActive Value="True"/>
+        <ExeOutputDirectory Value="lib/$(TargetOS)"/>
+        <ObjectDirectory Value="lib/$(TargetOS)"/>
+        <UseCustomBuildOptions Value="False"/>
+        <SearchPaths Value="False"/>
+        <CustomOptions>
+          <CustomOptions>
+            <Define Name="TEST_TOOLCHAIN" Value="True"/>
+            <Define Name="FPC_ANON_HOOK" Value="True"/>
+          </CustomOptions>
+        </CustomOptions>
+      </Flags>
+    </BuildMode>
+    <RequiredPackages Count="0"/>
+    <UnitOutputDirectory Value="lib/$(TargetOS)"/>
+  </ProjectOptions>
+  <CompilerOptions>
+    <Version Value="11"/>
+    <SearchPaths>
+      <Other>
+        <Include Value="../../Source/Core"/>
+        <Include Value="../../Source/Debugger/GDB"/>
+        <Include Value="../../Source/LSP/JsonRpc"/>
+        <Include Value="../../Source/LSP/Transport"/>
+        <Include Value="../../Source/LSP/Process"/>
+        <Include Value="../../Source/Toolchain"/>
+      </Other>
+    </SearchPaths>
+    <Parsing>
+      <SyntaxMode Value="Delphi"/>
+      <UseAnsiStrings Value="True"/>
+      <ParamCount Value="0"/>
+      <SyntaxOptions>
+        <UseTypeHelpers Value="False"/>
+      </SyntaxOptions>
+    </Parsing>
+    <Linking>
+      <PassLinkerOptions Value="False"/>
+      <GenerateDebugInfo Value="True"/>
+      <StripSymbols Value="False"/>
+      <StaticLinked Value="False"/>
+    </Linking>
+    <Target>
+      <Filename Value="lib/$(TargetOS)/FpcCoreTestsWin"/>
+    </Target>
+  </CompilerOptions>
+  <Units Count="11">
+    <Unit0>
+      <Filename Value="FpcCoreTests.lpr"/>
+      <IsPartOfProject Value="True"/>
+    </Unit0>
+    <Unit1>
+      <Filename Value="../../Source/Core/Core.Events.pas"/>
+      <IsPartOfProject Value="True"/>
+    </Unit1>
+    <Unit2>
+      <Filename Value="../../Source/Core/Core.Services.pas"/>
+      <IsPartOfProject Value="True"/>
+    </Unit2>
+    <Unit3>
+      <Filename Value="../../Source/Debugger/GDB/GDB.MiTypes.pas"/>
+      <IsPartOfProject Value="True"/>
+    </Unit3>
+    <Unit4>
+      <Filename Value="../../Source/Debugger/GDB/GDB.MiParser.pas"/>
+      <IsPartOfProject Value="True"/>
+    </Unit4>
+    <Unit5>
+      <Filename Value="../../Source/Toolchain/ToolchainConfig.pas"/>
+      <IsPartOfProject Value="True"/>
+    </Unit5>
+    <Unit6>
+      <Filename Value="../../Source/LSP/JsonRpc/Lsp.JsonRpc.pas"/>
+      <IsPartOfProject Value="True"/>
+    </Unit6>
+    <Unit7>
+      <Filename Value="../../Source/LSP/Process/Lsp.Process.pas"/>
+      <IsPartOfProject Value="True"/>
+    </Unit7>
+    <Unit8>
+      <Filename Value="../../Source/LSP/Process/Lsp.Process.Fpc.pas"/>
+      <IsPartOfProject Value="True"/>
+    </Unit8>
+    <Unit9>
+      <Filename Value="../../Source/LSP/Process/Lsp.Process.Factory.pas"/>
+      <IsPartOfProject Value="True"/>
+    </Unit9>
+    <Unit10>
+      <Filename Value="../../Source/LSP/Transport/Lsp.Transport.pas"/>
+      <IsPartOfProject Value="True"/>
+    </Unit10>
+  </Units>
+</CONFIG>

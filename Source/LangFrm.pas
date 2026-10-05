@@ -65,7 +65,7 @@ type
 implementation
 
 uses
-  MultiLangSupport, DataFrm, devcfg, utils, main, version, ImageTheme, SynEditTypes;
+  MultiLangSupport, DataFrm, devcfg, utils, version, ImageTheme, SynEditTypes;
 
 {$R *.dfm}
 

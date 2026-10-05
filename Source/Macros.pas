@@ -29,7 +29,7 @@ function ParseMacros(Str: String): String;
 implementation
 
 uses
-  Main, editor, Dialogs, Utils, Classes;
+  editor, Dialogs, Utils, Classes, MainUi;
 
 procedure Replace(var Str: String; Old, New: String);
 begin
@@ -41,7 +41,7 @@ var
   e: TEditor;
 begin
   Result := Str;
-  e := MainForm.EditorList.GetEditor;
+  e := TEditor(MainUi.EditorByIndex(-1, nil));
 
   Replace(Result, '<DEFAULT>', devDirs.Default);
   Replace(Result, '<DEVCPP>', ExtractFileDir(ParamStr(0)));
@@ -65,12 +65,12 @@ begin
   end;
 
   // Project-dependent macros
-  if Assigned(MainForm.Project) then begin
-    Replace(Result, '<EXENAME>', MainForm.Project.Executable);
-    Replace(Result, '<PROJECTNAME>', MainForm.Project.Name);
-    Replace(Result, '<PROJECTFILE>', MainForm.Project.FileName);
-    Replace(Result, '<PROJECTPATH>', MainForm.Project.Directory);
-    Replace(Result, '<SOURCESPCLIST>', MainForm.Project.ListUnitStr(' '));
+  if Assigned(MainUi.CurrentProject) then begin
+    Replace(Result, '<EXENAME>', MainUi.ProjectExecutable);
+    Replace(Result, '<PROJECTNAME>', MainUi.ProjectName);
+    Replace(Result, '<PROJECTFILE>', MainUi.ProjectFileName);
+    Replace(Result, '<PROJECTPATH>', MainUi.ProjectDirectory);
+    Replace(Result, '<SOURCESPCLIST>', MainUi.ProjectUnitList(' '));
   end else if Assigned(e) then begin // Non-project editor macros
     Replace(Result, '<EXENAME>', '"' + ChangeFileExt(e.FileName, EXE_EXT) + '"');
     Replace(Result, '<PROJECTNAME>', e.FileName);

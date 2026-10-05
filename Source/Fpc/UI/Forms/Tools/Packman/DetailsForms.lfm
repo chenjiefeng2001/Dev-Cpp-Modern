@@ -1,0 +1,48 @@
+object DetailsForm: TDetailsForm
+  Left = 192
+  Top = 107
+  Caption = 'Details'
+  ClientHeight = 263
+  ClientWidth = 451
+  Color = clWindow
+  Font.Color = clWindowText
+  Font.Height = -11
+  Font.Name = 'Heebo'
+  Font.Style = []
+  Position = poScreenCenter
+end
+  object Memo1: TMemo
+    Left = 0
+    Top = 0
+    Width = 451
+    Height = 224
+    Align = alClient
+    Font.Color = clWindowText
+    Font.Height = -13
+    Font.Name = 'Courier'
+    Font.Style = []
+    ParentFont = False
+    ReadOnly = True
+    ScrollBars = ssBoth
+    TabOrder = 0
+  end
+  object Panel1: TPanel
+    Left = 0
+    Top = 224
+    Width = 451
+    Height = 39
+    Align = alBottom
+    BevelOuter = bvNone
+    TabOrder = 1
+  end
+  object BitBtn1: TBitBtn
+    Left = 8
+    Top = 8
+    Width = 97
+    Height = 25
+    Caption = '&Close'
+    Default = True
+    NumGlyphs = 2
+    TabOrder = 0
+    OnClick = BitBtn1Click
+  end

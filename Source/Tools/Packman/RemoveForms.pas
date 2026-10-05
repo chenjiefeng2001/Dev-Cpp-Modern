@@ -14,7 +14,6 @@ uses
 
 type
   TRemoveForm = class(TForm)
-    Animate1: TAnimate;
     Label1: TLabel;
     GroupBox1: TGroupBox;
     ProgressBar1: TProgressBar;
@@ -149,7 +148,6 @@ begin
         BorderIcons := BorderIcons + [biSystemMenu];
         Caption := 'Aborted';
         Label1.Caption := 'Aborted.';
-        Animate1.Active := False;
         BitBtn1.Kind := bkClose;
         BitBtn1.Default := True;
         BitBtn1.OnClick := nil;
@@ -182,7 +180,6 @@ begin
         BorderIcons := BorderIcons + [biSystemMenu];
         Caption := 'Aborted';
         Label1.Caption := 'Aborted.';
-        Animate1.Active := False;
         BitBtn1.Kind := bkClose;
         BitBtn1.Default := True;
         BitBtn1.OnClick := nil;
@@ -203,7 +200,6 @@ begin
     Caption := 'Finished removing ' + Ini.ReadString('Setup', 'AppName', '');
     GroupBox1.Caption := 'Progress (100%)';
     Label1.Caption := 'Finished.';
-    Animate1.Active := False;
     BorderIcons := BorderIcons + [biSystemMenu];
     Abort := False;
     Ini.Free;

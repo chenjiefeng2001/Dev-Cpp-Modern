@@ -22,8 +22,16 @@ unit Debugger.Scheduler;
 interface
 
 uses
+  {$IFDEF FPC}
+  SysUtils, Classes, SyncObjs,
+  {$ELSE}
   System.SysUtils, System.Classes, System.SyncObjs,
+  {$ENDIF}
+  {$IFDEF FPC}
+  Generics.Collections,
+  {$ELSE}
   System.Generics.Collections,
+  {$ENDIF}
   GDB.MiParser, GDB.MiTypes;
 
 // Command scheduler for GDB/MI.
@@ -32,7 +40,7 @@ uses
 // this unit stays free of any MainForm / debugger-window dependency.
 
 type
-  TSendCommandCallback = reference to procedure(const ARecord: TMiRecord);
+  TSendCommandCallback = procedure(const ARecord: TMiRecord) of object
 
   TCommandToken = Integer;
 

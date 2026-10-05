@@ -1,0 +1,622 @@
+[
+  {
+    "list": "SVGImageListMenuStyle",
+    "class": "TSVGIconImageList",
+    "size_px": 19,
+    "count": 85,
+    "items": [
+      {
+        "name": "iconsnew-51",
+        "chars": 521,
+        "sha256": "88ae6129cf201e50881b2221f544dc1d01983494cc723a8f8b6efdd9456c67fd"
+      },
+      {
+        "name": "iconsnew-02",
+        "chars": 326,
+        "sha256": "fa21af45edd1a0b1cea0cdea79e5e7935b7ffec9a98f0dea09e64b463a26e781"
+      },
+      {
+        "name": "icons-229",
+        "chars": 601,
+        "sha256": "2b3cb847b37e7052294d557039c6af02fc301f2e040fa4c869e86e72bf0d103f"
+      },
+      {
+        "name": "iconsnew-46",
+        "chars": 544,
+        "sha256": "cb3d78e0f0b75c8276dc96290925812e70e02cce0c0d736eea2bd29a0aa77284"
+      },
+      {
+        "name": "iconsnew-03",
+        "chars": 369,
+        "sha256": "177e86552930cd561384396a60d4664c88cb4328640d28267fd97b079ad586a5"
+      },
+      {
+        "name": "iconsnew-31",
+        "chars": 663,
+        "sha256": "09fdf190ae381a1a04db2569edec8f602f363009a48b1cebfaefbb75bffe861e"
+      },
+      {
+        "name": "iconsnew-04",
+        "chars": 1004,
+        "sha256": "17b3eb830b4d5d2d606769f0d6b9dc0fc70684e2eaf3cd2a5eb045beb71ad81e"
+      },
+      {
+        "name": "iconsnew-04-2",
+        "chars": 1004,
+        "sha256": "17b3eb830b4d5d2d606769f0d6b9dc0fc70684e2eaf3cd2a5eb045beb71ad81e"
+      },
+      {
+        "name": "iconsnew-05",
+        "chars": 646,
+        "sha256": "cfc0667c38587517f237cbbc9e48391de892c30617a0635f3cf2d4b8430c189c"
+      },
+      {
+        "name": "iconsnew-06",
+        "chars": 489,
+        "sha256": "0cb0e06c438aec48bd682e83fc97a1cc1b17c034aad815fe7ca8958cf843f91c"
+      },
+      {
+        "name": "iconsnew-08",
+        "chars": 666,
+        "sha256": "5ea4e6c870f2098634e14f5a2ef7296726430758909d878f7349f6fdf0df3e77"
+      },
+      {
+        "name": "iconsnew-23",
+        "chars": 324,
+        "sha256": "85eff612b7c3c72b48ea2601bddb0e115e2fb05d937882cb00f346fd9a49241b"
+      },
+      {
+        "name": "iconsnew-01",
+        "chars": 467,
+        "sha256": "42cba19641eab3dea24b640a0643e50ef2407148ecf5e89af2ed121b583b0e5c"
+      },
+      {
+        "name": "iconsnew-09",
+        "chars": 363,
+        "sha256": "ec718ed08d09eb1e79a1133e9267424f39c5e61d295ccbffcab96ff9cd289363"
+      },
+      {
+        "name": "iconsnew-10",
+        "chars": 360,
+        "sha256": "8537506ae3f78e58fa98e5e57b09754ff36e8e8e092fda12e134e1ee7f0220aa"
+      },
+      {
+        "name": "iconsnew-42",
+        "chars": 1186,
+        "sha256": "ad632446b6c6b1ea6891e11e38361a713d0f7fe8d2aec22e24475fc8333a2ce6"
+      },
+      {
+        "name": "iconsnew-43",
+        "chars": 419,
+        "sha256": "bc53b38e0d06b07a940af7a427ef176b92f1d797f77c77f6df4b51c6906c4276"
+      },
+      {
+        "name": "iconsnew-44",
+        "chars": 773,
+        "sha256": "8a7e0a139e80aa10f2ec664565ff82cacf9eee95049f0c1afb2d96a688340e23"
+      },
+      {
+        "name": "iconsnew-26",
+        "chars": 651,
+        "sha256": "3385ca128a9b69ab5558d107edab3287c99e99862fe0e0c21eda024abd44ec44"
+      },
+      {
+        "name": "iconsnew-27",
+        "chars": 488,
+        "sha256": "f831cbaa646fa898dfc220a3b5fc8b52c0d0455071458bf10692ee6476f9ed57"
+      },
+      {
+        "name": "iconsnew-28",
+        "chars": 861,
+        "sha256": "5d794cbf1cff4199bd69ede09c6e99e407c9545d19a25ee1d00a323496f6c41d"
+      },
+      {
+        "name": "iconsnew-11",
+        "chars": 454,
+        "sha256": "bd4e3f5fba56483e87bed9225d34eedb6b30317e7ba1ba8f5d3741faa248cc3b"
+      },
+      {
+        "name": "iconsnew-12",
+        "chars": 1650,
+        "sha256": "76d37f5d6ffc58aa440754a2838eac7b78128d0eb7e706459454d44c8595ed4f"
+      },
+      {
+        "name": "iconsnew-47",
+        "chars": 622,
+        "sha256": "49945ee506589be8e61e7c03a4790fa76de46538aa220ebcce74570f6d283874"
+      },
+      {
+        "name": "iconsnew-14",
+        "chars": 458,
+        "sha256": "99b2920d7c06fb94ad470b0ff31d443abec0d555b5048dfbdb06a60df8ff8874"
+      },
+      {
+        "name": "iconsnew-15",
+        "chars": 484,
+        "sha256": "4057ee32b78c244bde247bbf856804746686e0177b025f9ad753a2268cf8d170"
+      },
+      {
+        "name": "iconsnew-16",
+        "chars": 383,
+        "sha256": "3ce3ff2639bcd3cbfdf8db3f9ed9cbf0cccc18e63f27c188fbebad22d61ec7f4"
+      },
+      {
+        "name": "iconsnew-17",
+        "chars": 560,
+        "sha256": "99c71c5bf4d81960ec426830cf226a7a7b0c409b1a345caab5a28e8f7ca68fb0"
+      },
+      {
+        "name": "iconsnew-18",
+        "chars": 454,
+        "sha256": "18602cd2b72d7a4e78f1c3b0fc8c4e0af545f73b9f3bd9fc4af92fbcba2c6846"
+      },
+      {
+        "name": "iconsnew-38",
+        "chars": 443,
+        "sha256": "4921be07114603eb69b0a165f28e3b9475a79ee41a0a2e813f3b8b4eb0410e1b"
+      },
+      {
+        "name": "iconsnew-21",
+        "chars": 762,
+        "sha256": "5e995eb3b1f17746657f87279578036b6f70ff503223e841d4f2336b288a7aa8"
+      },
+      {
+        "name": "iconsnew-19",
+        "chars": 318,
+        "sha256": "a157dbe618c6010e0bc1b919908176fcb6b758b789d201c39da69c88f0c08a7e"
+      },
+      {
+        "name": "iconsnew-22",
+        "chars": 270,
+        "sha256": "9d5a738c4932485dccd29508b041e32c5c9a46b5418caf1c792b529def585661"
+      },
+      {
+        "name": "iconsnew-20",
+        "chars": 614,
+        "sha256": "e7b7ecae7c725d3e36110ae3d65b1e13d564669d047eae840460e6b29dec0736"
+      },
+      {
+        "name": "iconsnew-36",
+        "chars": 470,
+        "sha256": "9a76b0b4b751909bc9fa358063a9b39d670be1966b8fccd7d2139bce289c2ae5"
+      },
+      {
+        "name": "iconsnew-37",
+        "chars": 761,
+        "sha256": "6c531aceda59fd3309eb6e555b991ba89c7b23e8ec3300993b4daf3d1053f7d7"
+      },
+      {
+        "name": "iconsnew-38-2",
+        "chars": 443,
+        "sha256": "4921be07114603eb69b0a165f28e3b9475a79ee41a0a2e813f3b8b4eb0410e1b"
+      },
+      {
+        "name": "iconsnew-40",
+        "chars": 612,
+        "sha256": "68374206734de88b9effc34e1bf0f2bbe56d60133a008127e8f1117241375123"
+      },
+      {
+        "name": "iconsnew-50",
+        "chars": 818,
+        "sha256": "6ccaf58325d4258655b30aea7d282eb135b027644d399f89dfba3032e89246dd"
+      },
+      {
+        "name": "iconsnew-34",
+        "chars": 373,
+        "sha256": "8436023335921c3a347e0a8532d00b92931a72d51a440abe0070867653427773"
+      },
+      {
+        "name": "iconsnew-35",
+        "chars": 375,
+        "sha256": "2c326b78d201764b759ebd4a2e1b9d2dad5568fafb89e20ce25710bec8e8ed1f"
+      },
+      {
+        "name": "iconsnew-49",
+        "chars": 517,
+        "sha256": "6b219cdc232150b253a72da09d79e099fa83afbeee1047c536f96801f1a257b7"
+      },
+      {
+        "name": "iconsnew-30",
+        "chars": 575,
+        "sha256": "7db2eef351a47e7f911e1ed3d16940468c81e28310f53df622be57f3c0f083bc"
+      },
+      {
+        "name": "iconsnew-24",
+        "chars": 447,
+        "sha256": "66f022f34ccefc0626f2a8c4d118eaad4c869ca68a842f64b0cae94547f3952a"
+      },
+      {
+        "name": "iconsnew-13",
+        "chars": 575,
+        "sha256": "929d887109c4b615d2f71df8afd314a05bc88781615e00736862cb3b794ff475"
+      },
+      {
+        "name": "iconsnew-19-2",
+        "chars": 318,
+        "sha256": "a157dbe618c6010e0bc1b919908176fcb6b758b789d201c39da69c88f0c08a7e"
+      },
+      {
+        "name": "iconsnew-29",
+        "chars": 978,
+        "sha256": "cc130dc0f87071613887e8af1d1a1dad76dba1a3e446c80883919734428562b9"
+      },
+      {
+        "name": "iconsnew-25",
+        "chars": 632,
+        "sha256": "44260a3ab35cb347b2669a83d763f4bdd589e386e049ade9d351712c5fc2ddf1"
+      },
+      {
+        "name": "iconsnew-41",
+        "chars": 855,
+        "sha256": "aba7d0d1fb07d6d9a9e8c0ad34c61a20bb0cc75e06345b66e72bb762577fac76"
+      },
+      {
+        "name": "iconsnew-32",
+        "chars": 464,
+        "sha256": "51436d34d92fda6b43be5caca0fc074c97e9dd06fa07aa522a1659d8dc7259e8"
+      },
+      {
+        "name": "iconsnew-07",
+        "chars": 596,
+        "sha256": "27c88401812c6ba0ecb3dbdaf52aa01c8b558eb27a941e3b1bca976419a33f0e"
+      },
+      {
+        "name": "iconsnew-45",
+        "chars": 670,
+        "sha256": "f5cdc66c44752dbb256176541cec4b8634efbc5603d5ef1a4a3df0321079a778"
+      },
+      {
+        "name": "iconsnew-59",
+        "chars": 752,
+        "sha256": "d98efebc86f981a363137d41753778e38f424a49f6854c8b0b933f83c1e9234c"
+      },
+      {
+        "name": "iconsnew-56",
+        "chars": 851,
+        "sha256": "ed2b6445c76e0df77fe6f700d36968b8dfd72f9bf1d4d789eb9a1294c36e981d"
+      },
+      {
+        "name": "iconsnew-33",
+        "chars": 895,
+        "sha256": "f4cdf66067ee5ad0ff250a5cad29d2b5967dde3c40774b50977e583efb61c9e5"
+      },
+      {
+        "name": "iconsnew-39",
+        "chars": 1075,
+        "sha256": "c0b8334e32b0173e7df70a31519ac3bbdc4ec843587d1ee0d25df10c129281e3"
+      },
+      {
+        "name": "iconsnew-52",
+        "chars": 306,
+        "sha256": "7d3000aa8e1e128be426828ffefcff6deb6a1855b33121286a1c2aad615ddc10"
+      },
+      {
+        "name": "iconsnew-53",
+        "chars": 309,
+        "sha256": "644867d13bff5fd868ebc8e206a27d61a4cc26e2d308c023e1b5ee4e29aa991f"
+      },
+      {
+        "name": "iconsnew-64",
+        "chars": 755,
+        "sha256": "fa5f4a88c4b4d1790701ed928cdc959b344ff6a3da3298d042eca2730bdf3b22"
+      },
+      {
+        "name": "iconsnew-65",
+        "chars": 1199,
+        "sha256": "28c5f0cff4ab8a914a6e90843f59fb6b54c133f44f275261334693482df67f6a"
+      },
+      {
+        "name": "iconsnew-66",
+        "chars": 894,
+        "sha256": "9cb4dc14c44fa96fec4e5244f707508a70eaa11a94363420807d96689f0d2b19"
+      },
+      {
+        "name": "iconsnew-67",
+        "chars": 505,
+        "sha256": "1ae9456269646e335eff209499c725ae520df59c5380f2bda6868e63ea6c6e3e"
+      },
+      {
+        "name": "iconsnew-68",
+        "chars": 692,
+        "sha256": "587e733827bfa4b27c677615b3609361e17331222a4d0b6b779208117ac7b685"
+      },
+      {
+        "name": "iconsnew-69",
+        "chars": 871,
+        "sha256": "0928d13e93603406931b0be6122e7157e893d9f7d9a6633a1aabbc1638ee5c85"
+      },
+      {
+        "name": "iconsnew-70",
+        "chars": 950,
+        "sha256": "01fb200212c181e3d93dfa737589d43eb2696657f028e08aaf6a480d8c2f6ec6"
+      },
+      {
+        "name": "iconsnew-71",
+        "chars": 842,
+        "sha256": "9c8614db1a2d1c42016f7c9a3dfbc9d0585b494dd61edfd64eaf603672cdf776"
+      },
+      {
+        "name": "iconsnew-72",
+        "chars": 959,
+        "sha256": "80f4015d666e2f7a074eb9eb333b31a37571d3ad358aaecbe348fcd17b2d2d97"
+      },
+      {
+        "name": "iconsnew-73",
+        "chars": 682,
+        "sha256": "024169dc649c90bfd38f3aa2b94746fd2efae52f3238c74dab434c97efeba29a"
+      },
+      {
+        "name": "iconsnew-74",
+        "chars": 1832,
+        "sha256": "c2e8ddcd65d7dc32689700d049a7324977ce63c29a484a0d6b0ba78fd2edf695"
+      },
+      {
+        "name": "iconsnew-75",
+        "chars": 1296,
+        "sha256": "307ff1f2db98383a5a7a044679dfa0a9dcc58a80182c53e34c711ea9bd2f3faa"
+      },
+      {
+        "name": "iconsnew-76",
+        "chars": 575,
+        "sha256": "4f64c7b51d0a1ae52326221dfca08748bb8adaac1194ce7a61c04de2d28339a8"
+      },
+      {
+        "name": "iconsnew-77",
+        "chars": 1082,
+        "sha256": "fda5025e63df5f3621b524b58a4f28fec7a3a7c09273c211e4315432b6e28593"
+      },
+      {
+        "name": "iconsnew-79",
+        "chars": 2607,
+        "sha256": "cfa1ac0c61d5d55368d786d59a60ae6d2e7399ba041d8160ec2f9481aece4906"
+      },
+      {
+        "name": "iconsnew-80",
+        "chars": 801,
+        "sha256": "e575c4f6f02e980163f96038b00fecd976c3491071283b461f4b8a6196ce94de"
+      },
+      {
+        "name": "iconsnew-81",
+        "chars": 915,
+        "sha256": "d11d8f10267dd3e1a6283748612aacc810d6706a244645beb666a348deb8e12a"
+      },
+      {
+        "name": "iconsnew-82",
+        "chars": 4291,
+        "sha256": "0433a99dd49e9b2908d75442a0c1cbde925d35a19fb1521f04bf2f8f5b55016e"
+      },
+      {
+        "name": "iconsnew-83",
+        "chars": 767,
+        "sha256": "a5d9b25cf506b10d7785dd88c7c5acb6d82519cc5896e5e6e1cb12d717df26af"
+      },
+      {
+        "name": "iconsnew-84",
+        "chars": 450,
+        "sha256": "347d5cb77444970087938b5a86e992a4d8ca09c21d5d593e7324c09dc7e3a728"
+      },
+      {
+        "name": "Plus",
+        "chars": 254,
+        "sha256": "3a20efb604e128dd0952a5b2da96fa2bf5ca94b8bcae09c0fb0198773e797fd3"
+      },
+      {
+        "name": "Grupo 196",
+        "chars": 708,
+        "sha256": "62386781552b6140615e6b06238b69597e00184e176c1cf1bb552a42a40b6f9f"
+      },
+      {
+        "name": "icons-227",
+        "chars": 752,
+        "sha256": "00944347071a39b65d26ccd86e857e4b9c949fe726464f80215743186ff148de"
+      },
+      {
+        "name": "icons-228",
+        "chars": 410,
+        "sha256": "d8428eadde81c45e8f2ca3c5f47dc69676dcbea5fc6781d9f1d0781bd751f23f"
+      },
+      {
+        "name": "icons-230",
+        "chars": 767,
+        "sha256": "5388d02d071a35da24ba3068423cdfc298aec67b5d2e147bd08b4c4fe9b04e2e"
+      },
+      {
+        "name": "icons-231",
+        "chars": 1548,
+        "sha256": "ea768718297d3f5f152fb4519d614df881e71f80891bab28cfaa41489a81f608"
+      },
+      {
+        "name": "iconsnew-78",
+        "chars": 992,
+        "sha256": "d04f51d33277e7e1b5f1e877f65506dfd0cf87e8fddfe719735a84bfb5223c0e"
+      }
+    ]
+  },
+  {
+    "list": "SVGImageListProjectStyle",
+    "class": "TSVGIconImageList",
+    "size_px": 18,
+    "count": 6,
+    "items": [
+      {
+        "name": "iconsnew-51",
+        "chars": 521,
+        "sha256": "88ae6129cf201e50881b2221f544dc1d01983494cc723a8f8b6efdd9456c67fd"
+      },
+      {
+        "name": "iconsnew-02",
+        "chars": 326,
+        "sha256": "fa21af45edd1a0b1cea0cdea79e5e7935b7ffec9a98f0dea09e64b463a26e781"
+      },
+      {
+        "name": "iconsnew-19",
+        "chars": 318,
+        "sha256": "a157dbe618c6010e0bc1b919908176fcb6b758b789d201c39da69c88f0c08a7e"
+      },
+      {
+        "name": "iconsnew-31",
+        "chars": 663,
+        "sha256": "09fdf190ae381a1a04db2569edec8f602f363009a48b1cebfaefbb75bffe861e"
+      },
+      {
+        "name": "iconsnew-03",
+        "chars": 369,
+        "sha256": "177e86552930cd561384396a60d4664c88cb4328640d28267fd97b079ad586a5"
+      },
+      {
+        "name": "iconsnew-48",
+        "chars": 378,
+        "sha256": "70124249174907eea78ab7b6a8d2d1bf0d90c65d70ff89a69032d99d5cad196c"
+      }
+    ]
+  },
+  {
+    "list": "SVGImageListClassStyle",
+    "class": "TSVGIconImageList",
+    "size_px": null,
+    "count": 12,
+    "items": [
+      {
+        "name": "iconsnew-68",
+        "chars": 692,
+        "sha256": "587e733827bfa4b27c677615b3609361e17331222a4d0b6b779208117ac7b685"
+      },
+      {
+        "name": "iconsnew-45",
+        "chars": 670,
+        "sha256": "f5cdc66c44752dbb256176541cec4b8634efbc5603d5ef1a4a3df0321079a778"
+      },
+      {
+        "name": "iconsnew-54",
+        "chars": 1828,
+        "sha256": "3f8c9c69454968c1104ade682efc6c5616395266512a2e6eee0338a87e30201c"
+      },
+      {
+        "name": "iconsnew-55",
+        "chars": 2355,
+        "sha256": "bc7cb297e7b9fea204635b2afdff21d2d11fbd70637f6473e6a1bbb441ecbb69"
+      },
+      {
+        "name": "iconsnew-56",
+        "chars": 851,
+        "sha256": "ed2b6445c76e0df77fe6f700d36968b8dfd72f9bf1d4d789eb9a1294c36e981d"
+      },
+      {
+        "name": "iconsnew-60",
+        "chars": 1541,
+        "sha256": "0f067ad131e55e9d8f236331da24c54851c7d6d81ff47b087789a6c63c94d1a0"
+      },
+      {
+        "name": "iconsnew-61",
+        "chars": 2073,
+        "sha256": "6ff7298ff2a05fb63bdf8419d97ceec9dfe0954ced28e55ef8ed9a97af16e53e"
+      },
+      {
+        "name": "iconsnew-59",
+        "chars": 752,
+        "sha256": "d98efebc86f981a363137d41753778e38f424a49f6854c8b0b933f83c1e9234c"
+      },
+      {
+        "name": "iconsnew-62",
+        "chars": 2215,
+        "sha256": "8ff18541eaee0d7b6cccf942dab490dfb8d32af2fab9471298929cd2659a70c2"
+      },
+      {
+        "name": "iconsnew-57",
+        "chars": 985,
+        "sha256": "00eb996e10d08d262c839b3e4b4f018879b32ebb3f97285f92c22b193aa63fea"
+      },
+      {
+        "name": "iconsnew-58",
+        "chars": 901,
+        "sha256": "4e480e6e144624dacb13caeeb999299f7e6f0bf31293e0330d30cd7470b79c48"
+      },
+      {
+        "name": "iconsnew-63",
+        "chars": 2518,
+        "sha256": "190288ab12612818cd21c230576d707a2e6a88d6de1f8a33017fec07970c5149"
+      }
+    ]
+  },
+  {
+    "list": "SVGImageListMessageStyle",
+    "class": "TSVGIconImageList",
+    "size_px": 25,
+    "count": 7,
+    "items": [
+      {
+        "name": "iconsnew-18",
+        "chars": 454,
+        "sha256": "18602cd2b72d7a4e78f1c3b0fc8c4e0af545f73b9f3bd9fc4af92fbcba2c6846"
+      },
+      {
+        "name": "icons-229",
+        "chars": 601,
+        "sha256": "2b3cb847b37e7052294d557039c6af02fc301f2e040fa4c869e86e72bf0d103f"
+      },
+      {
+        "name": "iconsnew-24",
+        "chars": 447,
+        "sha256": "66f022f34ccefc0626f2a8c4d118eaad4c869ca68a842f64b0cae94547f3952a"
+      },
+      {
+        "name": "iconsnew-22",
+        "chars": 270,
+        "sha256": "9d5a738c4932485dccd29508b041e32c5c9a46b5418caf1c792b529def585661"
+      },
+      {
+        "name": "iconsnew-11",
+        "chars": 454,
+        "sha256": "bd4e3f5fba56483e87bed9225d34eedb6b30317e7ba1ba8f5d3741faa248cc3b"
+      },
+      {
+        "name": "iconsnew-50",
+        "chars": 818,
+        "sha256": "6ccaf58325d4258655b30aea7d282eb135b027644d399f89dfba3032e89246dd"
+      },
+      {
+        "name": "iconsnew-23",
+        "chars": 324,
+        "sha256": "85eff612b7c3c72b48ea2601bddb0e115e2fb05d937882cb00f346fd9a49241b"
+      }
+    ]
+  },
+  {
+    "list": "SVGIconImageWelcomeScreen",
+    "class": "TSVGIconImageList",
+    "size_px": 37,
+    "count": 6,
+    "items": [
+      {
+        "name": "iconsnew-02",
+        "chars": 326,
+        "sha256": "fa21af45edd1a0b1cea0cdea79e5e7935b7ffec9a98f0dea09e64b463a26e781"
+      },
+      {
+        "name": "iconsnew-03",
+        "chars": 369,
+        "sha256": "177e86552930cd561384396a60d4664c88cb4328640d28267fd97b079ad586a5"
+      },
+      {
+        "name": "icons-231",
+        "chars": 1548,
+        "sha256": "ea768718297d3f5f152fb4519d614df881e71f80891bab28cfaa41489a81f608"
+      },
+      {
+        "name": "icons-227",
+        "chars": 752,
+        "sha256": "00944347071a39b65d26ccd86e857e4b9c949fe726464f80215743186ff148de"
+      },
+      {
+        "name": "icons-228",
+        "chars": 410,
+        "sha256": "d8428eadde81c45e8f2ca3c5f47dc69676dcbea5fc6781d9f1d0781bd751f23f"
+      },
+      {
+        "name": "icons-230",
+        "chars": 767,
+        "sha256": "5388d02d071a35da24ba3068423cdfc298aec67b5d2e147bd08b4c4fe9b04e2e"
+      }
+    ]
+  }
+]

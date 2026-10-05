@@ -25,15 +25,6 @@ object RemoveForm: TRemoveForm
     Height = 13
     Caption = 'Deleting file: %s'
   end
-  object Animate1: TAnimate
-    Left = 8
-    Top = 8
-    Width = 304
-    Height = 60
-    Active = True
-    CommonAVI = aviEmptyRecycle
-    StopFrame = 23
-  end
   object GroupBox1: TGroupBox
     Left = 8
     Top = 104

@@ -104,7 +104,7 @@ var
 implementation
 
 uses
-  LibTar, ExtractionProgressDialog, System.IOUtils, AbUnzper, AbArcTyp, Main;
+  LibTar, ExtractionProgressDialog, System.IOUtils, AbUnzper, AbArcTyp;
 
 const
   PageCount = 5;

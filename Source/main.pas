@@ -30,7 +30,7 @@ uses
   Project, editor, DateUtils, compiler, ActnList, ToolFrm, AppEvnts,
   debugger, ClassBrowser, CodeCompletion, CppParser, CppTokenizer, SyncObjs,
   ProjectTreeFrame, WatchCallStackFrame,
-  StrUtils, SynEditTypes, devFileMonitor, devMonitorTypes, DdeMan, EditorList,
+  StrUtils, SynEditTypes, devFileMonitor, devMonitorTypes, EditorList,
   devShortcuts, debugreader, ExceptionFrm, CommCtrl, devcfg, SynEditTextBuffer,
   CppPreprocessor, CBUtils, StatementList, AStyleFormatterOptionsFrm, ClangFormatterOptionsFrm, System.Actions,
   vcl.Themes, SVGColor, Vcl.Imaging.pngimage, Vcl.WinXCtrls, Vcl.WinXPanels, Vcl.ExtDlgs,
@@ -361,7 +361,6 @@ type
     actViewCPU: TAction;
     actExecParams: TAction;
     mnuExecParameters: TMenuItem;
-    DevCppDDEServer: TDdeServerConv;
     actShowTips: TAction;
     ShowTipsItem: TMenuItem;
     N42: TMenuItem;
@@ -762,7 +761,6 @@ type
     procedure ViewCPUItemClick(Sender: TObject);
     procedure edGdbCommandKeyPress(Sender: TObject; var Key: Char);
     procedure actExecParamsExecute(Sender: TObject);
-    procedure DevCppDDEServerExecuteMacro(Sender: TObject; Msg: TStrings);
     procedure actShowTipsExecute(Sender: TObject);
     procedure CppParserStartParsing(Sender: TObject);
     procedure CppParserEndParsing(Sender: TObject; Total: Integer);
@@ -5264,32 +5262,6 @@ begin
   end;
 end;
 
-procedure TMainForm.DevCppDDEServerExecuteMacro(Sender: TObject; Msg: TStrings);
-var
-  filename: String;
-  i, n: Integer;
-begin
-  if Msg.Count > 0 then begin
-    for i := 0 to Msg.Count - 1 do begin
-      filename := Msg[i];
-      if Pos('[Open(', filename) = 1 then begin
-        n := Pos('"', filename);
-        if n > 0 then begin
-          Delete(filename, 1, n);
-          n := Pos('"', filename);
-          if n > 0 then
-            Delete(filename, n, maxint);
-          try
-            OpenFile(filename);
-          except
-          end;
-        end;
-      end;
-    end;
-    Application.BringToFront;
-  end;
-end;
-
 procedure TMainForm.actShowTipsExecute(Sender: TObject);
 begin
   with TTipOfTheDayForm.Create(Self) do
@@ -6478,7 +6450,6 @@ begin
   UpdateCompilerList;
 
   // Try to fix the file associations. Needs write access to registry, which might cause exceptions to be thrown
-  DDETopic := DevCppDDEServer.Name;
   if devData.CheckAssocs then begin
     try
       CheckAssociations(true); // check and fix

@@ -56,3 +56,124 @@ __history/
 *.~*
 MinGW64
 devcpp.exe
+
+# Lazarus/FPC 平移子工程产物 (Phase-F)
+**/lib/
+**/*.lps
+**/*.compiled
+**/*.o
+**/*.ppu
+**/*.rst
+Tests/FpcCoreTests/FpcCoreTests
+Tests/FpcCoreTests/FpcCoreTests.exe
+
+# Python 门禁工具的运行产物 (tools/*.py 是 CI 门禁的一等公民)
+__pycache__/
+*.py[cod]
+
+# ---------------------------------------------------------------------------
+# 构建产物补充 (2026-10-05)
+#
+# 上面几节覆盖了 Delphi 与 Lazarus 的常见产物, 但有两类东西会持续污染
+# `git status`, 而它们都不是源码。
+#
+# IMPORTANT -- gitignore 对已追踪文件无效
+# -----------------------------------------
+# 本仓库有 42 个文件已被 git 追踪, 同时又命中下面某条规则 (38 个 .dproj /
+# .res / .a / .rc, 以及 4 个真正的产物: main.o / Packman.cfg /
+# ClassBrowsing.cfg / Demo1.lps)。gitignore 不会把它们移出版本库, 需要
+# `git rm --cached <path>` 才行。
+#
+# 这里【不动】那些文件, 理由是:
+#   * .dproj / .res / .libshlwapi.a / resource.rc 属工程资产而非产物 --
+#     vendored VCL 子包的 .res 是 Delphi 编译必需, .dproj 是工程配置。
+#     把它们从版本库剔除会让 vendored 树无法直接编译。
+#   * 4 个真产物应该单独做一次 `git rm --cached`, 那是一次有意的、需要在
+#     提交信息里说明的改动, 不该混在一次忽略规则调整里悄悄发生。
+#
+# 所以本次只做"防止新的产物进来"。既有 42 个文件的去留是独立议题。
+
+# 链接器 / 编译器中间产物
+*.obj
+*.o
+*.dcu
+*.bpl
+*.dcp
+*.map
+*.drc
+*.tds
+*.idb
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.a
+*.so
+*.dylib
+*.dll
+
+# Lazarus / Free Pascal
+**/lib/
+**/units/
+**/*.lps
+**/*.lpi.bak
+**/*.compiled
+**/*.ppu
+**/*.ppudata
+**/*.rst
+**/*.or
+**/*.a
+Tests/FpcCoreTests/FpcCoreTests
+Tests/FpcCoreTests/FpcCoreTests.exe
+# The SVG probes link the whole LCL, so each binary is ~3 MB. They are built
+# from source by tools/build_svg_probe.ps1 (and by the lcl-svg-runtime CI job);
+# committing them would add ~12 MB of rebuildable output to the tree.
+Tests/FpcCoreTests/svg/*.exe
+
+# 编辑器 / 崩溃转储 / 临时文件
+*.exe.manifest.bak
+*.err
+*.log
+*.bak
+*.tmp
+*.orig
+*.rej
+*~
+*.swp
+*.swo
+.vs/
+.vscode/
+.idea/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 依赖目录 (experimental/ 下有 6.4 GB 的 node_modules 与 Rust target)
+node_modules/
+**/node_modules/
+**/target/
+**/.pnpm-store/
+# experimental/ 本身保持未追踪 —— 它是 Tauri/Monaco 替代方案的 PoC 区,
+# 6.4 GB 里绝大多数是构建缓存。但三份 FINDINGS.md 是有价值的调研结论,
+# 所以排除规则要放行它们, 而不是把整个目录一刀切掉。
+# (先忽略全部, 再逐级放行目录, 最后放行文件 —— gitignore 不会自动重开
+#  被忽略目录, 所以每层都必须显式写出来。)
+experimental/**
+!experimental/poc1-tauri-monaco/
+experimental/poc1-tauri-monaco/**
+!experimental/poc1-tauri-monaco/FINDINGS.md
+!experimental/poc1b-tauri-console/
+experimental/poc1b-tauri-console/**
+!experimental/poc1b-tauri-console/FINDINGS.md
+!experimental/poc2-conpty/
+experimental/poc2-conpty/**
+!experimental/poc2-conpty/FINDINGS.md
+
+# Windows 资源管理器垃圾
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+$RECYCLE.BIN/
+

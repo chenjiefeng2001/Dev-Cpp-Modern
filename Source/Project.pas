@@ -157,8 +157,8 @@ type
 implementation
 
 uses
-  main, MultiLangSupport, devcfg, ProjectOptionsFrm, DataFrm, utils,
-  RemoveUnitFrm, SynEdit, EditorList;
+  MainUi, MultiLangSupport, devcfg, ProjectOptionsFrm, DataFrm, utils,
+  RemoveUnitFrm, SynEdit;
 
 { TProjUnit }
 
@@ -173,7 +173,7 @@ end;
 destructor TProjUnit.Destroy;
 begin
   if Assigned(fEditor) then begin
-    MainForm.EditorList.ForceCloseEditor(fEditor);
+    MainUi.ForceCloseEditor(fEditor);
     fEditor := nil;
   end;
   fNode := nil;
@@ -184,7 +184,7 @@ function TProjUnit.Save: boolean;
 var
   workeditor: TSynEdit;
 begin
-  MainForm.FileMonitor.BeginUpdate;
+  MainUi.FileMonitorBeginUpdate;
   try
     try
       result := true;
@@ -201,7 +201,7 @@ begin
       result := false;
     end;
   finally
-    MainForm.FileMonitor.EndUpdate;
+    MainUi.FileMonitorEndUpdate;
   end;
 
   // Update node text
@@ -335,7 +335,7 @@ begin
   if Options.LogOutputEnabled then begin
 
     // Formatted log
-    if (MainForm.CompilerOutput.Items.Count > 0) then begin
+    if (MainUi.CompilerOutputItemCount > 0) then begin
       AssignFile(logfile, Options.LogOutput + '\Formatted Compiler Output.txt');
       try
         if FileExists(Options.LogOutput + '\Formatted Compiler Output.txt') = false then begin
@@ -347,8 +347,8 @@ begin
           Write(logfile, #13#10 + DateTimeToStr(Now) + ': Appending to log...' + #13#10#13#10);
         end;
 
-        for i := 0 to pred(MainForm.CompilerOutput.Items.Count) do begin
-          temp2 := MainForm.CompilerOutput.Items[i].Caption + #10 + MainForm.CompilerOutput.Items[i].SubItems.Text;
+        for i := 0 to pred(MainUi.CompilerOutputItemCount) do begin
+          temp2 := MainUi.CompilerOutputItemText(i);
           temp2 := StringReplace(temp2, #10, #9, []);
           temp2 := StringReplace(temp2, #13#10, #9, []);
           temp2 := StringReplace(temp2, #13#10, #9, []);
@@ -361,7 +361,7 @@ begin
     end;
 
     // Raw log
-    if Length(MainForm.LogOutput.Text) > 0 then begin
+    if Length(MainUi.LogOutputText) > 0 then begin
       AssignFile(logfile, Options.LogOutput + '\Raw Build Output.txt');
       try
         if FileExists(Options.LogOutput + '\Raw Build Output.txt') = false then begin
@@ -372,7 +372,7 @@ begin
           Append(logfile);
           Write(logfile, #13#10 + DateTimeToStr(Now) + ': Appending to log...' + #13#10#13#10);
         end;
-        Write(logfile, MainForm.LogOutput.Lines.Text);
+        Write(logfile, MainUi.LogOutputText);
       finally
         CloseFile(logfile);
       end;
@@ -382,15 +382,15 @@ end;
 
 function TProject.MakeProjectNode: TTreeNode;
 begin
-  MakeProjectNode := MainForm.ProjectView.Items.Add(nil, Name);
+  MakeProjectNode := MainUi.AddProjectRootNode(Name);
   MakeProjectNode.SelectedIndex := 0;
   MakeProjectNode.ImageIndex := 0;
-  MainForm.ProjectView.FullExpand;
+  MainUi.ExpandProjectView;
 end;
 
 function TProject.MakeNewFileNode(const s: String; IsFolder: boolean; NewParent: TTreeNode): TTreeNode;
 begin
-  MakeNewFileNode := MainForm.ProjectView.Items.AddChild(NewParent, s);
+  MakeNewFileNode := MainUi.AddProjectChildNode(s, NewParent);
 
 
   if IsFolder then begin
@@ -1132,6 +1132,7 @@ var
   sl: TStringList;
   S: String;
   e, e2: TEditor;
+  LEditor, REditor: TObject;
 begin
   s := ChangeFileExt(Filename, '.layout');
   layIni := TIniFile.Create(s);
@@ -1139,15 +1140,17 @@ begin
     sl := TStringList.Create;
     try
       // Write list of open project files
-      for I := 0 to MainForm.EditorList.PageCount - 1 do begin
-        e := MainForm.EditorList[i];
+      for I := 0 to MainUi.EditorPageCount - 1 do begin
+        e := TEditor(MainUi.EditorAt(I));
         if Assigned(e) and e.InProject then
           sl.Add(IntToStr(fUnits.IndexOf(e)));
       end;
       layIni.WriteString('Editors', 'Order', sl.CommaText);
 
       // Remember what files were visible
-      MainForm.EditorList.GetVisibleEditors(e, e2);
+      MainUi.VisibleEditors(LEditor, REditor);
+      e := TEditor(LEditor);
+      e2 := TEditor(REditor);
       if Assigned(e) then
         layIni.WriteInteger('Editors', 'Focused', fUnits.IndexOf(e));
       //if Assigned(e2) then
@@ -1263,7 +1266,7 @@ begin
 
   // Attempt to close it
   if DoClose and Assigned(fUnits.GetItem(index).fEditor) then
-    if not MainForm.EditorList.CloseEditor(fUnits.GetItem(index).fEditor) then
+    if not MainUi.TryCloseEditor(fUnits.GetItem(index).fEditor) then
       Exit;
 
   result := true;
@@ -1296,9 +1299,9 @@ begin
     if FileName <> '' then begin
       try
         SetCurrentDir(Directory);
-        fEditor := MainForm.EditorList.FileIsOpen(ExpandFileName(FileName));
+        fEditor := TEditor(MainUi.FindOpenEditor(ExpandFileName(FileName)));
         if fEditor = nil then
-          fEditor := MainForm.EditorList.NewEditor(ExpandFileName(FileName), true, false);
+          fEditor := TEditor(MainUi.CreateEditor(ExpandFileName(FileName), true, false));
         LoadUnitLayout(fEditor, index);
         Result := fEditor;
       except
@@ -1313,7 +1316,7 @@ begin
   with fUnits[index] do begin
     if Assigned(fEditor) then begin
       SaveUnitLayout(fEditor, index);
-      MainForm.EditorList.ForceCloseEditor(fEditor);
+      MainUi.ForceCloseEditor(fEditor);
       fEditor := nil;
     end;
   end;
@@ -1547,7 +1550,7 @@ function TProject.ShowOptions: Integer;
 var
   IconFileName: String;
 begin
-  with TProjectOptionsFrm.Create(MainForm) do try
+  with TProjectOptionsFrm.Create(MainUi.DialogOwner) do try
 
     // Apply current settings
     SetInterface(Self);
@@ -1605,7 +1608,7 @@ begin
         fIniFile := TMemIniFile.Create(aFileName);
       NewUnit(FALSE, nil);
       with fUnits[fUnits.Count - 1] do begin
-        Editor := MainForm.EditorList.NewEditor(FileName, True, True);
+        Editor := TEditor(MainUi.CreateEditor(FileName, True, True));
         Editor.InsertDefaultText;
         Editor.Activate;
       end;
@@ -1648,7 +1651,7 @@ begin
 
         // Create an editor
         with fUnits[fUnits.Count - 1] do begin
-          Editor := MainForm.EditorList.NewEditor(FileName, True, True);
+          Editor := TEditor(MainUi.CreateEditor(FileName, True, True));
           try
             // Set filename depending on C/C++ choice
             if (Length(aTemplate.Units[I].CppName) > 0) and (aTemplate.Options.useGPP) then begin
@@ -1681,7 +1684,7 @@ begin
     end else begin
       NewUnit(FALSE, nil);
       with fUnits[fUnits.Count - 1] do begin
-        Editor := MainForm.EditorList.NewEditor(FileName, TRUE, True);
+        Editor := TEditor(MainUi.CreateEditor(FileName, TRUE, True));
         if fOptions.useGPP then
           s := aTemplate.OldData.CppText
         else
@@ -1707,17 +1710,16 @@ var
   oldPaths: TStrings;
   tempnode: TTreeNode;
 begin
-  MainForm.ProjectView.Items.BeginUpdate;
+  MainUi.ProjectViewBeginUpdate;
   try
     // Remember if folder nodes were expanded or collapsed
     // Create a list of expanded folder nodes
     oldPaths := TStringList.Create;
-    with MainForm.ProjectView do
-      for idx := 0 to Items.Count - 1 do begin
-        tempnode := Items[idx];
-        if tempnode.Expanded and (tempnode.Data = Pointer(-1)) then // data=pointer(-1) - it's folder
-          oldPaths.Add(GetFolderPath(tempnode));
-      end;
+    for idx := 0 to MainUi.ProjectViewItemCount - 1 do begin
+      tempnode := MainUi.ProjectViewItem(idx);
+      if tempnode.Expanded and (tempnode.Data = Pointer(-1)) then // data=pointer(-1) - it's folder
+        oldPaths.Add(GetFolderPath(tempnode));
+    end;
 
     // Delete everything
     fNode.DeleteChildren;
@@ -1739,20 +1741,19 @@ begin
 
     // expand nodes expanded before recreating the project tree
     fNode.Collapse(True);
-    with MainForm.ProjectView do
-      for idx := 0 to Items.Count - 1 do begin
-        tempnode := Items[idx];
-        if (tempnode.Data = Pointer(-1)) then //it's a folder
-          if oldPaths.IndexOf(GetFolderPath(tempnode)) >= 0 then
-            tempnode.Expand(False);
-      end;
+    for idx := 0 to MainUi.ProjectViewItemCount - 1 do begin
+      tempnode := MainUi.ProjectViewItem(idx);
+      if (tempnode.Data = Pointer(-1)) then //it's a folder
+        if oldPaths.IndexOf(GetFolderPath(tempnode)) >= 0 then
+          tempnode.Expand(False);
+    end;
     //FreeAndNil(oldPaths);
 
     oldPaths.Free;
 
     fNode.Expand(False);
   finally
-    MainForm.ProjectView.Items.EndUpdate;
+    MainUi.ProjectViewEndUpdate;
   end;
 end;
 
@@ -1799,7 +1800,7 @@ begin
   if fFolders.IndexOf(s) = -1 then begin
     fFolders.Add(s);
     RebuildNodes;
-    MainForm.ProjectView.Select(FolderNodeFromName(s));
+    MainUi.SelectProjectNode(FolderNodeFromName(s));
     FolderNodeFromName(s).MakeVisible;
     SetModified(TRUE);
   end;

@@ -1,0 +1,17 @@
+object SvgImageLists: TSvgImageLists
+  object SVGImageListMenuStyle: TLclSvgImageList
+    ListName = 'SVGImageListMenuStyle'
+  end
+  object SVGImageListProjectStyle: TLclSvgImageList
+    ListName = 'SVGImageListProjectStyle'
+  end
+  object SVGImageListClassStyle: TLclSvgImageList
+    ListName = 'SVGImageListClassStyle'
+  end
+  object SVGImageListMessageStyle: TLclSvgImageList
+    ListName = 'SVGImageListMessageStyle'
+  end
+  object SVGIconImageWelcomeScreen: TLclSvgImageList
+    ListName = 'SVGIconImageWelcomeScreen'
+  end
+end

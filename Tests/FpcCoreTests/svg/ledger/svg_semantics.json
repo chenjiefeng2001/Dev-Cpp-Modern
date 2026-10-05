@@ -1,0 +1,455 @@
+{
+  "actions": {
+    "Ok": [
+      {
+        "form": "AboutFrm.dfm",
+        "component": "btnOk",
+        "index": 32,
+        "icon": "iconsnew-22"
+      }
+    ],
+    "Authors": [
+      {
+        "form": "AboutFrm.dfm",
+        "component": "btnAuthors",
+        "index": 71,
+        "icon": "iconsnew-77"
+      }
+    ],
+    "UpdateCheck": [
+      {
+        "form": "AboutFrm.dfm",
+        "component": "btnUpdateCheck",
+        "index": 72,
+        "icon": "iconsnew-79"
+      }
+    ],
+    "Up": [
+      {
+        "form": "CompOptionsFrm.dfm",
+        "component": "btnUp",
+        "index": 56,
+        "icon": "iconsnew-52"
+      },
+      {
+        "form": "ToolFrm.dfm",
+        "component": "btnUp",
+        "index": 56,
+        "icon": "iconsnew-52"
+      }
+    ],
+    "Down": [
+      {
+        "form": "CompOptionsFrm.dfm",
+        "component": "btnDown",
+        "index": 57,
+        "icon": "iconsnew-53"
+      },
+      {
+        "form": "ToolFrm.dfm",
+        "component": "btnDown",
+        "index": 57,
+        "icon": "iconsnew-53"
+      }
+    ],
+    "Browse": [
+      {
+        "form": "CompOptionsFrm.dfm",
+        "component": "btnBrowse",
+        "index": 59,
+        "icon": "iconsnew-65"
+      },
+      {
+        "form": "NewTemplateFrm.dfm",
+        "component": "btnBrowse",
+        "index": 61,
+        "icon": "iconsnew-67"
+      },
+      {
+        "form": "ProjectOptionsFrm.dfm",
+        "component": "btnBrowse",
+        "index": 59,
+        "icon": "iconsnew-65"
+      }
+    ],
+    "Browse2": [
+      {
+        "form": "CompOptionsFrm.dfm",
+        "component": "btnBrowse2",
+        "index": 59,
+        "icon": "iconsnew-65"
+      }
+    ],
+    "Browse3": [
+      {
+        "form": "CompOptionsFrm.dfm",
+        "component": "btnBrowse3",
+        "index": 59,
+        "icon": "iconsnew-65"
+      }
+    ],
+    "Browse4": [
+      {
+        "form": "CompOptionsFrm.dfm",
+        "component": "btnBrowse4",
+        "index": 59,
+        "icon": "iconsnew-65"
+      }
+    ],
+    "Browse5": [
+      {
+        "form": "CompOptionsFrm.dfm",
+        "component": "btnBrowse5",
+        "index": 59,
+        "icon": "iconsnew-65"
+      }
+    ],
+    "Browse6": [
+      {
+        "form": "CompOptionsFrm.dfm",
+        "component": "btnBrowse6",
+        "index": 59,
+        "icon": "iconsnew-65"
+      }
+    ],
+    "Browse8": [
+      {
+        "form": "CompOptionsFrm.dfm",
+        "component": "btnBrowse8",
+        "index": 59,
+        "icon": "iconsnew-65"
+      }
+    ],
+    "AddBlankCompilerSet": [
+      {
+        "form": "CompOptionsFrm.dfm",
+        "component": "btnAddBlankCompilerSet",
+        "index": 78,
+        "icon": "Plus"
+      }
+    ],
+    "DelCompilerSet": [
+      {
+        "form": "CompOptionsFrm.dfm",
+        "component": "btnDelCompilerSet",
+        "index": 5,
+        "icon": "iconsnew-31"
+      }
+    ],
+    "RenameCompilerSet": [
+      {
+        "form": "CompOptionsFrm.dfm",
+        "component": "btnRenameCompilerSet",
+        "index": 14,
+        "icon": "iconsnew-10"
+      }
+    ],
+    "FindCompilers": [
+      {
+        "form": "CompOptionsFrm.dfm",
+        "component": "btnFindCompilers",
+        "index": 41,
+        "icon": "iconsnew-49"
+      }
+    ],
+    "AddFilledCompilerSet": [
+      {
+        "form": "CompOptionsFrm.dfm",
+        "component": "btnAddFilledCompilerSet",
+        "index": 78,
+        "icon": "Plus"
+      }
+    ],
+    "SaveSyntax": [
+      {
+        "form": "EditorOptFrm.dfm",
+        "component": "btnSaveSyntax",
+        "index": 6,
+        "icon": "iconsnew-04"
+      }
+    ],
+    "DefBrws": [
+      {
+        "form": "EnviroFrm.dfm",
+        "component": "btnDefBrws",
+        "index": 59,
+        "icon": "iconsnew-65"
+      }
+    ],
+    "Outputbrws": [
+      {
+        "form": "EnviroFrm.dfm",
+        "component": "btnOutputbrws",
+        "index": 59,
+        "icon": "iconsnew-65"
+      }
+    ],
+    "BrwIcon": [
+      {
+        "form": "EnviroFrm.dfm",
+        "component": "btnBrwIcon",
+        "index": 59,
+        "icon": "iconsnew-65"
+      }
+    ],
+    "BrwLang": [
+      {
+        "form": "EnviroFrm.dfm",
+        "component": "btnBrwLang",
+        "index": 59,
+        "icon": "iconsnew-65"
+      }
+    ],
+    "BrwSplash": [
+      {
+        "form": "EnviroFrm.dfm",
+        "component": "btnBrwSplash",
+        "index": 59,
+        "icon": "iconsnew-65"
+      }
+    ],
+    "OkBtn": [
+      {
+        "form": "LangFrm.dfm",
+        "component": "OkBtn",
+        "index": 39,
+        "icon": "iconsnew-34"
+      }
+    ],
+    "NewDocument": [
+      {
+        "form": "main.dfm",
+        "component": "ButtonNewDocument",
+        "index": 0,
+        "icon": "iconsnew-02"
+      }
+    ],
+    "OpenDocument": [
+      {
+        "form": "main.dfm",
+        "component": "ButtonOpenDocument",
+        "index": 1,
+        "icon": "iconsnew-03"
+      }
+    ],
+    "Options": [
+      {
+        "form": "main.dfm",
+        "component": "ButtonOptions",
+        "index": 2,
+        "icon": "icons-231"
+      }
+    ],
+    "ChangeTheme": [
+      {
+        "form": "main.dfm",
+        "component": "ButtonChangeTheme",
+        "index": 80,
+        "icon": "icons-227"
+      }
+    ],
+    "ChangeFont": [
+      {
+        "form": "main.dfm",
+        "component": "ButtonChangeFont",
+        "index": 81,
+        "icon": "icons-228"
+      }
+    ],
+    "ChangeLanguage": [
+      {
+        "form": "main.dfm",
+        "component": "ButtonChangeLanguage",
+        "index": 82,
+        "icon": "icons-230"
+      }
+    ],
+    "Lib": [
+      {
+        "form": "NewTemplateFrm.dfm",
+        "component": "btnLib",
+        "index": 63,
+        "icon": "iconsnew-69"
+      }
+    ],
+    "Remove": [
+      {
+        "form": "NewTemplateFrm.dfm",
+        "component": "btnRemove",
+        "index": 5,
+        "icon": "iconsnew-31"
+      }
+    ],
+    "LoadBtn": [
+      {
+        "form": "ParamsFrm.dfm",
+        "component": "LoadBtn",
+        "index": 59,
+        "icon": "iconsnew-65"
+      }
+    ],
+    "IconBrowse": [
+      {
+        "form": "ProjectOptionsFrm.dfm",
+        "component": "btnIconBrowse",
+        "index": 59,
+        "icon": "iconsnew-65"
+      }
+    ],
+    "IconLib": [
+      {
+        "form": "ProjectOptionsFrm.dfm",
+        "component": "btnIconLib",
+        "index": 58,
+        "icon": "iconsnew-64"
+      }
+    ],
+    "RemoveIcon": [
+      {
+        "form": "ProjectOptionsFrm.dfm",
+        "component": "btnRemoveIcon",
+        "index": 5,
+        "icon": "iconsnew-31"
+      }
+    ],
+    "AddLib": [
+      {
+        "form": "ProjectOptionsFrm.dfm",
+        "component": "btnAddLib",
+        "index": 59,
+        "icon": "iconsnew-65"
+      }
+    ],
+    "DirDown": [
+      {
+        "form": "ProjectOptionsFrm.dfm",
+        "component": "btnDirDown",
+        "index": 57,
+        "icon": "iconsnew-53"
+      }
+    ],
+    "DirUp": [
+      {
+        "form": "ProjectOptionsFrm.dfm",
+        "component": "btnDirUp",
+        "index": 56,
+        "icon": "iconsnew-52"
+      }
+    ],
+    "ExeOutDir": [
+      {
+        "form": "ProjectOptionsFrm.dfm",
+        "component": "btnExeOutDir",
+        "index": 59,
+        "icon": "iconsnew-65"
+      }
+    ],
+    "LogOutputDir": [
+      {
+        "form": "ProjectOptionsFrm.dfm",
+        "component": "btnLogOutputDir",
+        "index": 59,
+        "icon": "iconsnew-65"
+      }
+    ],
+    "ObjOutDir": [
+      {
+        "form": "ProjectOptionsFrm.dfm",
+        "component": "btnObjOutDir",
+        "index": 59,
+        "icon": "iconsnew-65"
+      }
+    ],
+    "CustomMakeBrowse": [
+      {
+        "form": "ProjectOptionsFrm.dfm",
+        "component": "btnCustomMakeBrowse",
+        "index": 59,
+        "icon": "iconsnew-65"
+      }
+    ],
+    "MakDown": [
+      {
+        "form": "ProjectOptionsFrm.dfm",
+        "component": "btnMakDown",
+        "index": 57,
+        "icon": "iconsnew-53"
+      }
+    ],
+    "MakeBrowse": [
+      {
+        "form": "ProjectOptionsFrm.dfm",
+        "component": "btnMakeBrowse",
+        "index": 59,
+        "icon": "iconsnew-65"
+      }
+    ],
+    "MakUp": [
+      {
+        "form": "ProjectOptionsFrm.dfm",
+        "component": "btnMakUp",
+        "index": 56,
+        "icon": "iconsnew-52"
+      }
+    ],
+    "InfoMakeBtn": [
+      {
+        "form": "ProjectOptionsFrm.dfm",
+        "component": "InfoMakeBtn",
+        "index": 46,
+        "icon": "iconsnew-29"
+      }
+    ],
+    "Prog": [
+      {
+        "form": "ToolEditFrm.dfm",
+        "component": "btnProg",
+        "index": 59,
+        "icon": "iconsnew-65"
+      }
+    ],
+    "WorkDir": [
+      {
+        "form": "ToolEditFrm.dfm",
+        "component": "btnWorkDir",
+        "index": 59,
+        "icon": "iconsnew-65"
+      }
+    ],
+    "Insert": [
+      {
+        "form": "ToolEditFrm.dfm",
+        "component": "btnInsert",
+        "index": 60,
+        "icon": "iconsnew-66"
+      }
+    ],
+    "Add": [
+      {
+        "form": "ToolFrm.dfm",
+        "component": "btnAdd",
+        "index": 78,
+        "icon": "Plus"
+      }
+    ],
+    "Delete": [
+      {
+        "form": "ToolFrm.dfm",
+        "component": "btnDelete",
+        "index": 5,
+        "icon": "iconsnew-31"
+      }
+    ],
+    "Edit": [
+      {
+        "form": "ToolFrm.dfm",
+        "component": "btnEdit",
+        "index": 14,
+        "icon": "iconsnew-10"
+      }
+    ]
+  },
+  "inconsistent": [
+    "Browse"
+  ]
+}
