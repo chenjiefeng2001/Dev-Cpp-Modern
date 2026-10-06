@@ -618,5 +618,18 @@
         "sha256": "5388d02d071a35da24ba3068423cdfc298aec67b5d2e147bd08b4c4fe9b04e2e"
       }
     ]
+  },
+  {
+    "list": "SVGIconImageList",
+    "class": "TSVGIconImageList",
+    "size_px": 37,
+    "count": 1,
+    "items": [
+      {
+        "name": "Empty",
+        "chars": 1296,
+        "sha256": "307ff1f2db98383a5a7a044679dfa0a9dcc58a80182c53e34c711ea9bd2f3faa"
+      }
+    ]
   }
 ]

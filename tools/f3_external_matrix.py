@@ -53,9 +53,32 @@ DECL_RE = re.compile(r"^\s*(?:(\w+)\s*=\s*class|(\w+)\s*=\s*\w+\s*\()", re.M)
 # counterpart and need a design decision, not a rename.
 LCL_EQUIVALENT = {
     "TToolButton": "TToolButton (LCL has it; the field type is unchanged)",
-    "TVirtualImage": "TImage + TImageList (draw from the list by index)",
+    # MEASURED CORRECTION (2026-10-06). This used to read
+    #   "TImage + TImageList (draw from the list by index)",
+    # which is wrong at EVERY use site in this repository. All three instances
+    # are viewers over a VCL TImageCollection, selecting by NAME:
+    #
+    #   EnviroFrm.viThemePreview   ImageCollection = dmMain.AppearanceThemeCollection (9 items)
+    #   LangFrm.VirtualImageTheme  ImageCollection = dmMain.ImageThemeColection        (9 items)
+    #   main.ImageEmbarcadero      ImageCollection = dmMain.EMBTImageCollection         (2 items)
+    #
+    # LCL's TImage exposes Picture, not ImageCollection/ImageName/ImageIndex, so
+    # the old mapping described a rename that cannot compile -- and it hid the
+    # real dependency, which is Vcl.ImageCollection itself (20 inline PNGs,
+    # 458,644 bytes as extracted -- 26% of DataFrm.dfm's 1.77 MB). A blocker
+    # that is renamed away is not a blocker that is solved; it reappears at the
+    # next class checked.
+    #
+    # RESOLVED (sprint F3-3, 2026-10-06): tools/f3_image_extract.py pulled the
+    # 20 PNGs down to Source/Fpc/UI/Data/Images/ (img_manifest.json records
+    # name/size/sha256 per image), and Source/Fpc/UI/Controls/
+    # LclVirtualImage.pas is the by-name fetcher the three use sites need. The
+    # fields are renamed TVirtualImage -> TLclVirtualImage by
+    # f3_dfm_to_lfm.CLASS_RENAME and load-tested by
+    # Tests/FpcCoreTests/imgcoll/ImgCollProbe.lpr.
+    "TVirtualImage": "TLclVirtualImage (Source/Fpc/UI/Controls/LclVirtualImage.pas)",
     "TVirtualImageList": "TImageList (LCL; loses per-image mask/offset only)",
-    "TImageCollection": "TImageList, or the vendored TSVGIconImageList already used here",
+    "TImageCollection": "none -- the 20 named PNGs are extracted to Source/Fpc/UI/Data/Images/; the class itself is not ported",
     "TControlBar": "TToolBar / TPanel docking (LCL docking differs; needs design)",
     "TAnimate": "none -- an AVI playback control; see note in the findings",
     "TDdeServerConv": "none in LCL; DDE is a Windows-only IPC mechanism",
@@ -135,18 +158,12 @@ def main() -> int:
                 holders.append((p.name, m.group(1), usage_of(m.group(1), txt)))
         rows.append((t, sorted(forms), holders))
 
-    # LCL equivalents, written next to the verdict so a reader can judge the
-    # recommendation instead of taking it on faith. A dash means "no direct
-    # equivalent"; those are the ones that need a design decision, not a rename.
-    LCL_EQUIVALENT = {
-        "TToolButton": "TToolButton (LCL has it; the field type is unchanged)",
-        "TVirtualImage": "TImage + TImageList (draw from the list by index)",
-        "TVirtualImageList": "TImageList (LCL; loses per-image mask/offset only)",
-        "TImageCollection": "TImageList, or vendored TSVGIconImageList already used here",
-        "TControlBar": "TToolBar / TPanel docking (LCL docking differs; needs design)",
-        "TAnimate": "none -- this is an AVI playback control; see note below",
-        "TDdeServerConv": "none in LCL; DDE is a Windows-only IPC mechanism",
-    }
+    # No second LCL_EQUIVALENT table here. There used to be one, and the
+    # two copies had already drifted apart when the counts were corrected
+    # (one said "32 named inline bitmaps", the other "TImageList, or vendored
+    # TSVGIconImageList"). The module-level table is the single source:
+    # f3_batch_plan.py imports it, so a local shadow would be a third
+    # consumer of nothing.
 
     print("EXTERNAL CONTROL MATRIX")
     print("=" * 78)

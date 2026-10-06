@@ -29,6 +29,12 @@
     "source": "ClangFormatterOptionsFrm.dfm",
     "svg_lists": 0
   },
+  "CompOptionsFrame.lfm": {
+    "batch": "C",
+    "rule": "dfm-to-lfm",
+    "source": "CompOptionsFrame.dfm",
+    "svg_lists": 0
+  },
   "CompOptionsFrm.lfm": {
     "batch": "C",
     "rule": "dfm-to-lfm",
@@ -40,6 +46,12 @@
     "rule": "dfm-to-lfm",
     "source": "ConsoleAppHostFrm.dfm",
     "svg_lists": 0
+  },
+  "DataFrm.lfm": {
+    "batch": "C",
+    "rule": "dfm-to-lfm",
+    "source": "DataFrm.dfm",
+    "svg_lists": 5
   },
   "DataFrm.svg-lists.lfm": {
     "load_tested_by": "Tests/FpcCoreTests/svg/SvgLfmProbe.lpr",
@@ -101,6 +113,11 @@
     "source": "IconFrm.dfm",
     "svg_lists": 0
   },
+  "ImageCollections.lfm": {
+    "load_tested_by": "Tests/FpcCoreTests/imgcoll/ImgCollProbe.lpr",
+    "nodes": 3,
+    "rule": "vimage-fragment"
+  },
   "ImportCBFrm.lfm": {
     "batch": "A",
     "rule": "dfm-to-lfm",
@@ -136,6 +153,18 @@
     "rule": "dfm-to-lfm",
     "source": "NewFunctionFrm.dfm",
     "svg_lists": 0
+  },
+  "NewProjectFrm.lfm": {
+    "batch": "C",
+    "rule": "dfm-to-lfm",
+    "source": "NewProjectFrm.dfm",
+    "svg_lists": 1
+  },
+  "NewProjectFrm.svg-lists.lfm": {
+    "load_tested_by": "Tests/FpcCoreTests/svg/SvgLfmProbe.lpr",
+    "rule": "svg-list-fragment",
+    "source": "D:/Git/Dev-Cpp-Modern/Source/NewProjectFrm.dfm",
+    "svg_lists": 1
   },
   "NewTemplateFrm.lfm": {
     "batch": "A-svg",

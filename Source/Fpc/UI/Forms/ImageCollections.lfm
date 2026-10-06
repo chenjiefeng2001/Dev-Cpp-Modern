@@ -1,0 +1,33 @@
+object VirtualImages: TLclVirtualImages
+  object viThemePreview: TLclVirtualImage
+    Left = 0
+    Top = 150
+    Width = 476
+    Height = 249
+    ImageCollection = 'AppearanceThemeCollection'
+    ImageWidth = 0
+    ImageIndex = -1
+    ImageName = 'Windows Classic'
+  end
+  object VirtualImageTheme: TLclVirtualImage
+    Left = 3
+    Top = 135
+    Width = 383
+    Height = 103
+    ImageCollection = 'ImageThemeColection'
+    ImageWidth = 0
+    ImageIndex = 0
+    ImageName = 'Windows Classic'
+  end
+  object ImageEmbarcadero: TLclVirtualImage
+    Left = 22
+    Top = 392
+    Width = 139
+    Height = 23
+    Align = alCustom
+    ImageCollection = 'EMBTImageCollection'
+    ImageWidth = 0
+    ImageIndex = 0
+    ImageName = 'EMBTBlack'
+  end
+end

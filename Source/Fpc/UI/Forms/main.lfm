@@ -4283,15 +4283,14 @@ end
     C3387AF4687F7F7FFFCBE5E5E549FFB20D000000007ED2FF0FDED8BFD22F0D5F
     E80000000049454E44AE426082}
   end
-  object ImageEmbarcadero: TVirtualImage
+  object ImageEmbarcadero: TLclVirtualImage
     Left = 22
     Top = 392
     Width = 139
     Height = 23
     Align = alCustom
-    ImageCollection = dmMain.EMBTImageCollection
+    ImageCollection = 'EMBTImageCollection'
     ImageWidth = 0
-    ImageHeight = 0
     ImageIndex = 0
     ImageName = 'EMBTBlack'
   end

@@ -9,7 +9,8 @@ name: FPC Core CI (Phase-F / F0)
 #   * fpc-core (ubuntu-latest)     -> portable core compiles + tests pass
 #   * fpc-core (windows-latest)   -> same, plus the Win32-only toolchain unit
 #   * qa-gate-profiles            -> Delphi and FPC dialect gates both green
-#   * lcl-svg-runtime (windows)   -> the converted LFM LOADS and its 116 icons draw
+#   * lcl-svg-runtime (windows)   -> the converted LFMs LOAD: 116 icons draw, and
+#                                    the 20 extracted theme PNGs decode with ink
 #   * f3-form-ratchet             -> the 53 forms do not become less convertible
 #
 # f3-form-ratchet is text analysis only -- no Lazarus, no Pascal compiler. It
@@ -18,10 +19,13 @@ name: FPC Core CI (Phase-F / F0)
 #
 # lcl-svg-runtime is the odd one out and the reason this workflow exists in
 # this shape: it is the only job that RUNS converted output. Every other check
-# here parses text, and this project has been caught three times by text that
+# here parses text, and this project has been caught four times by text that
 # parses perfectly and does nothing -- an extractor that lost 12x of the icon
-# data, a control whose LoadSvgLists never loaded anything, and a converted
-# .lfm set whose provenance header made every file unreadable to the LCL.
+# data, a control whose LoadSvgLists never loaded anything, a converted .lfm set
+# whose provenance header made every file unreadable to the LCL, and a
+# `TBitmap.Assign` that rejects a decoded PNG with "Cannot assign a TPicture to
+# a TBitmap", which is what the 20 extracted theme images hit on their first
+# real run.
 
 on:
   push:
@@ -43,8 +47,11 @@ on:
       - "tools/f3_svg_semantics.py"
       - "tools/f3_lfm_check.py"
       - "tools/f3_dfm_to_lfm.py"
+      - "tools/f3_image_extract.py"
+      - "tools/f3_imgcoll_check.py"
       - "tools/build_svg_probe.ps1"
       - "Tests/FpcCoreTests/svg/**"
+      - "Tests/FpcCoreTests/imgcoll/**"
       - "Source/**/*.dfm"
       - ".github/workflows/fpc_ci.yml"
   pull_request:
@@ -65,8 +72,11 @@ on:
       - "tools/f3_svg_semantics.py"
       - "tools/f3_lfm_check.py"
       - "tools/f3_dfm_to_lfm.py"
+      - "tools/f3_image_extract.py"
+      - "tools/f3_imgcoll_check.py"
       - "tools/build_svg_probe.ps1"
       - "Tests/FpcCoreTests/svg/**"
+      - "Tests/FpcCoreTests/imgcoll/**"
       - "Source/**/*.dfm"
   workflow_dispatch:
 
@@ -215,6 +225,22 @@ jobs:
       - name: "LFM conversion + SVG binding check"
         run: python3 tools/f3_lfm_check.py
 
+      # The TVirtualImage half of step 3. Same shape as the SVG checks above:
+      # the extractor round-trips the payload from DataFrm.dfm byte for byte,
+      # and the gate confirms every VCL node in the tree actually became a
+      # TLclVirtualImage -- including the rule that dropping `ImageHeight` is
+      # only safe while it is 0.
+      #
+      # Both are text gates; neither decodes a PNG. The runtime job below is
+      # what does that, and this split is deliberate: a green static gate here
+      # says nothing about whether the widgetset accepts the bytes, which is
+      # exactly the gap this project has fallen into before.
+      - name: "TImageCollection payload round-trips from the DFM"
+        run: python3 tools/f3_image_extract.py --verify
+
+      - name: "TVirtualImage conversion gate"
+        run: python3 tools/f3_imgcoll_check.py
+
   # ---------------------------------------------------------------------------
   # The SVG work is the only part of F3 that has ever been RUN rather than
   # parsed. It needs a compiled LCL and fpvectorial, which the stock Lazarus
@@ -257,8 +283,9 @@ jobs:
         shell: pwsh
         run: |
           python tools/f3_svg_extract.py --verify
+          python tools/f3_image_extract.py
           python tools/f3_dfm_to_lfm.py --only batch-a
-          python tools/f3_dfm_to_lfm.py --only svg --emit-svg-lists
+          python tools/f3_dfm_to_lfm.py --only svg --emit-svg-lists --emit-vimage-fragment
           # Packman/Main.dfm carries TSVGIconImageCollection and
           # TSVGIconVirtualImageList, which have no LCL counterpart, so the
           # converter refuses it and exits 1 BY DESIGN. Assert that rather than
@@ -269,12 +296,12 @@ jobs:
         shell: pwsh
         run: ./tools/build_svg_probe.ps1 -Target all
 
-      # Three questions, three programs. DataProbe: do the 116 payloads reach
+      # Three questions, three programs. DataProbe: do the 117 payloads reach
       # the program at all. ListProbe: does the control rasterise them (0
       # failures is a hard assertion, not a reported ceiling). LfmProbe: does
       # the file the CONVERTER wrote stream through the real LCL reader with
       # every icon drawn -- the check no structural gate could stand in for.
-      - name: "SVG data arrives (5 lists / 116 payloads)"
+      - name: "SVG data arrives (6 lists / 117 payloads)"
         shell: pwsh
         run: ./Tests/FpcCoreTests/svg/SvgDataProbe.exe
 
@@ -296,12 +323,26 @@ jobs:
         run: |
           $out = ./Tests/FpcCoreTests/svg/RasterProbe.exe 2>&1 | Out-String
           $out
-          if ($out -notmatch 'rendered ok : 109') {
-            throw "expected 109/116 to render when bypassing the control"
+          if ($out -notmatch 'rendered ok : 110') {
+            throw "expected 110/117 to render when bypassing the control"
           }
           if ($out -notmatch 'RESULT: INCOMPLETE') {
             throw "RasterProbe must still report INCOMPLETE; it bypasses the normaliser"
           }
+
+      # ImgCollProbe is the runtime answer for the OTHER step-3 conversion.
+      # Where RasterProbe deliberately bypasses its control, this one does not:
+      # it streams the fragment the converter actually wrote, through the real
+      # LCL reader, and then checks that each of the 20 extracted PNGs decodes
+      # to the size the manifest recorded AND has at least one non-transparent
+      # pixel. "Decodes, right size, right index bound, and is not blank" is
+      # four separate claims; the first three pass on an all-black image.
+      #
+      # It takes under a second, and it is the only check anywhere that would
+      # have noticed that `TBitmap.Assign` cannot accept a decoded PNG.
+      - name: "the converted ImageCollections.lfm loads and every PNG has ink"
+        shell: pwsh
+        run: ./Tests/FpcCoreTests/imgcoll/ImgCollProbe.exe
 
   f3-form-ratchet:
     name: F3 form-conversion ratchet

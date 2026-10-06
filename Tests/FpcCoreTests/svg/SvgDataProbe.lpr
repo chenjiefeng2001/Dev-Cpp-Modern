@@ -14,10 +14,11 @@ var
   I, J: Integer;
   NamesOk, SvgOk: Integer;
   Edge: string;
+  Payloads: Integer;
 
 begin
   WriteLn('SvgListCount = ', SvgListCount);
-  if SvgListCount <> 5 then
+  if SvgListCount <> 6 then
   begin
     WriteLn('UNEXPECTED list count');
     Halt(1);
@@ -45,6 +46,7 @@ begin
 
     NamesOk := 0;
     SvgOk := 0;
+    Payloads := Payloads + Length(SVG_IMAGE_LISTS[I].Svg);
     for J := Low(SVG_IMAGE_LISTS[I].Svg) to High(SVG_IMAGE_LISTS[I].Svg) do
     begin
       if SVG_IMAGE_LISTS[I].Svg[J] <> '' then
@@ -75,5 +77,10 @@ begin
     Halt(1);
 
   WriteLn;
-  WriteLn('RESULT: data unit delivers 5 lists / 116 payloads');
+  // Counts, not literals: the next list the extractor adds should
+  // move this line by itself, not by somebody remembering to edit a
+  // number in three places (this probe, the CI step name, the throw
+  // message).
+  WriteLn('RESULT: data unit delivers ', SvgListCount, ' lists / ',
+    Payloads, ' payloads');
 end.

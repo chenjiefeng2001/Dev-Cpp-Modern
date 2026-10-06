@@ -20,7 +20,7 @@
 # built, `fpvectorial.ppu` does not exist and nothing here can compile.
 [CmdletBinding()]
 param(
-    [ValidateSet('all', 'data', 'list', 'lfm', 'raster', 'try', 'parse', 'norm')]
+    [ValidateSet('all', 'data', 'list', 'lfm', 'raster', 'try', 'parse', 'norm', 'imgcoll')]
     [string]$Target = 'all'
 )
 
@@ -67,5 +67,35 @@ foreach ($t in $targets) {
     $a += $t
     & fpc @a
     if ($LASTEXITCODE -ne 0) { $failed++ }
+}
+
+# ImgCollProbe lives in its own directory because it needs a DIFFERENT set of
+# unit paths: no fpvectorial (it decodes PNGs through the LCL's own registry
+# rather than rendering SVG), and it walks up from the executable to find the
+# repo root rather than depending on the working directory the way the probes
+# above do with their relative LFM paths.
+if ($Target -in @('all', 'imgcoll')) {
+    $img = Join-Path $PSScriptRoot '..\Tests\FpcCoreTests\imgcoll'
+    Push-Location $img
+    try {
+        New-Item -ItemType Directory -Path 'lib' -Force | Out-Null
+        Write-Host "==> ImgCollProbe.lpr" -ForegroundColor Cyan
+        $b = @('-Mdelphiunicode', '-FUlib', '-FE.')
+        # Same -Fu ORDER as above: widgetset-specific first.
+        foreach ($d in @(
+            "$laz\lcl\units\x86_64-win64\win32",
+            "$laz\lcl\units\x86_64-win64",
+            "$laz\components\lazutils\lib\x86_64-win64",
+            (Resolve-Path '.').Path,
+            (Join-Path $PSScriptRoot '..\Source\Fpc\UI\Controls'),
+            (Join-Path $PSScriptRoot '..\Source\Fpc\UI\Data'))) {
+            $b += "-Fu$d"
+        }
+        & fpc @b 'ImgCollProbe.lpr'
+        if ($LASTEXITCODE -ne 0) { $failed++ }
+    }
+    finally {
+        Pop-Location
+    }
 }
 exit $failed

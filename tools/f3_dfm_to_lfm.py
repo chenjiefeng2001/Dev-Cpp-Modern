@@ -27,8 +27,8 @@ transform: it would move the F3 gate from "measured" back to "assumed" while
 looking like progress.
 
 The SVG list fragments it DOES emit are a different matter, and they are load
-tested -- see Tests/FpcCoreTests/svg/SvgLfmProbe.lpr, which streams the generated
-DataFrm.svg-lists.lfm through the real LCL reader and counts the pixels.
+tested -- see Tests/FpcCoreTests/svg/SvgLfmProbe.lpr, which streams every
+generated .svg-lists.lfm through the real LCL reader and counts the pixels.
 
 NO HEADER COMMENTS, AND WHY THAT IS A HARD RULE
 ===============================================
@@ -113,7 +113,32 @@ CLASS_RENAME = {
     # `TSVGIconImageList` with all 116 SVG documents still inline -- i.e. the
     # header claimed the rule had been applied to a file it had not touched.
     "TSVGIconImageList": "TLclSvgImageList",
+    # Sprint F3-3. `TVirtualImage` was recorded as "external, LCL has an
+    # equivalent, so this is a field-level rename". Measurement said the class
+    # was never the problem -- all three use sites are named-image FETCHERS over
+    # a Vcl.TImageCollection whose 20 inline PNGs live in DataFrm.dfm, and LCL's
+    # TImage has no ImageCollection at all. The rename only became honest once
+    # tools/f3_image_extract.py had put those PNGs on disk and
+    # Source/Fpc/UI/Controls/LclVirtualImage.pas existed to resolve an index
+    # against them. See that unit for why the replacement needs almost no code.
+    "TVirtualImage": "TLclVirtualImage",
 }
+
+# Properties dropped on a TLclVirtualImage node, and ONLY those.
+#
+# This started as a whitelist -- the shape SVG_KEEP_PROPS uses -- and that was
+# wrong in a way the diff caught immediately: TVirtualImage is a TControl
+# descendant, so Left / Top / Width / Height are ordinary geometry, and a
+# whitelist over ALL properties swept them out too. EnviroFrm's preview arrived
+# at 0x0. A drop-list keeps geometry on the normal path, where it is emitted
+# like any other control's.
+#
+# `ImageHeight` is the one VirtualImage property LCL's TImage has no counterpart
+# for. All three sites set it to 0, which the VCL reads as "use the source
+# size", so dropping a 0 loses nothing. Dropping a REAL height would lose the
+# size, so the dropped VALUES are recorded and tools/f3_imgcoll_check.py fails
+# the build the day one is not 0.
+VIMAGE_DROP_PROPS = {"ImageHeight"}
 
 OBJ_RE = re.compile(r"^(\s*)(object|inherited|inline)\s+(\w+)\s*:\s*(\w+)\s*$")
 PROP_RE = re.compile(r"^(\s*)(\w[\w.\[\]]*)\s*=\s*(.*)$")
@@ -135,6 +160,12 @@ SVG_UNSUPPORTED = {"TSVGIconImageCollection", "TSVGIconVirtualImageList"}
 # lists and references none of them, and NewProjectFrm's `LargeImages =
 # SVGIconImageList` is a bare local name with no `dmMain.` prefix.
 SVG_DECL_RE = re.compile(r"^\s*object\s+\w+\s*:\s*TSVGIcon\w*\s*$")
+
+# The TVirtualImage half of step 3. Kept out of the SVG branch because the two
+# have nothing in common except that both rename a class whose payload has to
+# move somewhere else first.
+VIMAGE_SOURCE_CLASS = "TVirtualImage"
+VIMAGE_TARGET_CLASS = "TLclVirtualImage"
 
 # What survives on a TLclSvgImageList node. This is a WHITELIST, not a list of
 # things to drop, and the reason is a measured one: LCL's TCustomImageList
@@ -169,6 +200,27 @@ def _known_list_names():
 
 
 KNOWN_LIST_NAMES = _known_list_names()
+
+
+# The TImageCollection names tools/f3_image_extract.py actually extracted, read
+# from its manifest rather than hand-typed here. The same one-source-of-truth
+# rule as KNOWN_LIST_NAMES above: a second hand-typed copy of "which
+# collections exist" is a fact that drifts silently the day a fourth is added.
+def _known_collection_names():
+    path = ROOT / "Source" / "Fpc" / "UI" / "Data" / "img_manifest.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise SystemExit("cannot read %s: %s" % (path, exc))
+    return {row["collection"] for row in data}
+
+
+KNOWN_COLLECTION_NAMES = _known_collection_names()
+
+# `ImageCollection = dmMain.<Name>`. The owner prefix is dropped: dmMain is a
+# Delphi data module this port does not have, and what a use site actually names
+# is the collection.
+VIMAGE_COLLECTION_RE = re.compile(r"^(\w+)\.(\w+)$")
 
 # A collection property opens on its own line and is closed by `end>`, NOT by a
 # bare `>`: the DFM writer terminates the LAST item with `end>` so that the same
@@ -324,9 +376,25 @@ def to_lfm(root_type, nodes, source_name, dropped):
         prefix = "" if i == 0 else "  " * 1  # the reader keeps flat order
         out.append("%s%s %s: %s" % (prefix, node["kind"], node["name"], node["type"]))
         is_svg = node["type"] == SVG_TARGET_CLASS
+        is_vimage = node["type"] == VIMAGE_TARGET_CLASS
         if is_svg:
             out.append("%s  ListName = '%s'" % (prefix, node["name"]))
         for k, v in node["props"]:
+            if is_vimage:
+                # Handled before DROP_PROPS, because the rewrite below has to
+                # REFUSE on an unknown collection rather than let the generic
+                # path quietly pass a `dmMain.X` value to a property that
+                # expects a plain name.
+                if k == "ImageCollection":
+                    out.append("%s  ImageCollection = %s"
+                               % (prefix, rewrite_collection_ref(v, node["name"])))
+                    continue
+                if k in VIMAGE_DROP_PROPS:
+                    # Counted with its VALUE, not just its name: the whole claim
+                    # that dropping this loses nothing rests on every dropped
+                    # ImageHeight being 0, and a counter cannot show that.
+                    dropped["%s (TVirtualImage) = %s" % (k, v)] += 1
+                    continue
             if k in DROP_PROPS:
                 dropped[k] += 1
                 continue
@@ -363,6 +431,33 @@ def to_lfm(root_type, nodes, source_name, dropped):
                                       CLASS_RENAME.get(root_type, root_type)))
         out.append("end")
     return "\n".join(out) + "\n"
+
+
+def rewrite_collection_ref(value, node_name):
+    """Turn `dmMain.<Collection>` into `'<Collection>'`, or refuse.
+
+    REFUSING is the point. The first version of the SVG rule emitted whatever
+    name the DFM carried and let the loader discover the problem; the second
+    discovery of that shape (NewProjectFrm's list was not in SvgData while
+    the extractor still read DataFrm.dfm only, so the fragment it pointed at
+    did not exist) was a silent no-op that reported success. An unknown
+    collection here means a preview that will never paint, so it stops the
+    conversion instead.
+
+    Returns the already-quoted literal, ready to write.
+    """
+    m = VIMAGE_COLLECTION_RE.match(value.strip())
+    if not m:
+        raise ValueError(
+            "%s: ImageCollection is %r, expected `<owner>.<Collection>`"
+            % (node_name, value))
+    name = m.group(2)
+    if name not in KNOWN_COLLECTION_NAMES:
+        raise ValueError(
+            "%s: ImageCollection names %r, which is not in img_manifest.json "
+            "(known: %s)" % (node_name, name,
+                             ", ".join(sorted(KNOWN_COLLECTION_NAMES))))
+    return "'%s'" % name
 
 
 def emit_svg_fragment(dfms, out_dir, dropped):
@@ -408,16 +503,20 @@ def emit_svg_fragment(dfms, out_dir, dropped):
         # Caught here rather than left to the probe's MissingData flag, because
         # this is a build-time fact and nothing about it is a runtime surprise.
         #
-        # It is NOT hypothetical. NewProjectFrm declares its own single-item
-        # list called `SVGIconImageList` (one icon, named 'Empty', 37 px), and
-        # f3_svg_extract.py reads DataFrm.dfm only -- so that name is absent
-        # from the manifest. Step 1 did not cover every producer.
+        # This check has caught a real gap, and that is why it exists.
+        # NewProjectFrm declares its own single-item list called
+        # `SVGIconImageList` (one icon, named 'Empty', 37 px), and for the
+        # first weeks of F3 the extractor read DataFrm.dfm only -- so that
+        # name was absent from the manifest and this check refused the
+        # form's fragment until step 1's coverage was extended (doc §14.8).
+        # It stays live for the next producer the extractor has not reached.
         missing = [n["name"] for n in svg_nodes
                    if n["name"] not in KNOWN_LIST_NAMES]
         if missing:
             refused.append((p.as_posix(),
                             "SvgData has no list named " + ", ".join(missing)
-                            + " (f3_svg_extract.py covers DataFrm.dfm only)"))
+                            + " (not in svg_manifest.json -- f3_svg_extract.py"
+                            + " has not covered that DFM yet)"))
             continue
         body = ["object SvgImageLists: TSvgImageLists"]
         for n in svg_nodes:
@@ -438,6 +537,67 @@ def emit_svg_fragment(dfms, out_dir, dropped):
     return written, refused
 
 
+def emit_vimage_fragment(dfms, out_dir, dropped):
+    """Write every TVirtualImage subtree as one loadable .lfm.
+
+    WHY A FRAGMENT, AGAIN
+    =====================
+    Same reason as emit_svg_fragment, and the same reason it is worth repeating
+    rather than pointing at the one above: EnviroFrm.lfm, LangFrm.lfm and
+    main.lfm each carry ninety-odd controls whose classes must ALL be
+    registered before a reader can stream the file. A probe that wants to check
+    three TLclVirtualImage nodes would otherwise have to stand up the entire
+    application to look at them, and would then be testing the registration of
+    unrelated classes as much as the conversion.
+
+    So the three subtrees are re-rendered through the SAME `to_lfm` the
+    full-form path uses -- they cannot drift -- and wrapped in a carrier, which
+    the probe registers by hand.
+
+    The carrier is `TLclVirtualImages`, and it was originally called
+    `TVirtualImageCarrier`. That name CONTAINS `TVirtualImage`, so the gate
+    looking for surviving VCL declarations -- which is the one check that
+    catches this conversion having been skipped -- fired on the probe's own
+    fragment. Renaming the carrier removes a collision rather than teaching the
+    check to look the other way.
+
+    What the fragment deliberately does NOT do is carry the collection payload.
+    That lives in Source/Fpc/UI/Data/Images/, byte-checked by
+    `f3_image_extract.py --verify`, exactly as SvgData holds the SVG payload.
+    """
+    body = ["object VirtualImages: TLclVirtualImages"]
+    written, refused, total = [], [], 0
+    for p in dfms:
+        text = p.read_bytes().decode("utf-8-sig", errors="replace")
+        root, nodes = parse_dfm(text)
+        vnodes = [n for n in nodes if n["type"] == VIMAGE_TARGET_CLASS]
+        if not vnodes:
+            continue
+        try:
+            for n in vnodes:
+                sub = to_lfm(n["type"], [n], n["name"], dropped)
+                for line in sub.splitlines():
+                    body.append("  " + line)
+        except Exception as exc:                       # noqa: BLE001
+            refused.append((p.as_posix(), str(exc)))
+            continue
+        total += len(vnodes)
+        written.append((p.as_posix(), [n["name"] for n in vnodes]))
+    body.append("end")
+
+    if not written:
+        # No TVirtualImage anywhere: writing an empty carrier would produce a
+        # probe that loads successfully and checks nothing.
+        print("no TVirtualImage nodes found -- no fragment written")
+        return [], []
+
+    rel = pathlib.Path("ImageCollections.lfm")
+    dest = out_dir / rel
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text("\n".join(body) + "\n", encoding="utf-8", newline="\r\n")
+    return [(rel.as_posix(), total, written)], refused
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(ROOT / "Source" / "Fpc" / "UI" / "Forms"))
@@ -445,6 +605,8 @@ def main() -> int:
                     choices=["batch-a", "batch-b", "batch-c", "svg", "svg-lists", "all"])
     ap.add_argument("--emit-svg-lists", action="store_true",
                     help="also write the SVG list subtrees of every producer DFM")
+    ap.add_argument("--emit-vimage-fragment", action="store_true",
+                    help="also write every TVirtualImage subtree as ImageCollections.lfm")
     args = ap.parse_args()
 
     import importlib.util
@@ -569,6 +731,20 @@ def main() -> int:
                 "rule": "svg-list-fragment",
                 "svg_lists": n,
                 "load_tested_by": "Tests/FpcCoreTests/svg/SvgLfmProbe.lpr",
+            }
+        for src, why in refused:
+            print(f"  REFUSED {src}: {why}")
+    if args.emit_vimage_fragment:
+        written, refused = emit_vimage_fragment(dfms, out_dir, dropped)
+        print("TVirtualImage fragments:")
+        for rel, n, srcs in written:
+            print(f"  {rel}  ({n} node(s) from {len(srcs)} form(s))")
+            for src, names in srcs:
+                print(f"    {src}: {', '.join(names)}")
+            provenance[rel] = {
+                "rule": "vimage-fragment",
+                "nodes": n,
+                "load_tested_by": "Tests/FpcCoreTests/imgcoll/ImgCollProbe.lpr",
             }
         for src, why in refused:
             print(f"  REFUSED {src}: {why}")

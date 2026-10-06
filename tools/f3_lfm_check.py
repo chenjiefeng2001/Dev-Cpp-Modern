@@ -9,7 +9,12 @@ WHAT IT ASSERTS
   2. no VCL-only property survives in any .lfm -- the whole point of
      f3_dfm_to_lfm.py's DROP_PROPS, checked on the OUTPUT rather than trusted
      from the input list
-  3. block structure is preserved relative to the source DFM
+  3. block structure is preserved relative to the source DFM --
+     object-for-object, in order, with the DFM side normalised
+     through f3_dfm_to_lfm.CLASS_RENAME so a deliberate class
+     rename (TSVGIconImageList -> TLclSvgImageList,
+     TVirtualImage -> TLclVirtualImage) compares equal instead of
+     reading as drift
   4. CRLF line endings and no BOM, matching the rest of the repo
 
 WHY (3) IS A DIFFERENCE AND NOT AN ABSOLUTE COUNT
@@ -39,6 +44,7 @@ without a compiler.
 Run:  python tools/f3_lfm_check.py
 Exit: 0 when every assertion holds, 1 otherwise.
 """
+import importlib.util
 import json
 import pathlib
 import re
@@ -67,6 +73,25 @@ BANNED = {
 OBJ = re.compile(r"^(\s*)(?:object|inherited|inline)\s+(\w+)\s*:\s*(\w+)")
 END = re.compile(r"^\s*end\b")
 
+def _load_converter():
+    """f3_dfm_to_lfm, loaded by path -- tools/ is not a package.
+
+    The checker needs the converter's CLASS_RENAME and DROP_PROPS,
+    and must not restate them: a second copy of either table is
+    exactly how a gate ends up approving a conversion its own
+    converter did not perform, or banning a property the converter
+    no longer strips (or the reverse, which is worse).
+    """
+    spec = importlib.util.spec_from_file_location(
+        "f3_dfm_to_lfm", ROOT / "tools" / "f3_dfm_to_lfm.py"
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+CONVERTER = _load_converter()
+CLASS_RENAME = CONVERTER.CLASS_RENAME
+
 
 def read(p):
     return p.read_bytes().decode("latin-1")
@@ -80,15 +105,28 @@ def counts(lines):
             sum(1 for l in lines if END.match(l)))
 
 
-def object_names(lines):
+def object_names(lines, rename=None):
     """Ordered list of `Name:Type` for every object block.
 
     A LIST, not a multiset: two panels may legitimately declare the same control
-    name, and the converter emits a flat list, so counting names would hide a swap
-    between two identically-named components. Positional comparison catches it.
+    name, and the converter emits a flat list, so counting names would hide a
+    swap between two identically-named components. Positional comparison catches it.
+
+    `rename`, when given, maps a source-side class through the converter's
+    CLASS_RENAME before the pair is built. The DFM side is the one that needs
+    it: the LFM side is what the converter WROTE, and if it wrote a class the
+    rename table does not describe, that must surface as a difference.
     """
-    return [f"{OBJ.match(l).group(2)}:{OBJ.match(l).group(3)}"
-            for l in lines if OBJ.match(l)]
+    out = []
+    for l in lines:
+        m = OBJ.match(l)
+        if not m:
+            continue
+        t = m.group(3)
+        if rename is not None:
+            t = rename.get(t, t)
+        out.append(f"{m.group(2)}:{t}")
+    return out
 
 
 ITEM = re.compile(r"^(\s*)item\s*$")
@@ -132,6 +170,17 @@ def walk(lines):
 def main() -> int:
     problems = []
 
+    # The BANNED set above is hand-maintained, and its comment promises
+    # it is asserted against the converter's own DROP_PROPS. That promise
+    # stood unkept for the whole life of this file -- the assertion
+    # existed only in the comment. A property the converter strips but
+    # this gate does not ban would pass silently, which is the exact
+    # failure mode the comment claims to prevent.
+    unstripped = CONVERTER.DROP_PROPS - BANNED
+    if unstripped:
+        problems.append(
+            f"BANNED is missing converter DROP_PROPS: {sorted(unstripped)}")
+
     if not LFM_ROOT.is_dir():
         print(f"ERROR: {LFM_ROOT.relative_to(ROOT)} does not exist")
         return 1
@@ -140,12 +189,30 @@ def main() -> int:
         print("ERROR: no .lfm files found")
         return 1
 
-    # 1. orphan check, both directions. Fragments are exempt: a
-    # `.svg-lists.lfm` is a subtree lifted out of a .dfm, not a form, so
-    # `DataFrm.svg-lists.lfm -> DataFrm.dfm` is the wrong pairing to look for.
+    # 1. orphan check, both directions. Fragments are exempt:
+    # _generated.json records how each .lfm was produced, and a
+    # rule ending in `-fragment` marks a subtree lifted out of a
+    # .dfm rather than a form -- the SVG icon lists
+    # (`.svg-lists.lfm`) and the TVirtualImage nodes
+    # (`ImageCollections.lfm`) both live that way -- so
+    # `ImageCollections.lfm -> ImageCollections.dfm` is the wrong
+    # pairing to look for. Exempting by rule, not by file-name
+    # suffix, is what keeps a future fragment type from being
+    # reported as an orphan. The manifest is read ONCE, here,
+    # because two checks consume it: this exemption and the
+    # cross-check in 1b -- reading it twice would let the two
+    # disagree about a file that changed between reads.
+    manifest_path = LFM_ROOT / "_generated.json"
+    provenance = {}
+    if not manifest_path.is_file():
+        problems.append("_generated.json is missing -- nothing records provenance")
+    else:
+        provenance = json.loads(manifest_path.read_text(encoding="utf-8"))
+
     for p in lfms:
         rel = p.relative_to(LFM_ROOT)
-        if rel.name.endswith(".svg-lists.lfm"):
+        rec = provenance.get(rel.as_posix())
+        if rec is not None and str(rec.get("rule", "")).endswith("-fragment"):
             continue
         src = DFM_ROOT / rel.with_suffix(".dfm")
         if not src.is_file():
@@ -163,19 +230,14 @@ def main() -> int:
     # no comment syntax -- measured, see f3_dfm_to_lfm.py's docstring), the
     # record of what produced each file lives in _generated.json. Checking it
     # here is what keeps that file from rotting into a list nobody maintains:
-    # an .lfm with no record is an orphan in the other direction.
-    manifest_path = LFM_ROOT / "_generated.json"
-    provenance = {}
-    if not manifest_path.is_file():
-        problems.append("_generated.json is missing -- nothing records provenance")
-    else:
-        provenance = json.loads(manifest_path.read_text(encoding="utf-8"))
-        for rel in sorted(have):
-            if rel not in provenance:
-                problems.append(f"{rel}: no entry in _generated.json")
-        for rel in sorted(provenance):
-            if rel not in have:
-                problems.append(f"_generated.json records {rel}, which does not exist")
+    # an .lfm with no record is an orphan in the other direction. The manifest
+    # itself was read before the orphan check above.
+    for rel in sorted(have):
+        if rel not in provenance:
+            problems.append(f"{rel}: no entry in _generated.json")
+    for rel in sorted(provenance):
+        if rel not in have:
+            problems.append(f"_generated.json records {rel}, which does not exist")
 
     # 2/3/4. per-file assertions
     checked = 0
@@ -207,7 +269,13 @@ def main() -> int:
         src = DFM_ROOT / pathlib.Path(rel).with_suffix(".dfm")
         if src.is_file():
             d_lines = src.read_bytes().decode("latin-1").splitlines()
-            d_objs, l_objs = object_names(d_lines), object_names(lines)
+            # The DFM side is normalised through the converter's own
+            # CLASS_RENAME before comparing: a deliberate class rename IS
+            # the conversion, not a drift. Comparing raw types reported six
+            # good files as differing -- four TSVGIconImageList nodes in
+            # DataFrm, three TVirtualImage nodes, one more in NewProjectFrm.
+            d_objs = object_names(d_lines, CLASS_RENAME)
+            l_objs = object_names(lines)
             if d_objs != l_objs:
                 missing = [n for n in d_objs if n not in l_objs]
                 extra = [n for n in l_objs if n not in d_objs]
@@ -340,7 +408,7 @@ def main() -> int:
     print()
     print("  NOT PROVEN for the FORMS: that Lazarus can load them. The SVG list")
     print("  fragments ARE load tested -- Tests/FpcCoreTests/svg/SvgLfmProbe.lpr")
-    print("  streams DataFrm.svg-lists.lfm and counts pixels.")
+    print("  streams every generated .svg-lists.lfm and counts pixels.")
     return 0
 
 

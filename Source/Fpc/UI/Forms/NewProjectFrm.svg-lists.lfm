@@ -1,0 +1,5 @@
+object SvgImageLists: TSvgImageLists
+  object SVGIconImageList: TLclSvgImageList
+    ListName = 'SVGIconImageList'
+  end
+end

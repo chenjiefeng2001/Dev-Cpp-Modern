@@ -404,17 +404,18 @@ property Size: Integer read GetSize write SetSize default 32;   // 像素边长
 
 | 步 | 状态 |
 |---|---|
-| 1 数据抽取 | ✅ 完成并校验（**覆盖面不足**：`NewProjectFrm` 自带的 1 个列表未抽取，见 §12.6） |
+| 1 数据抽取 | ✅ 完成并校验（**双 DFM 覆盖**：`DataFrm` + `NewProjectFrm`，6 列表 / 117 图标，重名即拒） |
 | 2 `TLclSvgImageList` 控件 | ✅ **编译 + 运行验证通过**；7 个 `EZeroDivide` 已修复，走控件 **116/116、`fail=0`**（§11.4b），`EXPECTED_MAX_FAILURES` 收紧到 0 |
-| 3 DFM 转换规则 | ✅ **完成，并由 §12.7 的探针首次真正加载验证**（5 列表 / 116 图标 / 边长与像素全对） |
-| 4 接入 13 个窗体 | ✅ **消费端完成**：15 个 LFM + 68 处绑定全部解析。**生产端 1/3 完成**：`DataFrm` 的 5 个列表已出片段；`NewProjectFrm`（抽取器未覆盖）、`Tools/Packman/Main`（无 LCL 对应控件）被**明确拒绝**而非静默放行 |
+| 3 DFM 转换规则 | ✅ **完成，并由 §12.7 的探针首次真正加载验证**（6 列表 / 117 图标 / 边长与像素全对） |
+| 4 接入 13 个窗体 | ✅ **消费端完成**：15 个 LFM + 68 处绑定全部解析。**生产端 2/3 完成**：`DataFrm` 的 5 个列表 + `NewProjectFrm` 的 1 个列表均已出片段；`Tools/Packman/Main`（无 LCL 对应控件）被**明确拒绝**而非静默放行 |
 
 步骤 3/4 已纯代码完成并经真实 LCL 运行验证（§12）。**当前剩余项**（均不阻塞已交付部分）：
 
-1. **抽取器覆盖面**：`f3_svg_extract.py` 只读 `DataFrm.dfm`，`NewProjectFrm` 的 1 个列表（名 `Empty`，37 px）缺失 → 该窗体的片段目前被拒绝。
-2. **`Tools/Packman/Main`**：需要 `TSVGIconImageCollection` / `TSVGIconVirtualImageList` 的 LCL 对应控件（18 处集合）。
-3. **消费端 15 个 LFM 本身尚未被 `lazbuild` 加载**：它们含大量 vendored / 自有控件（`TCompOptionsFrame`、`TSynCppSyn`、`TClassBrowser` 等），受 C 批阻塞；已验证的只是 SVG 列表片段这一层。
-4. §7 尚未验证的三项（主题改色、高 DPI 光栅化质量）是质量问题。
+1. **`Tools/Packman/Main`**：需要 `TSVGIconImageCollection` / `TSVGIconVirtualImageList` 的 LCL 对应控件（18 处集合）。
+2. **消费端 15 个 LFM 本身尚未被 `lazbuild` 加载**：它们含大量 vendored / 自有控件（`TCompOptionsFrame`、`TSynCppSyn`、`TClassBrowser` 等），受 C 批阻塞；已验证的只是 SVG 列表片段这一层。
+3. §7 尚未验证的三项（主题改色、高 DPI 光栅化质量）是质量问题。
+
+> 原第 1 项「抽取器覆盖面」已由 §14.8 关闭：`f3_svg_extract.py` 现读双 DFM，`NewProjectFrm` 的 `SVGIconImageList`（1 条 `Empty`，37 px）已入 `SvgData`，该窗体的片段随之产出。
 
 > 其中第 3 项是本方案当前最诚实的边界：**“SVG 一次解锁 13 个窗体”成立的前提是 SVG 这一个阻塞被清掉；其余阻塞并未随之消失。** §12.6 的实测把“已解锁”与“仍被其它控件阻塞”分开列了，不再给出一个合并后的乐观数字。
 ---
@@ -501,17 +502,17 @@ end                                             end
 |---|---|
 | 消费窗体（`Images = dmMain.<list>`）转换 | **15** 个 LFM |
 | 消费侧绑定点，全部能在片段里解析到 | **68** 处，0 悬空 |
-| 生产端 SVG 片段 | `DataFrm.svg-lists.lfm`（**5** 个列表） |
+| 生产端 SVG 片段 | `DataFrm.svg-lists.lfm`（**5** 个列表）+ `NewProjectFrm.svg-lists.lfm`（**1** 个列表） |
 | 生产端拒绝 | `Tools/Packman/Main.dfm`（`TSVGIconImageCollection` / `TSVGIconVirtualImageList` 无 LCL 对应物） |
-| 生产端拒绝 | `NewProjectFrm.dfm`——**它自己声明了一个列表**，且**步骤 1 从未抽取过它**（说明见本节末） |
 
-**`NewProjectFrm` 是本轮挖出的真实缺口**：它内联了一个名为 `SVGIconImageList` 的单条目列表（1 个图标，名 `Empty`，37 px），而 `f3_svg_extract.py` 只读 `DataFrm.dfm`。转换器现在**读 `svg_manifest.json` 做交叉校验并拒绝它**，而不是让它流出一个 `Count = 0` 的空列表。**抽取器的覆盖面本身仍需扩展**（步骤 1 的遗留项）。
+**`NewProjectFrm` 曾是真实缺口，现已关闭**（§14.8）：它内联了一个名为 `SVGIconImageList` 的单条目列表（1 个图标，名 `Empty`，37 px），而 `f3_svg_extract.py` 当初只读 `DataFrm.dfm`。转换器读 `svg_manifest.json` 做交叉校验、名字不在表里就拒绝（而不是放出一个 `Count = 0` 的空列表）——**在缺口补上之前，这个拒绝是正确行为**；缺口本身在抽取器一侧，现已补上。
 
 ### 12.7 新增门禁：LFM 首次被真实加载
 
-`Tests/FpcCoreTests/svg/SvgLfmProbe.lpr`（245 行）流式加载**转换器实际产出**的文件——不是自己写的固定样本，否则它与控件同源、只能证明控件能被喂进形状相似的东西。实测：
+`Tests/FpcCoreTests/svg/SvgLfmProbe.lpr`（348 行）流式加载**转换器实际产出的每个片段**——按通配符发现 `*.svg-lists.lfm`，不点名文件，否则抽取器新增一个源 DFM 时探针会悄悄漏测。不是自己写的固定样本，否则它与控件同源、只能证明控件能被喂进形状相似的东西。实测：
 
 ```
+DISCOVERED 2 fragment(s) in Source\Fpc\UI\Forms
 STREAMING Source\Fpc\UI\Forms\DataFrm.svg-lists.lfm
   parsed to binary: 422 byte(s)
   streamed root: TSvgImageLists with 5 component(s)
@@ -521,6 +522,14 @@ STREAMING Source\Fpc\UI\Forms\DataFrm.svg-lists.lfm
   SVGImageListClassStyle     Count 12/12  edge 32x32  fail 0  blank 0/12
   SVGImageListMessageStyle   Count  7/ 7  edge 25x25  fail 0  blank 0/ 7
   SVGIconImageWelcomeScreen  Count  6/ 6  edge 37x37  fail 0  blank 0/ 6
+
+STREAMING Source\Fpc\UI\Forms\NewProjectFrm.svg-lists.lfm
+  parsed to binary:  98 byte(s)
+  streamed root: TSvgImageLists with 1 component(s)
+
+  SVGIconImageList           Count  1/ 1  edge 37x37  fail 0  blank 0/ 1
+
+Streamed lists match the data unit: 6 of 6
 
 RESULT: the generated LFM loads and its icons are drawn
 ```
@@ -587,7 +596,7 @@ RESULT: the generated LFM loads and its icons are drawn
 
 | 阻断控件 | 归属 | 解锁窗体 | 目标窗体 |
 |---|---|---|---|
-| `TVirtualImage` | **external**（LCL 有等价物） | **3** | EnviroFrm, LangFrm, main |
+| ~~`TVirtualImage`~~ | ~~external（LCL 有等价物）~~ | **3** | EnviroFrm, LangFrm, main |
 | `TCompOptionsFrame` | own | 2 | CompOptionsFrm, ProjectOptionsFrm |
 | `TCompOptionsList` | vendored | 2 | CompOptionsFrm, ProjectOptionsFrm |
 | `TSynCppSyn` | vendored | 1 | EditorOptFrm |
@@ -595,7 +604,7 @@ RESULT: the generated LFM loads and its icons are drawn
 
 **排期结论有两层，第二层比第一层重要：**
 
-- **单点最优是 `TVirtualImage`**（3 个窗体），而且它是 **external** —— LCL 侧有对应物，属于**字段级替换**，不需要写控件。这是投入产出比最高的一刀。
+- ~~**单点最优是 `TVirtualImage`**（3 个窗体），而且它是 **external** —— LCL 侧有对应物，属于**字段级替换**，不需要写控件。这是投入产出比最高的一刀。~~ **这条已被 Sprint F3-3 实测推翻，见 §14.1。** 被推翻的不是「3 个窗体」这个数，而是「字段级替换」这个**性质**。
 - **`main.dfm` 的 8 个阻断项，每一个都只值 1 个窗体**，而且 8 个里有 5 个是 vendored 自研解析器（`TCppParser` / `TCppPreprocessor` / `TCppTokenizer` / `TClassBrowser` / `TCodeCompletion`）。**把 `main.dfm` 当作一个目标去"清空阻断"，成本是 8 次控件移植；而它本身只有 1 个窗体的收益。** 正确做法是把它**排除出近期排期**，而不是让它绑架整条路线。
 
 ### 13.4 生产端缺口（缺的是控件，不是窗体）
@@ -622,3 +631,133 @@ DataFrm.dfm / NewProjectFrm.dfm: SVG 类已全部转换，但没有窗体级 .lf
 ### 13.6 一条方法论
 
 > **"还有几个窗体被挡着"是情绪指标，"退役哪一个能解锁几个"才是排期指标。** 前者回答一次就过期，后者每次都能重算。这个区别就是 `f3_batch_plan.py`（批次）与本工具（路线）并存的理由：批次回答"能不能转"，路线回答"先动哪个"。
+
+---
+
+## 14. Sprint F3-3：`TVirtualImage` 实做（本节推翻 §13.3 的第一层结论）
+
+### 14.1 §13.3 的「字段级替换」被推翻
+
+§13.3 把 `TVirtualImage` 记为「external，LCL 有等价物，字段级替换，不需要写控件」。逐个读使用点之后，这个结论在三处全错：
+
+| 使用点 | `ImageCollection` | 集合内条目数 | DFM 的 `ImageIndex` |
+|---|---|---|---|
+| `EnviroFrm.viThemePreview` | `dmMain.AppearanceThemeCollection` | 9 | `-1` |
+| `LangFrm.VirtualImageTheme` | `dmMain.ImageThemeColection` | 9 | `0` |
+| `main.ImageEmbarcadero` | `dmMain.EMBTImageCollection` | 2 | `0` |
+
+三处都不是「TImage + TImageList 按索引取图」，而是 **`Vcl.ImageCollection` 的按名取图器**。LCL 的 `TImage` 只有 `Picture`，没有 `ImageCollection` / `ImageName` / `ImageIndex`。
+
+> **顺带订正一个数字。** §13.3 及 `f3_external_matrix.py` 此前记的是「12 / 16 / 4，合计 32 条内联位图」。逐条数过 `DataFrm.dfm` 之后，真实数字是 **9 / 9 / 2，合计 20 条，458,644 字节**。32 这个数是错的，且它一直印在文档里而没人核过——这正是本项目反复吃亏的那一类错误：**一个被引用过很多次的数字，不等于一个被量过的数字。**
+
+### 14.2 真正的前置任务是载荷，不是类
+
+`TVirtualImage` 之所以看起来像「字段级替换」，是因为**载荷藏在类后面**。`DataFrm.dfm` 的 1.74 MB 里有 20 条内联 PNG。丢掉它们再改名，得到的是一个**能编译、能加载、什么都不画**的控件。
+
+所以顺序必须是：**先抽出载荷 → 再写按索引取图的控件 → 最后改名**。跳过第一步就是那个空窗口。
+
+### 14.3 实做结果
+
+| 交付物 | 路径 |
+|---|---|
+| 提取器（含 `--verify` 字节门禁） | `tools/f3_image_extract.py` |
+| 20 个 PNG（与 DFM 逐字节相同） | `Source/Fpc/UI/Data/Images/<集合>/<NN>_<slug>.png` |
+| 清单 | `Source/Fpc/UI/Data/img_manifest.json` |
+| 索引单元（**不含图像字节**） | `Source/Fpc/UI/Data/ImageCollectionData.pas` |
+| 控件 | `Source/Fpc/UI/Controls/LclVirtualImage.pas` |
+| 静态门禁 | `tools/f3_imgcoll_check.py` |
+| 运行探针 | `Tests/FpcCoreTests/imgcoll/ImgCollProbe.lpr` |
+
+**控件几乎是空的，这是读了 LCL 源码之后的结果，不是偷懒：**
+
+`TCustomImage` **本来就 published 了** `Images` / `ImageIndex` / `ImageWidth` / `Proportional`（`lcl/include/customimage.inc`），而且
+
+```pascal
+function TCustomImage.GetHasGraphic: Boolean;
+begin
+  Result := Assigned(Picture.Graphic) or (Assigned(Images) and (ImageIndex >= 0));
+end;
+```
+
+也就是说 **`ImageIndex = -1` 在 LCL 里已经是「什么都不画」**，与 VCL 语义一致。而四个调用点（`EnviroFrm.pas:245`、`LangFrm.pas:157`、`LangFrm.pas:235`、`main.pas:7404`）**全部按 `ImageIndex` 驱动**。
+
+于是整个平替 = **把 PNG 装进一个 `TCustomImageList`，赋给继承来的 `Images`，再补两个 LCL 没有的属性（`ImageCollection` / `ImageName`）**。`.pas` 调用点**一行都不用改**。唯一需要设置的默认值是 `Proportional := True`（`TCustomImage.Create` 给的是 `False`，而 `TVirtualImage` 是等比缩放——`LangFrm` 那个控件是 383×103 摆在 671×250 的图上）。
+
+### 14.4 实测抓到的 5 个缺陷（全部先复现、后修复）
+
+| # | 缺陷 | 症状 |
+|---|---|---|
+| 1 | `TFPColor` 不可见 | `Identifier not found "TFPColor"`——该类型只有 LCL 自己的单元能命名（兄弟探针 `SvgLfmProbe` 也是因为从不声明它才没踩到） |
+| 2 | `LastDelimiter` 返回 **1** | 独立小程序实测：`S = D:\Git\Dev-Cpp-Modern\Tests\...`（len 48），`LastDelimiter(S,'\/') = 1`。仓库根路径查找直接跳到盘根并放弃 |
+| 3 | `IncludeTrailingPathDelimiter('')` 返回 `PathDelim` 而不是 `''` | 根路径向上走**死循环**。探针 400 秒零输出，看起来像 PNG 解码器死锁——其实根本没走到解码器 |
+| 4 | 探针只打印 `E.ClassName` | 20 次失败全是「EConvertError」，没有任何可据以行动的线索 |
+| 5 | `TBitmap.Assign(Pic)` 拒绝解码后的 PNG | `EConvertError: Cannot assign a TPicture to a TBitmap.`（`TPicture.LoadFromFile` 其实**成功了**，是我的搬运代码失败了） |
+
+> **#2 / #3 的教训比缺陷本身重要。** 一个「向上找仓库根目录」的辅助函数，配上会缓冲的 stdout，看起来和一个死锁**完全一样**。#3 修好之前，我无法区分「扫描慢」和「卡死」——因为两种情况下探针都不输出任何东西。
+>
+> **#4 是探针自己的缺陷。** 一条不能据以行动的诊断，等于没有诊断。
+
+### 14.5 探针抓到的两个「不是缺陷的缺陷」
+
+| 现象 | 真相 |
+|---|---|
+| `viThemePreview.ImageIndex` 停在 `-1` | **代码是对的，期望值是错的。** `EnviroFrm` 写的是 `ImageName = 'Windows Classic'`，而 `AppearanceThemeCollection` 的条目名是 `windows_classic` / `windows_10` / `slate_gray`…… **名字对不上任何一条**。VCL 控件查不到名字就不画图，所以 Delphi 原版的这个预览**本来就是空白**，直到用户点一下 `ListBoxStyle`。平替忠实地复现了这个行为 |
+| 载荷必须是文件，不能是生成的单元 | `const BIG: array[0..N] of Byte = ('...')` **根本不编译**：`Incompatible types: got "Constant String" expected "Byte"`。FPC 的类型化常量不接受字符串字面量 |
+
+第一条尤其值得记：第一版期望值写的是 `0`（推理「名字应该能解析」），探针报失败后查下来**错的是期望值**。两个选项里更「说得通」的那个反而是错的。
+
+### 14.6 反空转验证（4 处注入缺陷，逐一被拒）
+
+| 注入 | 谁抓住了 | 退出码 |
+|---|---|---|
+| 篡改 1 个 PNG 的 1 个字节 | `f3_image_extract.py --verify` **和** `ImgCollProbe` | 都 `1` |
+| `ImageCollectionData.pas` 里把宽 671 改成 670 | `f3_image_extract.py --verify`（重建后 `ImgCollProbe` 也报 `got 671x250, manifest says 670x250`） | 都 `1` |
+| `ImageCollection` 指向不存在的集合 | 转换器**拒绝转换**，且生成物里不含那个名字 | `1` |
+| `ImageHeight = 180`（非 0） | `f3_imgcoll_check.py` | `1` |
+
+全部还原后 MD5 与注入前一致（`ImageCollectionData.pas` = `ce5fa0cc5b2547afa45d2868dedcbd4b`），探针 `exit=0`。
+
+> **注入 #2 第一轮测出了门禁本身的一个假阴性。** 探针报了 `exit=0`——因为我**跑的是旧二进制**：FPC 按 `.ppu` 缓存，不重建就等于测上一轮的代码。
+>
+> **教训：一个探针只有在刚刚被重建过时才算数。** 这条对 CI 同样成立（CI 每次都重建，所以 CI 里没问题），但任何本地「改完再跑」都必须先 `rm lib/*.ppu`。
+
+门禁自己也被证伪过一次，而且是**门禁报错了**：`f3_imgcoll_check.py` 最初用 `"TVirtualImage" in text` 找残留的 VCL 类，结果命中了探针片段自己的载体类 `TVirtualImageCarrier`——**它的名字里包含它本该顶替的那个类名**。收紧为类声明位置匹配，同时把载体改名为 `TLclVirtualImages`。改检查而不改名字，等于把一个陷阱留给下一个读代码的人。
+
+### 14.7 `EnviroFrm` / `LangFrm` 的状态
+
+两者都已转换，且转换产物经过**真实 LCL 读取器**加载验证（`ImageCollections.lfm` 内 3 个节点全部 stream 成功）。
+
+但**「转换完成」不等于「窗体可用」**：`EnviroFrm.lfm` / `LangFrm.lfm` 本身**仍未被任何完整 LFM 加载器加载过**——它们各自还有 90 多个其它控件类需要注册。片段验证证明的是**这三个节点转对了**，不是**这两个窗体能打开**。
+
+### 14.8 抽取器覆盖面 + 门禁自身的两处欠账（2026-10-06）
+
+F3-3 收尾阶段的三件事，全部由实测驱动。
+
+**1. 抽取器覆盖面关闭**（§10 第 1 项、§12.6 的缺口）：`f3_svg_extract.py` 从只读 `DataFrm.dfm` 扩到也读 `NewProjectFrm.dfm`。两个输入带来两个新要求：**重名即拒**（两个 DFM 声明同名列表是数据冲突，不是合并），以及 `--verify` 重读两个文件做往返。实测：`lists: 6   items: 117`，`VERIFY OK: 117 SVG(s) round-trip byte-identical from 2 DFM(s)`。
+
+**2. `f3_lfm_check.py` 的三处欠账**（修复前实测报 6 处误报：5 个文件的树比较 + 1 处孤儿）：
+
+| 欠账 | 修复 |
+|---|---|
+| 孤儿检查按**文件名后缀**豁免 fragment（只认 `.svg-lists.lfm`），`ImageCollections.lfm` 被误报「orphan LFM with no source DFM」 | 按 `_generated.json` 的 **rule** 豁免：凡 rule 以 `-fragment` 结尾的都是从 DFM 撕下的子树，不是窗体——未来的 fragment 类型不会被误报 |
+| 树比较不认 `CLASS_RENAME`：DFM 侧的 `TSVGIconImageList` / `TVirtualImage` 与 LFM 侧重写后的类型被当成 drift，5 个窗体文件误报 | DFM 侧比较前过一遍转换器自己的 `CLASS_RENAME` 表（importlib 按路径加载，**不抄第二份**——两份表迟早漂移） |
+| BANNED 集的注释声称「与 `f3_dfm_to_lfm.DROP_PROPS` 互相断言」，但断言只存在于注释里 | 断言真正落实：`DROP_PROPS - BANNED` 非空即报失败（实测 14 = 14，通过） |
+
+**3. 探针与 CI 的硬编码计数**：`SvgDataProbe`（`SvgListCount <> 5`）与 `SvgLfmProbe`（`Expected: array[0..4]`、单文件硬编码）在 6 列表下会失败。修法是**消除硬编码**而不是改数字：`SvgDataProbe` 的汇总行改为动态累加；`SvgLfmProbe` 重构为通配符发现所有 fragment、逐个流式加载、断言**联合**组件数 = `SvgListCount`（单个 fragment 本就只含一个窗体的列表，联合才是不变量）。`RasterProbe` 本就无硬编码，实测 `rendered ok : 110`（新的 `Empty` 图标有墨水），CI 的步骤名与正则同步。
+
+实测收尾（除转换器按设计 `exit=1` 外，全部 `exit=0`）：
+
+```
+f3_svg_extract  --verify : VERIFY OK: 117 SVG(s) round-trip byte-identical from 2 DFM(s)
+f3_image_extract --verify: OK: 20 images / 3 collections byte-identical to DataFrm.dfm
+f3_imgcoll_check          : OK: 3 TVirtualImage node(s) converted, payload byte-identical
+f3_lfm_check              : PASS（55 .lfm / 52 compared / 2 fragments = 6 lists / 69 绑定 / 55 溯源记录）
+f3_dfm_to_lfm --only svg  : exit 1（Packman/Main 拒绝，设计如此，CI 显式断言）
+SvgDataProbe              : RESULT: data unit delivers 6 lists / 117 payloads
+SvgLfmProbe               : DISCOVERED 2 fragment(s) … Streamed lists match the data unit: 6 of 6
+SvgListProbe              : renderer failures over all lists = 0
+RasterProbe               : rendered ok : 110 … RESULT: INCOMPLETE（绕过控件直喂 fpvectorial，设计如此）
+ImgCollProbe              : RESULT: the converted LFM streams and every PNG decodes with content
+```
+
+探针全部在清掉 `.ppu` 缓存后重建再跑——§14.6 的教训对这里同样适用：`SvgData.pas` 从 5 列表变成 6 列表，不重建就跑等于测上一轮的代码。
