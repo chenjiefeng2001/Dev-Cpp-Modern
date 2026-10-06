@@ -575,36 +575,38 @@ RESULT: the generated LFM loads and its icons are drawn
 
 上一节结束时"SVG 解锁 13 个窗体"这句话缺一个数：解完之后，**还剩几个真的能编译，剩几个被别的控件挡着**。本节用 `tools/f3_load_routes.py` 从树上重算，替代此前 13 / 15 / 9 三个互相矛盾的手算答案。
 
-### 13.1 关键结论：15 个消费端里，**9 个已无任何阻塞**
+### 13.1 关键结论：15 个消费端里，**11 个已无任何阻塞**（F3-3 后重算）
 
 ```
-  converted .lfm in total     : 49
+  converted .lfm in total     : 52
   of which SVG consumers      : 15
-  CLEARED by the SVG work     : 9
-  still blocked by other code : 6
+  CLEARED by the SVG work     : 11
+  still blocked by other code : 4
 ```
 
-**「9」不是估计，是交叉验证出来的**：`f3_form_survey.py` 独立报「convertible AND svg-independent = 34/53」与「convertible as-is = 43/53」，二者相减 **43 − 34 = 9**，与本工具从 `_generated.json` 侧算出的 9 完全一致。两个工具走不同代码路径得到同一个数，这是本项目一贯要求的交叉校验。
+**「11」不是估计，是交叉验证出来的**——但两个数测的层面不同，差异本身就是证据：`f3_form_survey.py` 从 **DFM 静态侧**（DFM 没动，仍声明 `TVirtualImage`）报「convertible as-is = 43/53」「convertible AND svg-independent = 34/53」，相减 **43 − 34 = 9**；本工具从 **`_generated.json` 产物侧**（含 F3-3 的 `TVirtualImage → TLclVirtualImage` 退役规则）算出 **11**。差 **2** 恰好是 `EnviroFrm` / `LangFrm`：survey 侧仍把它们算作被 `TVirtualImage` 挡着，产物侧该类已退役、阻塞随之消失。两个工具走不同代码路径、不同层面，差值精确等于 F3-3 解锁的窗体数——这正是本项目一贯要求的交叉校验。
 
 ### 13.2 下一块最便宜的证据：把这 9 个**加载**出来
 
-`AStyleFormatterOptionsFrm` / `AboutFrm` / `ClangFormatterOptionsFrm` / `FormatterOptionsFrm` / `IconFrm` / `NewTemplateFrm` / `ParamsFrm` / `ToolEditFrm` / `ToolFrm`
+`AStyleFormatterOptionsFrm` / `AboutFrm` / `ClangFormatterOptionsFrm` / `FormatterOptionsFrm` / `IconFrm` / `NewTemplateFrm` / `ParamsFrm` / `ToolEditFrm` / `ToolFrm` / `EnviroFrm` / `LangFrm`
 
-这 9 个**无阻塞控件 + 图标列表已是真列表**，即 `f3_lfm_check.py` 之后没有任何东西挡着编译。它们是全计划里**最便宜的剩余证据**——不需要新写任何控件，只需要像 `SvgLfmProbe` 那样把 LFM 喂给真实 LCL 读取器。**这应当优先于任何新控件的编写。**
+这 11 个**无阻塞控件 + 图标列表已是真列表**，即 `f3_lfm_check.py` 之后没有任何东西挡着编译。它们是全计划里**最便宜的剩余证据**——不需要新写任何控件，只需要像 `SvgLfmProbe` 那样把 LFM 喂给真实 LCL 读取器。**这应当优先于任何新控件的编写。**
+
+后两个（`EnviroFrm` / `LangFrm`）是 F3-3 净增的，证据级别与前面 9 个略有不同：§14.7 已验证它们在 `ImageCollections.lfm` 中的 3 个 `TVirtualImage` 节点，但**完整窗体 LFM 从未被完整加载器加载过**。把它们纳入本节清单，正是要把这层证据补齐。
 
 ### 13.3 阻断项按「退役一个能解锁几个」排序
 
 | 阻断控件 | 归属 | 解锁窗体 | 目标窗体 |
 |---|---|---|---|
-| ~~`TVirtualImage`~~ | ~~external（LCL 有等价物）~~ | **3** | EnviroFrm, LangFrm, main |
-| `TCompOptionsFrame` | own | 2 | CompOptionsFrm, ProjectOptionsFrm |
-| `TCompOptionsList` | vendored | 2 | CompOptionsFrm, ProjectOptionsFrm |
+| ~~`TVirtualImage`~~ | ~~external~~ | **0**（已由 F3-3 解决：实做 `TLclVirtualImage`，EnviroFrm / LangFrm 已清除；main 仍被其 8 个阻断项挡着） | ~~EnviroFrm, LangFrm, main~~ |
+| `TCompOptionsFrame` | own | 2 | CompOptionsFrm, ProjectOptionsFrm（剖析与决策见 §15） |
+| `TCompOptionsList` | vendored | 2 | CompOptionsFrm, ProjectOptionsFrm（剖析见 §15：**建议退役**，LCL 原生覆盖） |
 | `TSynCppSyn` | vendored | 1 | EditorOptFrm |
 | `TClassBrowser` `TCodeCompletion` `TControlBar` `TCppParser` `TCppPreprocessor` `TCppTokenizer` `TdevFileMonitor` `TdevShortcuts` | vendored/external | **各 1** | **全部是 main.dfm** |
 
 **排期结论有两层，第二层比第一层重要：**
 
-- ~~**单点最优是 `TVirtualImage`**（3 个窗体），而且它是 **external** —— LCL 侧有对应物，属于**字段级替换**，不需要写控件。这是投入产出比最高的一刀。~~ **这条已被 Sprint F3-3 实测推翻，见 §14.1。** 被推翻的不是「3 个窗体」这个数，而是「字段级替换」这个**性质**。
+- ~~**单点最优是 `TVirtualImage`**（3 个窗体），而且它是 **external** —— LCL 侧有对应物，属于**字段级替换**，不需要写控件。这是投入产出比最高的一刀。~~ **这条已被 Sprint F3-3 实测推翻，见 §14.1。** 被推翻的不是「3 个窗体」这个数，而是「字段级替换」这个**性质**。F3-3 完成后，这把交椅移交给 **`TCompOptionsFrame` + `TCompOptionsList`**（各 2 个窗体；§15 剖析结论：frame 直接移植、list 退役）。
 - **`main.dfm` 的 8 个阻断项，每一个都只值 1 个窗体**，而且 8 个里有 5 个是 vendored 自研解析器（`TCppParser` / `TCppPreprocessor` / `TCppTokenizer` / `TClassBrowser` / `TCodeCompletion`）。**把 `main.dfm` 当作一个目标去"清空阻断"，成本是 8 次控件移植；而它本身只有 1 个窗体的收益。** 正确做法是把它**排除出近期排期**，而不是让它绑架整条路线。
 
 ### 13.4 生产端缺口（缺的是控件，不是窗体）
@@ -618,15 +620,17 @@ DataFrm.dfm / NewProjectFrm.dfm: SVG 类已全部转换，但没有窗体级 .lf
 
 ### 13.5 路线图自身的反空转验证
 
-工具的价值全在"会重算"。摘掉一个已转换窗体再跑：
+工具的价值全在"会重算"。F3-3 后基线 **52 / 15 / 11 / 4**，做了两次扰动（做完都还原）：
 
-| | SVG 消费端 | 仍阻断 | `TVirtualImage` 覆盖面 |
-|---|---|---|---|
-| 基线 | 15 | 6 | **3** (EnviroFrm, LangFrm, main) |
-| 扰动（摘掉 LangFrm） | 14 | 5 | **2** (EnviroFrm, main) |
-| 还原 | 15 | 6 | **3** |
+| | 总数 | SVG 消费端 | CLEARED | 仍阻断 | 说明 |
+|---|---|---|---|---|---|
+| 基线 | 52 | 15 | 11 | 4 | F3-3 后实测 |
+| 扰动 A：摘掉 `EnviroFrm.lfm` 条目 | 51 | 14 | 10 | 4 | 模拟一个已清除窗体消失 |
+| 还原 A | 52 | 15 | 11 | 4 | `_generated.json` MD5 复原一致（`799542…d51f`） |
+| 扰动 B：把 `TCompOptionsFrame`/`TCompOptionsList` 临时加入退役集 | 52 | 15 | **13** | **2** | 前瞻验证 §15 的收益预测 |
+| 还原 B | 52 | 15 | 11 | 4 | 工具文件 MD5 复原一致 |
 
-`_generated.json` 还原后 MD5 一致，`f3_lfm_check.py` 仍 exit=0。
+扰动 A 证明数字会随产物集重算；扰动 B 是**前瞻性**的——不改任何代码，只回答「§15 的移植做了，路线图会变成什么样」，答案是 **13 cleared / 2 blocked**（只剩 `EditorOptFrm` 的 `TSynCppSyn` 与 `main.dfm` 的 8 个，后者按上一节结论排除出近期排期）。
 
 ### 13.6 一条方法论
 
@@ -761,3 +765,68 @@ ImgCollProbe              : RESULT: the converted LFM streams and every PNG deco
 ```
 
 探针全部在清掉 `.ppu` 缓存后重建再跑——§14.6 的教训对这里同样适用：`SvgData.pas` 从 5 列表变成 6 列表，不重建就跑等于测上一轮的代码。
+
+---
+
+## 15. 头号阻断项剖析：`TCompOptionsFrame` + `TCompOptionsList`（2026-10-06）
+
+F3-3 之后路线图的头号共享阻断项：各解锁 2 个窗体（`CompOptionsFrm` / `ProjectOptionsFrm`），是 `main.dfm` 之外唯一「一动多」的目标。本节给出实测剖析与 **Frame-port 决策**。
+
+### 15.1 两个控件是什么
+
+**`TCompOptionsList`**（`Source/VCL/CompOptionsList/CompOptionsList.pas`，103 行，vendored）：`class(TValueListEditor)` 加一个 `TInplaceEditListAccess = class(Grids.TInplaceEditList)` 的私有类 hack，依赖 VCL 私有成员 `EditList` / `StyleServices` / `ItemProps[].HasPickList`。它的全部「增值」只有两处：`DrawCell` 里的 `StyleServices.DrawElement` 调用——**是注释掉的死代码**；`MouseDown`——只调 `TInplaceEditListAccess(EditList).DropDown` 弹下拉。
+
+**`TCompOptionsFrame`**（`Source/CompOptionsFrame.pas`，139 行，own）：`class(TFrame)`，`tabs: TTabControl` + `vle: TCompOptionsList`，三个方法：
+
+- `FillOptions`：从 `devCompilerSets[fCurrentIndex].Options` 收集 section 名（经 `Lang[...]` 本地化）去重加入 `tabs.Tabs`；
+- `tabsChange`：按当前 tab 过滤选项，`vle.InsertRow(...)` 逐行插入（有 `Choices` 用选项名，否则用 `BoolValYesNo`），`Strings.Objects[idx] := Pointer(I)` 记下标，`ItemProps[idx].EditStyle := esPickList`、`ReadOnly := true`、填 `PickList`；
+- `vleSetEditText`：把 Yes/No 或选项名映射回 `option^.Value`，调 `CompilerSet.SetOption` 写回编译集。
+
+### 15.2 关键实测：`TCompOptionsList` 在 LCL 上是冗余的
+
+LCL `valedit.pas` 对 `esPickList` 行**原生**提供组合编辑器（实测行号）：
+
+```
+valedit.pas:17    TEditStyle = (esSimple, esEllipsis, esPickList);
+valedit.pas:309   property DropDownRows: Integer ... default 8;
+valedit.pas:1267  esPickList: begin
+valedit.pas:1268    result := EditorByStyle(cbsPickList);   // 原生下拉编辑器
+                    (result as TCustomComboBox).Items.Assign(ItemProp.PickList);
+                    DropDownCount := DropDownRows;
+```
+
+即：凡 `EditStyle := esPickList` 的行，LCL 的 `TValueListEditor` **自己**给下拉按钮、`PickList`、`DropDownRows`——vendored 控件用私有 hack 手搓的那套，在 LCL 里一行都不用写。而 `TCompOptionsFrame` 的全部代码（`InsertRow` / `Strings` / `ItemProps` / `PickList` / `ReadOnly` / `ColWidths` / `OnSetEditText` / `TTabControl.Tabs` / `OnChange`）**没有一处**用到 vendored 控件的独有行为——`DrawCell` 与 `MouseDown` 的覆写在这个 frame 里根本不会被触发。
+
+**结论：`TCompOptionsList` 退役，`vle` 直接用 LCL 原生 `TValueListEditor`。**
+
+### 15.3 决策：Frame-port（直接移植 frame），不是 field-simplification
+
+两个候选：
+
+- **Frame-port**：移植 `TCompOptionsFrame` 本身，`vle` 字段类型换成 `TValueListEditor`，退役 vendored 控件；
+- **field-simplification**：拆掉 frame 容器，把 `TTabControl` + `TValueListEditor` 直接铺进两个窗体。
+
+选 Frame-port，理由全部可测：
+
+1. frame 的三个方法逻辑真实且**在两个窗体间共享同一行为**（同一 `devCompilerSets` 的选项编辑）；拆成两份会复制约 80 行逻辑，迟早漂移——这正是本项目「一份规则一处」纪律的反面。
+2. frame 的依赖全部是在仓内已移植单元：`devCFG`（`BoolValYesNo` :29、`TdevCompilerSet` :46、`TdevCompilerSets` :146、`SetOption` :109）、`ProjectTypes`（`TCompilerOption` / `PCompilerOption`）、`utils`、`MultiLangSupport`、`project`。**没有 VCL 私有单元依赖**——vendored 的 `CompOptionsList` 反而是唯一的 VCL 私有依赖，退役它即斩断。
+3. LCL 属性面逐项验证过：`InsertRow`（valedit.pas:188）、`ItemProps`（:203）、`TItemProp.ReadOnly`（:51）、`DropDownRows`（:309）、`TTabControl.Tabs`（comctrls.pp:888）、`OnChange`（:877）、`OnSetEditText`（valedit.pas:296）、`goAlwaysShowEditor`（grids.pas:101）、`doKeyColFixed`（valedit.pas:106）、`BorderStyle`（grids.pas:1225）、`DefaultRowHeight` / `ColWidths` / `FixedCols`（grids.pas:1238 / 1236 / 1254）。
+
+### 15.4 移植改动清单（文件级，实测）
+
+| 文件 | 改动 |
+|---|---|
+| `Source/CompOptionsFrame.pas` | `vle: TCompOptionsList`（:31）→ `vle: TValueListEditor`；uses 去 `CompOptionsList`（`ValEdit` 已在） |
+| `Source/CompOptionsFrm.pas` | uses 去冗余的 `CompOptionsList`（:27——全文件无 `TCompOptionsList` 直接类型引用，实测） |
+| `Source/CompOptionsFrame.dfm` | `object vle: TCompOptionsList` → `object vle: TValueListEditor`；属性全部 LCL 原生，**一行不用删**（`DropDownRows=40`、`BorderStyle=bsNone`、`DefaultRowHeight=22`、`DisplayOptions=[doKeyColFixed]`、`FixedCols=1`、`Options=[goEditing,goAlwaysShowEditor]`、`ScrollBars=ssNone`、`ColWidths=(199,364)`） |
+| 两个窗体 LFM | 重跑转换器即可：`CompOptionsFrm.lfm:158` 的 `inherited vle: TCompOptionsList` 自动变为 `TValueListEditor`（转换器 OBJ_RE 原生认 `object/inherited/inline`，f3_dfm_to_lfm.py:143；两个窗体的 `inline CompOptionsFrame1: TCompOptionsFrame` 节点不变） |
+
+frame 的 Pascal 逻辑代码**零改动**——它用的每个符号都是 LCL 原生 API。
+
+### 15.5 收益（前瞻扰动实测，非估计）
+
+§13.5 扰动 B 已验证：把这一对加入退役集后路线重算为 **52 / 15 / 13 / 2**——`CompOptionsFrm` 与 `ProjectOptionsFrm` 解锁，剩余阻断只剩 `EditorOptFrm`（`TSynCppSyn`）与 `main.dfm`（8 个，按 §13.3 结论排除出近期排期）。
+
+### 15.6 与 §14 的关系
+
+§14 推翻了「`TVirtualImage` 是字段级替换」的性质判断；本节是同一性质判断的**正例**：`TCompOptionsList` 是真冗余（死代码 + LCL 原生覆盖），`TCompOptionsFrame` 是真逻辑（需要移植）。一刀切地「全部字段级替换」或「全部移植」都会误判——逐控件实测才是排期依据。

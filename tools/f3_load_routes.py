@@ -23,8 +23,9 @@ WHAT IT MEASURES
     was converted by hand and a form the converter emitted are both "converted"
     for this purpose, and neither should have to be remembered in two places.
   * For each, the control types f3_form_survey.py reports as non-convertible,
-    MINUS the ones the SVG work has already retired (TSVGIconImageList ->
-    TLclSvgImageList).
+    MINUS the ones later sprints have already retired: the SVG work
+    (TSVGIconImageList -> TLclSvgImageList) and F3-3
+    (TVirtualImage -> TLclVirtualImage).
   * The blocker roll-up, sorted by forms-unblocked-per-blocker.
 
 WHY THE SVG EXCLUSION IS SUBTRACTED AND NOT ASSUMED AWAY
@@ -60,6 +61,16 @@ MANIFEST = FORMS_DIR / "_generated.json"
 # control it became is load-tested (Tests/FpcCoreTests/svg/SvgLfmProbe.lpr).
 SVG_RETIRED = {"TSVGIconImageList"}
 
+# Retired by sprint F3-3: the converter renames TVirtualImage ->
+# TLclVirtualImage (Source/Fpc/UI/Controls/LclVirtualImage.pas), and the
+# converted nodes + extracted PNGs are load-tested (ImgCollProbe.lpr).
+F33_RETIRED = {"TVirtualImage"}
+
+# Both exclusions are scoped to forms that actually received a converted .lfm
+# (blockers_of only runs on the converted set), so producer-side gaps such as
+# Packman/Main keep their real blockers.
+RETIRED = SVG_RETIRED | F33_RETIRED
+
 
 def load(name):
     spec = importlib.util.spec_from_file_location(name, ROOT / "tools" / f"{name}.py")
@@ -78,7 +89,7 @@ def converted_forms():
 
 def blockers_of(survey, dfm_path):
     _, _, custom = survey.survey(dfm_path)
-    return sorted(set(custom) - SVG_RETIRED)
+    return sorted(set(custom) - RETIRED)
 
 
 def main() -> int:
