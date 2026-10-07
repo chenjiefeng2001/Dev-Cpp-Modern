@@ -140,8 +140,23 @@ CLASS_RENAME = {
 # the build the day one is not 0.
 VIMAGE_DROP_PROPS = {"ImageHeight"}
 
-OBJ_RE = re.compile(r"^(\s*)(object|inherited|inline)\s+(\w+)\s*:\s*(\w+)\s*$")
-PROP_RE = re.compile(r"^(\s*)(\w[\w.\[\]]*)\s*=\s*(.*)$")
+# `object Name: Class` is the usual form, but a TNotebook's pages are written
+# WITHOUT a name and without a colon -- `object TPage` -- because the class comes
+# from the parent's `PageClass` property and Delphi's writer has nowhere else to
+# put it. Five such lines exist in the tree, all in Tools/Packman/InstallWizards.
+# The LFM grammar accepts them too (lresources.pp ProcessObject: no `:` means
+# ObjectName='' and ObjectType is the lone symbol), so they are passed through.
+# A regex that insists on the colon silently drops the page and every control on
+# it, and the object-tree gate could not see it either, because it used this same
+# shape.
+OBJ_RE = re.compile(r"^(\s*)(object|inherited|inline)\s+(\w+)(?:\s*:\s*(\w+))?\s*$")
+
+# The name may be indexed (`Columns[0].Width`), which is what the Delphi writer
+# emits for a property on an element of an array property. Measured over every
+# .dfm in the tree: ZERO. Kept because the grammar allows it and a silently
+# unparsed property is the failure this whole rewrite exists to remove.
+PROP_RE = re.compile(
+    r"^\s*(?P<pname>[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*(?:\[\d+\])?)\s*=\s*(?P<pval>.*)$")
 
 # ---------------------------------------------------------------------------
 # STEP 3: the SVG conversion rule.
@@ -232,28 +247,180 @@ VIMAGE_COLLECTION_RE = re.compile(r"^(\w+)\.(\w+)$")
 COLL_START_RE = re.compile(r"^(\s*)([\w.\[\]]+)\s*=\s*<\s*$")
 COLL_END_RE = re.compile(r"^\s*end>\s*$")
 ITEM_RE = re.compile(r"^\s*item\s*$")
+END_LINE_RE = re.compile(r"^\s*end\s*$")
+
+
+def _paren_delta(s):
+    """`(` minus `)` in `s`, counting only outside quoted strings.
+
+    A caption may legally contain both: `'Press (OK)'`. Counting the quote as
+    a bracket ends the list at the wrong line and strands the rest of the
+    node's properties -- which is how a `Lines.Strings` list swallowed the
+    `ReadOnly = True` that followed it.
+    """
+    depth, i, quoted = 0, 0, False
+    while i < len(s):
+        c = s[i]
+        if quoted:
+            if c == "'":
+                # Delphi escapes a quote inside a DFM string by doubling it.
+                if i + 1 < len(s) and s[i + 1] == "'":
+                    i += 1
+                else:
+                    quoted = False
+        elif c == "'":
+            quoted = True
+        elif c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+        i += 1
+    return depth
+
+
+def _scan_value(lines, j, val, consumed):
+    """Consume a property's whole value, which may span many lines.
+
+    Returns `(value, last_line)`. `value` is what gets re-emitted after the
+    `=`, with newlines where the DFM had them; `last_line` is the index of the
+    final line the value occupied.
+
+    WHY THE VALUE IS TAKEN AS A UNIT
+    ===============================
+    The previous reader collected "anything that is not a property" into a
+    single `binary` bucket and appended that bucket to the END of the node's
+    property list. A DFM has no such bucket: a `Picture.Data` blob is written
+    between `Proportional` and `Stretch`, not after them, and the emitted .lfm
+    said
+
+        Picture.Data = {
+        }
+        Proportional = True
+        ShowHint = False
+        Stretch = True
+        0954506E67496D61676589504E47...
+
+    -- the brace closed on the line after it opened, and a megabyte of hex
+    landed where a property name was expected. Measured against the real LCL
+    reader that is `Wrong token type: Symbol expected but Float found`, on
+    AboutFrm, IconFrm and ToolFrm at once. Order is not cosmetic here: the
+    reader assigns properties in file order, and it tokenises, so the only
+    thing that matters is that each value's tokens arrive together and in
+    sequence.
+
+    The four shapes that span lines, and how each is recognised:
+
+      `Name = (` ... `)`   a list. Closed by paren counting, because a quoted
+                           item may itself contain `)`. 83 in the tree.
+      `Name = {` ... `}`   a binary blob. Closed by the first line that ENDS
+                           with `}` -- the last hex line carries it, and there
+                           is no line of its own. 47 in the tree.
+      `Name =`             a string split with `+` across lines. 151 in the
+        `'a' +`              tree, and every one of them is followed by a
+        `'b'`               quoted line, so an empty value never means "the
+                           empty string" here. Emitted as `''` if it ever does.
+      `Name = <` ... `end>` a collection, handled by the caller, which already
+                           had to count `end>` nesting for the SVG rule.
+    """
+    v = val.strip()
+
+    if v == "(":
+        body = ["("]
+        depth = 1
+        k = j + 1
+        while k < len(lines):
+            consumed[k] = True
+            if lines[k].strip():
+                body.append(lines[k].strip())
+            depth += _paren_delta(lines[k])
+            if depth <= 0:
+                return "\n".join(body), k
+            k += 1
+        raise ValueError("unterminated list opened at line %d" % (j + 1))
+
+    if v == "{":
+        body = ["{"]
+        k = j + 1
+        while k < len(lines):
+            consumed[k] = True
+            if lines[k].strip():
+                body.append(lines[k].strip())
+            if lines[k].rstrip().endswith("}"):
+                return "\n".join(body), k
+            k += 1
+        raise ValueError("unterminated binary block opened at line %d" % (j + 1))
+
+    if v == "" or v.endswith("+"):
+        nxt = lines[j + 1].strip() if j + 1 < len(lines) else ""
+        if not nxt.startswith("'"):
+            # An empty value whose next line is not a continuation means the
+            # empty string, which the DFM writer spells `''`. Emitting a bare
+            # `Caption =` would make the reader bind the NEXT property's name
+            # as this property's value.
+            return "''", j
+        body = []
+        k = j + 1
+        while k < len(lines):
+            consumed[k] = True
+            body.append(lines[k].strip())
+            if not lines[k].rstrip().endswith("+"):
+                return "\n".join(body), k
+            k += 1
+        raise ValueError("unterminated string continuation opened at line %d"
+                         % (j + 1))
+
+    return v, j
 
 
 def parse_dfm(text):
-    """Return (root_type, [ (depth, name, kind, type, [(prop, value)]) ]).
+    """Return (root_type, [node, ...]).
 
-    A deliberately small reader: DFM is line-oriented and this only needs the
-    object tree and simple properties. Binary property blocks (`object X: Y`
-    followed by hex blobs) are captured as a single opaque value so they survive
-    the round trip untouched.
+    A deliberately small reader: DFM is line-oriented and this needs the object
+    tree, the property names and the property VALUES. Values are taken whole
+    (`_scan_value`) rather than line by line, because a value is a token
+    sequence to the LFM reader and the line it happens to start on is not part
+    of it.
+
+    EVERY NON-BLANK LINE MUST BE CONSUMED
+    ======================================
+    The parser records which lines it accounted for and refuses to return if any
+    are left over. That is not defensive decoration: the reader this replaced
+    silently skipped lines it did not understand, which is exactly how a
+    property can vanish from a converted form with the conversion still
+    reporting success. A parse that cannot explain a line is an error, and the
+    line number is in the message.
     """
     lines = text.splitlines()
+    consumed = [False] * len(lines)
     i = 0
     root = None
     nodes = []
     stack = []  # (indent, node)
     while i < len(lines):
         line = lines[i]
+        if not line.strip():
+            consumed[i] = True
+            i += 1
+            continue
         m = OBJ_RE.match(line)
         if not m:
+            # The object loop below stops on the node's own `end`, so the outer
+            # walk is the one that steps over it. `end>` and `item` are NOT
+            # excused here: those only exist inside a collection, which claims
+            # them itself, so one reaching this point is a real defect and the
+            # coverage check should say so.
+            if END_LINE_RE.match(line):
+                consumed[i] = True
             i += 1
             continue
         indent, kind, name, ctype = m.groups()
+        consumed[i] = True
+        # `object TPage` carries no name and no class of its own: the lone token
+        # IS the class, and LFM's ProcessObject takes it as ObjectType with an
+        # empty ObjectName.
+        nameless = ctype is None
+        if nameless:
+            name, ctype = None, name
         if root is None and len(indent) == 0:
             root = ctype
         node = {
@@ -265,16 +432,19 @@ def parse_dfm(text):
         }
         # Collect properties until `end` at the same indent, or the next object.
         j = i + 1
-        binary = []
         while j < len(lines):
             nxt = lines[j]
             if OBJ_RE.match(nxt):
                 break
-            if re.match(r"^\s*end\s*$", nxt) and len(nxt) - len(nxt.lstrip()) == len(indent):
+            if END_LINE_RE.match(nxt) and len(nxt) - len(nxt.lstrip()) == len(indent):
                 break
-            pm = PROP_RE.match(nxt)
+            if not nxt.strip():
+                consumed[j] = True
+                j += 1
+                continue
             cm = COLL_START_RE.match(nxt)
             if cm:
+                consumed[j] = True
                 # Consume the whole collection body. The old reader had no
                 # branch for this, so `SVGIconItems = < ... end>` fell through
                 # to the binary bucket: its 116 SVG documents were re-emitted
@@ -285,6 +455,7 @@ def parse_dfm(text):
                 depth = 1
                 while j + 1 < len(lines):
                     nxt2 = lines[j + 1]
+                    consumed[j + 1] = True
                     if COLL_START_RE.match(nxt2):
                         depth += 1
                     elif COLL_END_RE.match(nxt2):
@@ -301,33 +472,31 @@ def parse_dfm(text):
                         % (cm.group(2), i + 1))
                 node["props"].append(
                     ("__collection__", (cm.group(2), "\n".join(coll), items)))
-            elif pm:
-                node["props"].append((pm.group(2), pm.group(3)))
-            elif nxt.strip():
-                binary.append(nxt.strip())
-                # A binary DFM property closes with a `}` at the END of the last
-                # hex line -- `FFFF}`, `AE426082}`, `...FF0000}` -- not on a
-                # line of its own. Measured in InstallWizards.dfm: 5 such blocks,
-                # and the `}` is on lines 264, 982, 1477 and two more.
-                #
-                # The previous reader never captured those, so every binary
-                # property lost one block terminator. That is why the .lfm for
-                # InstallWizards had 50 `end`s where the DFM had 55: not a
-                # layout accident, five `Picture.Data` blobs (three images, a
-                # bitmap, a license memo) each short of their own `}`.
-                #
-                # Counting only lines that END with `}` is what matters here; a
-                # line merely containing one is hex data.
-                if nxt.rstrip().endswith("}"):
-                    node["props"].append(("__end__", ""))
-            j += 1
-        if binary:
-            node["props"].append(("__binary__", "\n".join(binary)))
+                j += 1
+                continue
+            pm = PROP_RE.match(nxt)
+            if not pm:
+                # Not a property, not a collection, not a terminator. Stop here
+                # and let the coverage check below name the line, rather than
+                # swallowing it into something that looks converted.
+                break
+            consumed[j] = True
+            value, last = _scan_value(lines, j, pm.group("pval"), consumed)
+            node["props"].append((pm.group("pname"), value))
+            j = last + 1
         nodes.append(node)
         while stack and stack[-1][0] >= len(indent):
             stack.pop()
         stack.append((len(indent), node))
         i = j
+    leftover = [k for k, ln in enumerate(lines) if not consumed[k] and ln.strip()]
+    if leftover:
+        shown = "; ".join("line %d: %r" % (k + 1, lines[k].strip()[:60])
+                          for k in leftover[:3])
+        raise ValueError(
+            "%d line(s) of the DFM are neither an object, a property, a "
+            "collection nor consumed as a value -- first offenders: %s"
+            % (len(leftover), shown))
     return root, nodes
 
 
@@ -347,6 +516,28 @@ def to_lfm(root_type, nodes, source_name, dropped):
     13 root properties and a `Picture.Data` blob had evaporated.
 
     The root is now rendered by the same loop as everything else, at indent 0.
+
+    THE NESTING RULE
+    ====================
+    Nodes are emitted INSIDE the block that closed around them in the DFM,
+    rebuilt from the indent every node carries out of `parse_dfm` -- the
+    parser walks a stack of indents, so the same walk re-derives the tree it
+    saw. The first version of this emitter rendered every node as a flat
+    sibling after the root's `end` ("the reader keeps flat order"), on the
+    assumption that a component reader would re-attach them. It does not:
+    measured with Tests/FpcCoreTests/forms/MiniLfmTest.lpr, one
+    `ReadComponentFromBinaryStream` call reads the FIRST top-level object and
+    silently drops every sibling after it -- a form streamed back with
+    `ComponentCount = 0` and all of its controls gone, which is assertion 4 of
+    FormLfmProbe failing on all thirteen CLEARED forms at once. The SVG list
+    fragments always emitted nested (their own writer below), which is why
+    SvgLfmProbe streamed five attached lists while no whole window ever
+    streamed one.
+
+    The root is rendered by the same recursion as everything else, at
+    indent 0. A node count check runs after the walk: a second indent-0
+    object (no DFM here has one, but a hand-edited one would) must REFUSE,
+    not vanish the way flat output would have hidden it.
 
     STEP 3, THE SVG RULE
     ====================
@@ -372,13 +563,47 @@ def to_lfm(root_type, nodes, source_name, dropped):
     "window opens, icons blank" failure this work exists to remove.
     """
     out = []
+    if not nodes:
+        out.append("object %s: %s" % (source_name,
+                                      CLASS_RENAME.get(root_type, root_type)))
+        out.append("end")
+        return "\n".join(out) + "\n"
+
+    # Rebuild the tree: pop to the node the new indent nests under, exactly
+    # the walk parse_dfm used to collect each node's properties.
+    children = {}
+    stack = []                                       # (indent, node index)
     for i, node in enumerate(nodes):
-        prefix = "" if i == 0 else "  " * 1  # the reader keeps flat order
-        out.append("%s%s %s: %s" % (prefix, node["kind"], node["name"], node["type"]))
+        while stack and stack[-1][0] >= node["indent"]:
+            stack.pop()
+        if stack:
+            children.setdefault(stack[-1][1], []).append(i)
+        stack.append((node["indent"], i))
+
+    emitted = 0
+
+    def emit(idx, depth):
+        nonlocal emitted
+        emitted += 1
+        node = nodes[idx]
+        prefix = "  " * depth
+        if node["name"] is None:
+            # `object TPage` -- the DFM's nameless form. See OBJ_RE.
+            out.append("%s%s %s" % (prefix, node["kind"], node["type"]))
+        else:
+            out.append("%s%s %s: %s" % (prefix, node["kind"], node["name"],
+                                        node["type"]))
         is_svg = node["type"] == SVG_TARGET_CLASS
         is_vimage = node["type"] == VIMAGE_TARGET_CLASS
         if is_svg:
             out.append("%s  ListName = '%s'" % (prefix, node["name"]))
+        # Collections are re-emitted verbatim, so their lines carry whatever
+        # indent the DFM gave them. The emitted layout reproduces the DFM's
+        # two-spaces-per-level, which makes the shift zero for every
+        # IDE-written DFM; it is computed anyway, because a differently
+        # indented source must shift into place rather than strand its
+        # collection bodies at an indent that belongs to some other block.
+        shift = len(prefix) - node["indent"]
         for k, v in node["props"]:
             if is_vimage:
                 # Handled before DROP_PROPS, because the rewrite below has to
@@ -408,28 +633,56 @@ def to_lfm(root_type, nodes, source_name, dropped):
                 dropped["%s (SVG list)" % label] += 1
                 continue
             if k == "__collection__":
-                # Any collection on a NON-SVG node is re-emitted verbatim -- its
-                # lines already carry their own relative indentation from the
-                # DFM, so adding `prefix` on top would double it. Dropping the
+                # The `}`-terminated binary blocks and `end>`-terminated
+                # collections inside these lines are depth-agnostic text; what
+                # matters is that their relative indent survives. Dropping the
                 # block instead would produce an .lfm that loads and is quietly
                 # missing data, which is the failure mode this project has
                 # already been bitten by twice; and there is no rule for one, so
                 # the honest move is to keep the bytes and let the loader judge.
-                out.extend(v[1].splitlines())
+                for ln in v[1].splitlines():
+                    if shift > 0:
+                        out.append(" " * shift + ln)
+                    elif shift < 0:
+                        body = ln.lstrip(" ")
+                        keep = min(-shift, len(ln) - len(body))
+                        out.append(ln[keep:] if keep else body)
+                    else:
+                        out.append(ln)
                 continue
             if k == "__binary__":
-                for bl in v.splitlines():
-                    out.append("%s  %s" % (prefix, bl))
-            elif k == "__end__":
-                # The `}` that closed a binary property block on its hex line.
-                out.append("%s  }" % prefix)
-            else:
-                out.append("%s  %s = %s" % (prefix, k, v))
+                raise AssertionError(
+                    "__binary__ is dead: parse_dfm no longer buckets lines. A "
+                    "binary property is stored under its own name with the whole "
+                    "`{...}` block as its value.")
+            if k == "__end__":
+                raise AssertionError(
+                    "__end__ is dead: it existed to re-close a `{` block whose "
+                    "body had been moved to the end of the node. A value now "
+                    "carries its own terminator.")
+            # A value may span lines (a list, a binary blob, a `+`-chained
+            # string). They are re-emitted one per line under the same
+            # property, which is what the LFM reader wants: it tokenises, so
+            # only the token sequence matters. The extra indent is cosmetic and
+            # matches what the DFM writer produced, so a diff against the .dfm
+            # still reads as a diff rather than as a reflow.
+            parts = v.split("\n")
+            out.append(("%s  %s = %s" % (prefix, k, parts[0])).rstrip())
+            for extra in parts[1:]:
+                out.append("%s    %s" % (prefix, extra))
+        for c in children.get(idx, []):
+            emit(c, depth + 1)
         out.append("%send" % prefix)
-    if not nodes:
-        out.append("object %s: %s" % (source_name,
-                                      CLASS_RENAME.get(root_type, root_type)))
-        out.append("end")
+
+    emit(0, 0)
+    if emitted != len(nodes):
+        # A second indent-0 object, or an indent jump that no node nests
+        # under. Flat output would have emitted it anyway and looked fine;
+        # nesting it would strand it. Refuse, loudly.
+        raise ValueError(
+            "node tree is not a single root: emitted %d of %d nodes "
+            "(first stray indent-0 object after the root would be dropped)"
+            % (emitted, len(nodes)))
     return "\n".join(out) + "\n"
 
 

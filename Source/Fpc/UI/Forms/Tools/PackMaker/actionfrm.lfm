@@ -11,7 +11,6 @@ object ActionForm: TActionForm
   Font.Name = 'MS Sans Serif'
   Font.Style = []
   Position = poScreenCenter
-end
   object RadioGroup1: TRadioGroup
     Left = 8
     Top = 8
@@ -20,9 +19,9 @@ end
     Caption = 'What would you like to do?'
     ItemIndex = 0
     Items.Strings = (
+      '&Create a new package'
+      '&Open an existing package')
     TabOrder = 0
-    '&Create a new package'
-    '&Open an existing package')
   end
   object BitBtn1: TBitBtn
     Left = 41
@@ -40,3 +39,4 @@ end
     TabOrder = 2
     Kind = bkCancel
   end
+end

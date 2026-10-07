@@ -13,7 +13,6 @@ object NewFunctionForm: TNewFunctionForm
   Position = poMainFormCenter
   OnClose = FormClose
   OnShow = FormShow
-end
   object lblReturnType: TLabel
     Left = 8
     Top = 12
@@ -50,10 +49,10 @@ end
     Caption = 'Access scope'
     ItemIndex = 2
     Items.Strings = (
+      'Private'
+      'Protected'
+      'Public')
     TabOrder = 4
-    'Private'
-    'Protected'
-    'Public')
   end
   object txtType: TEdit
     Left = 88
@@ -106,11 +105,11 @@ end
     Sorted = True
     TabOrder = 3
     Items.Strings = (
-    'bool'
-    'double'
-    'float'
-    'int'
-    'void')
+      'bool'
+      'double'
+      'float'
+      'int'
+      'void')
   end
   object chkToDo: TCheckBox
     Left = 12
@@ -129,40 +128,41 @@ end
     Height = 97
     Caption = 'Attributes'
     TabOrder = 5
+    object chkStatic: TCheckBox
+      Left = 12
+      Top = 20
+      Width = 157
+      Height = 17
+      Caption = 'Static'
+      TabOrder = 0
+      OnClick = chkStaticClick
+    end
+    object chkVirtual: TCheckBox
+      Left = 12
+      Top = 44
+      Width = 69
+      Height = 17
+      Caption = 'Virtual'
+      TabOrder = 1
+      OnClick = chkStaticClick
+    end
+    object chkPure: TCheckBox
+      Left = 96
+      Top = 44
+      Width = 57
+      Height = 17
+      Caption = 'Pure'
+      TabOrder = 2
+      OnClick = chkStaticClick
+    end
+    object chkInline: TCheckBox
+      Left = 12
+      Top = 68
+      Width = 157
+      Height = 17
+      Caption = 'Inline'
+      TabOrder = 3
+      OnClick = chkStaticClick
+    end
   end
-  object chkStatic: TCheckBox
-    Left = 12
-    Top = 20
-    Width = 157
-    Height = 17
-    Caption = 'Static'
-    TabOrder = 0
-    OnClick = chkStaticClick
-  end
-  object chkVirtual: TCheckBox
-    Left = 12
-    Top = 44
-    Width = 69
-    Height = 17
-    Caption = 'Virtual'
-    TabOrder = 1
-    OnClick = chkStaticClick
-  end
-  object chkPure: TCheckBox
-    Left = 96
-    Top = 44
-    Width = 57
-    Height = 17
-    Caption = 'Pure'
-    TabOrder = 2
-    OnClick = chkStaticClick
-  end
-  object chkInline: TCheckBox
-    Left = 12
-    Top = 68
-    Width = 157
-    Height = 17
-    Caption = 'Inline'
-    TabOrder = 3
-    OnClick = chkStaticClick
-  end
+end

@@ -4,11 +4,14 @@ f3_removed_controls.py -- keep the removed Win32-only controls removed.
 
 WHY THIS FILE EXISTS
 ====================
-Two controls were physically deleted because LCL has no counterpart and the
-Delphi originals blocked conversion:
+Three controls were physically deleted, or their last use deleted, because the
+LCL has no counterpart:
 
   TAnimate          RemoveForms.dfm / .pas   an AVI playback control
   TDdeServerConv    main.dfm / main.pas      Windows-only DDE IPC
+  TCompOptionsList  CompOptionsFrame.dfm     vendored TValueListEditor whose
+                                             only real behaviour LCL gives
+                                             natively for esPickList rows
 
 The deletions were correct and are the reason `f3_form_ratchet.py` counts those
 types no longer. But a deletion is not a property: nothing stopped either
@@ -19,6 +22,25 @@ below its baseline, and these types are counted per-form, so a reintroduction
 would show up as a single blocked form rather than as the regression it is.
 
 This is that gate. It is a NEGATIVE assertion: the controls must be absent.
+
+TCompOptionsList IS A DIFFERENT KIND OF ENTRY, AND THE GATE HAS TO KNOW IT
+=======================================================================
+The other two were deleted outright. TCompOptionsList still EXISTS, as
+Source/VCL/CompOptionsList/CompOptionsList.pas, and it must:
+  * keep existing -- it is in the Delphi package (Source/VCL/DevCpp.dpk:41)
+    and deleting the file would break the Delphi build;
+  * keep existing there in a form that NOTHING references -- the vendored
+    control's only value-add was hand-rolling a pick-list editor on top of
+    VCL private members (EditList, StyleServices), which LCL's
+    TValueListEditor gives an esPickList row natively (valedit.pp:1267).
+
+So this entry asserts that no LIVE source names it. That is a different claim
+from the other two, and it is stated separately rather than folded in: a
+reader who assumes "REMOVED means deleted" would be misled, and the vendored
+file being present is exactly the evidence that the two cases differ.
+`Source/Archive/FormatterOptionsFrm.pas` is dead code that is not in any
+project file and still names the unit -- measured 2026-10-06 -- so the
+exclusion is declared rather than implied.
 
 WHAT IT CHECKS, AND WHAT IT DELIBERATELY DOES NOT
 ================================================
@@ -61,7 +83,27 @@ REMOVED = {
         ["DdeServerConv"],
         "Windows-only DDE IPC; no LCL equivalent. Removed from the main form.",
     ),
+    "TCompOptionsList": (
+        # The UNIT name, not a component name. This entry was first written
+        # with an empty list, on the reasoning that a retired control has no
+        # DFM component block left -- and the injection test then put
+        # `CompOptionsList` back into CompOptionsFrm.pas's uses clause and the
+        # gate stayed green, because what a uses clause names is the UNIT and
+        # the unit name does not contain the type name. A negative assertion
+        # that misses the most likely way the thing comes back is decoration.
+        ["CompOptionsList"],
+        "RETIRED, not deleted: the unit stays (DevCpp.dpk) but nothing may use it.",
+    ),
 }
+
+# Directories that are not live source, stated rather than implied.
+#
+# `Archive` holds superseded copies of units. `Source/Archive/FormatterOptionsFrm.pas`
+# still names the CompOptionsList unit in its uses clause; it is in no project
+# file and compiles nowhere (measured 2026-10-06: `rg CompOptionsList` outside
+# Source/VCL and Source/Archive returns nothing). Excluding a directory is a
+# decision with a reason attached, so the reason is the entry.
+NOT_LIVE = {"Archive"}
 
 # Binaries are excluded from the assertion on purpose; see the docstring.
 TEXT_SUFFIXES = {".pas", ".dfm", ".inc"}
@@ -97,6 +139,8 @@ def scan_live():
             continue
         if "VCL" in p.parts:
             continue
+        if NOT_LIVE & set(p.parts):
+            continue
         lines = read(p).splitlines()
         for n, line in enumerate(lines, 1):
             code = re.sub(r"//.*$", "", line)
@@ -125,6 +169,10 @@ def report(hits):
                 print(f"    {kw:<18} REAPPEARED ({len(found)} site(s))")
                 for p, n, s in found[:6]:
                     print(f"        {p.relative_to(ROOT).as_posix()}:{n}  {s[:64]}")
+        if not fields:
+            # A retired-but-present control has no DFM component block left
+            # once it is retired; such an entry asserts on the unit name.
+            print(f"    {'':<18} (no component name: the unit stays, the USE does not)")
         print()
 
     print("STALE ARTEFACTS (informational, not a regression)")
@@ -146,7 +194,7 @@ def report(hits):
     if total:
         print(f"FAIL -- {total} reference(s) to removed controls in live source")
         return 1
-    print("PASS -- both controls are absent from live source.")
+    print(f"PASS -- all {len(REMOVED)} controls are absent from live source.")
     print("        This gate is a negative assertion: it only fails on a")
     print("        reintroduction, so a green result says nothing about whether")
     print("        the removal was correct -- only that it still holds.")

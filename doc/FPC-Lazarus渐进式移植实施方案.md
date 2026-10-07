@@ -1898,3 +1898,23 @@ order-probe cond=TRUE detail=value=0
 > ③ 匿名方法——**风险成立且更严重**：`reference to` 在**所有**模式（`-Mdelphi` /
 > `-Mdelphiunicode` / `-Mfpc` / `-Mobjfpc`，含 `{$modeswitch anonymousfunctions}`）
 > 一律报 `Error: Identifier not found "reference"`，已按预案降级为 `of object`。
+
+---
+
+## 10. F3 当前状态：13 个窗体已被真实加载验证（2026-10-06）
+
+| 项 | 状态 |
+|---|---|
+| 转换产物可加载性 | ✅ **`FormLfmProbe` 13/13 全绿**（真实 LCL 读取器，非结构对比） |
+| 属性层可赋值性 | ✅ **`PropRttiProbe` 0 条被拒**（14 文件 / 3457 条属性赋值逐条过读取器） |
+| Delphi 构建 | ⚠️ **本机无 Delphi，未编译验证**；改动以 `{$IFDEF}` 隔离，`.dfm` 的 `TCompOptionsList` → `TValueListEditor` 是 VCL 与 LCL **都成立**的写法（`valedit.pas:17` 两侧同名） |
+| 剩余阻断 | `EditorOptFrm`（`TSynCppSyn`）、`main.dfm`（8 类，按 §13.3 排除出近期排期）、`Tools/Packman/Main`（无 LCL 对应控件，转换器**明确拒绝**） |
+
+本轮（F3-4/F3-5）落地的四件事：
+
+1. **`TCompOptionsList` 退役、`TCompOptionsFrame` 移植**（§15 的方案，`Source/CompOptionsFrame.pas` 的 `vle` 改为 `TValueListEditor`，两个窗体随之解锁）；
+2. **转换器三处修复**：根 `end` 位置（平铺输出会让读取器丢弃全部子控件）、属性值整体读取（否则十六进制块错位）、**任何读不懂的行都必须报错**（此前是静默跳过）；
+3. **两个新探针 + 共享单元**（`Tests/FpcCoreTests/forms/`），其中一个的**提问器带自测**，因为“只会说不”的提问器和正确结果长得一样；
+4. **`Source/Fpc/UI/Compat/VclPropertySkips.pas`**：17 条实测被拒的属性用 LCL 自己的 `RegisterPropertyToSkip` 按类登记，而不是在转换器里删掉——详见 SVG 方案 §16.3，其中 `OnInfoTip`（功能缺失）与 `TSynGutter.Font`（视觉差异）是两条**明确记录而非默认吞掉**的损失。
+
+> **下一步的最便宜证据已经做完**：§13.2 说“把这 9 个窗体加载出来”，本节给出 13 个中的 13 个。剩余的排期不再是“能不能加载”，而是“处理器的 Pascal 侧是否可编译”——那是 F2/F3 的 SynEdit 与 frame 移植工作量，不再是转换问题。

@@ -70,7 +70,17 @@ BANNED = {
 
 # Groups matter here: the tree check compares `Name:Type` pairs, so the name and
 # type must be captured rather than matched non-capturing.
-OBJ = re.compile(r"^(\s*)(?:object|inherited|inline)\s+(\w+)\s*:\s*(\w+)")
+#
+# The name and the colon are both OPTIONAL, and dropping them is what this check
+# cost once: a TNotebook's pages are written `object TPage` with no name and no
+# class of their own, five times in Tools/Packman/InstallWizards.dfm. This regex
+# required the colon, so it saw neither the page nor anything inside it, and the
+# five pages' `end` lines came back as "`end` closes nothing" -- a gate firing on
+# correct output, which is the failure mode that teaches people to ignore a gate.
+# LFM's own grammar accepts the short form (lresources.pp ProcessObject: absent
+# `:` means ObjectName='' and the lone symbol is ObjectType), so it is passed
+# through and counted here.
+OBJ = re.compile(r"^(\s*)(?:object|inherited|inline)\s+(\w+)(?:\s*:\s*(\w+))?")
 END = re.compile(r"^\s*end\b")
 
 def _load_converter():
@@ -122,10 +132,14 @@ def object_names(lines, rename=None):
         m = OBJ.match(l)
         if not m:
             continue
-        t = m.group(3)
+        # Group 2 is the name when a colon follows and the CLASS when it does
+        # not; group 3 is the class only in the first case. Both are keyed into
+        # one `Name:Type` string so the two sides of the comparison cannot
+        # describe the same node differently.
+        name, t = (m.group(2), m.group(3)) if m.group(3) else ("", m.group(2))
         if rename is not None:
             t = rename.get(t, t)
-        out.append(f"{m.group(2)}:{t}")
+        out.append(f"{name}:{t}")
     return out
 
 

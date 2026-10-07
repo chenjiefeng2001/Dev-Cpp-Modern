@@ -13,7 +13,6 @@ object ProcessListForm: TProcessListForm
   Position = poMainFormCenter
   OnCreate = FormCreate
   OnDestroy = FormDestroy
-end
   object MainLabel: TLabel
     Left = 16
     Top = 12
@@ -49,3 +48,4 @@ end
     Style = csDropDownList
     TabOrder = 2
   end
+end

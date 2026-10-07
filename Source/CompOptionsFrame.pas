@@ -23,12 +23,12 @@ interface
 
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
-  Grids, ValEdit, ComCtrls, ExtCtrls, CompOptionsList, project, utils, ProjectTypes, StdCtrls;
+  Grids, ValEdit, ComCtrls, ExtCtrls, project, utils, ProjectTypes, StdCtrls;
 
 type
   TCompOptionsFrame = class(TFrame)
     tabs: TTabControl;
-    vle: TCompOptionsList;
+    vle: TValueListEditor;
     procedure tabsChange(Sender: TObject);
     procedure vleSetEditText(Sender: TObject; ACol, ARow: Integer; const Value: string);
   public

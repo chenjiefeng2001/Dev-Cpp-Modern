@@ -129,6 +129,9 @@ Tests/FpcCoreTests/FpcCoreTests.exe
 # from source by tools/build_svg_probe.ps1 (and by the lcl-svg-runtime CI job);
 # committing them would add ~12 MB of rebuildable output to the tree.
 Tests/FpcCoreTests/svg/*.exe
+# The form probes link the same LCL and for the same reason (tools/build_form_probe.ps1,
+# and the lcl-svg-runtime CI job).
+Tests/FpcCoreTests/forms/*.exe
 
 # 编辑器 / 崩溃转储 / 临时文件
 *.exe.manifest.bak

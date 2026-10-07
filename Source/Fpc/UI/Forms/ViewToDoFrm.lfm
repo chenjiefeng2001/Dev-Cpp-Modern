@@ -18,9 +18,8 @@ object ViewToDoForm: TViewToDoForm
   OnDestroy = FormDestroy
   OnShow = FormShow
   DesignSize = (
-  588
-  243)
-end
+    588
+    243)
   object lblFilter: TLabel
     Left = 8
     Top = 199
@@ -99,10 +98,11 @@ end
     TabOrder = 3
     OnChange = cmbFilterChange
     Items.Strings = (
-    'All files (in project and not)'
-    'Open files only (in project and not)'
-    'All project files'
-    'Open project files only'
-    'Non-project open files'
-    'Current file only')
+      'All files (in project and not)'
+      'Open files only (in project and not)'
+      'All project files'
+      'Open project files only'
+      'Non-project open files'
+      'Current file only')
   end
+end

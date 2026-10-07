@@ -24,7 +24,7 @@ interface
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
   Buttons, StdCtrls, Inifiles, ExtCtrls, ComCtrls, Spin, Math,
-  CompOptionsFrame, CompOptionsList;
+  CompOptionsFrame;
 
 type
   TCompOptForm = class(TForm)

@@ -830,3 +830,100 @@ frame 的 Pascal 逻辑代码**零改动**——它用的每个符号都是 LCL 
 ### 15.6 与 §14 的关系
 
 §14 推翻了「`TVirtualImage` 是字段级替换」的性质判断；本节是同一性质判断的**正例**：`TCompOptionsList` 是真冗余（死代码 + LCL 原生覆盖），`TCompOptionsFrame` 是真逻辑（需要移植）。一刀切地「全部字段级替换」或「全部移植」都会误判——逐控件实测才是排期依据。
+---
+
+## 16. Sprint F3-4/F3-5：13 个窗体**全部真的能加载**（2026-10-06）
+
+§15 的结论是“把 `TCompOptionsFrame` 移植过来，`CompOptionsFrm` 与 `ProjectOptionsFrm` 就解锁”。本节记录这项移植**做完之后**发生的事——**结论先行：13 个 CLEARED 窗体现在全部通过真实 LCL 读取器加载，0 失败**；而通往这个结论的路��，先要修掉**三个此前被当成已经解决的转换器缺陷**，否则“转换成功”这个词一直是不成立的。
+
+| 探针 | 结果 |
+|---|---|
+| `PropRttiProbe` | `refused by the reader : 0`——14 个转换文件里 **3457 条属性赋值**逐条过了读取器 |
+| `FormLfmProbe` | `Streamed forms: 13 of 13`，`Ancestor fallbacks : 0` |
+| `f3_lfm_check` | PASS（55 lfm / 52 比对 / 69 绑定 / 55 溯源） |
+| 反空转注入 | 7 处注入，**6 处被拒**（第 7 处是文档化的空串语义，不是漏网） |
+
+### 16.1 转换器的三个缺陷（都是**先复现、后修复**）
+
+**1. 根对象的 `end` 位置错了 → 所有子控件被静默丢弃。**
+旧转换器把每个对象平铺在根的 `end` 之后（“读取器保留平序”）。实测（`MiniLfmTest`）：
+一次 `ReadComponentFromBinaryStream` **只读第一个顶层对象**，后面的兄弟节点全部消失——窗体流回来 `ComponentCount = 0`，13 个窗体同时挂掉。**旧假设被自己的断言 4 推翻**，现在按 DFM 缩进重建嵌套树，并加了一道“只有一个根”的硬拒。
+
+**2. 属性值不是按整体读的 → 十六进制块和值顺序错位。**
+旧读取器把“不能识别成属性的行”塞进一个 `binary` 桶，**追加到该节点属性列表末尾**。而 `Picture.Data` 在 DFM 里写在 `Proportional` 和 `Stretch` **之间**，于是生成的 LFM 出现
+
+```
+Picture.Data = {
+}
+Proportional = True
+ShowHint = False
+Stretch = True
+0954506E67496D61676589504E47...
+```
+
+大括号在下一行就闭合了，一兆十六进制落在了「该出现属性名」的位置。**实测对真实 LCL 读取器就是** `Wrong token type: Symbol expected but Float found`，`AboutFrm` / `IconFrm` / `ToolFrm` 同时中招。属性**顺序不是排版问题**：读取器按文件顺序赋值，且要分词，只有“每个值的 token 连在一起且顺序正确”才成立。
+
+**3. 读取器会跳过它读不懂的行。**
+旧读取器**静默跳过**不认识的行——这正是“某个属性可以从窗体里消失、而转换还报成功”的成因。现在解析器记录**已消费的行**，剩一行就报错并给出行号。
+
+### 16.2 探针自身的三个缺陷（与产品缺陷无关，但同样致命）
+
+| 缺陷 | 症状 | 根因 |
+|---|---|---|
+| frame 资源注册成了**文本** | 两个 frame 窗体 `Invalid Filer Signature` | `TLRSObjectReader.BeginRootComponent`（`lresources.pp:3990-3998`）读**4 个原始字节**比对 `'TPF0'`，尽管该类有分词 API。实测编译产物：`lhelp.exe` 里 `'TPF0'` 出现 2 次——**Lazarus 嵌入的就是二进制 LFM** |
+| frame 桩的两个处理函数声明在 `public` | `tabs.OnChange: Invalid value for property` | frame 的 LFM 经 **LCL 自己的读取器**加载，没有方法钩子；`RTTIGetMethod` 只看得见 **published** 方法 |
+| `PropRttiProbe` 自己的提问器**对所有属性都答“拒绝”** | 49 条候选全部 `Read Error`，看起来像结论 | `LRSObjectTextToBinary` 把输出流留在**末尾**，读取器从 EOF 开始 |
+
+第三条最值得记：**一个只会说“不”的提问器，和一个正确的结果长得一模一样。** 因此 `PropRttiProbe` 每次运行都先**自测**：4 个 LCL 确有的属性必须被接受、2 个 LCL 没有的必须被拒绝、3 个点号路径形式必须按子属性接受，**8 个自测问题双向都能回答之后**才允许输出结论。
+
+> **本轮第 4 次踩到“旧二进制”**（§14.6 已记过一次）：注入实验后没重建就重跑，探针报的是上一轮代码的结论。注入矩阵因此要求**每次还原后重建**，且还原后校验 MD5。
+
+### 16.3 17 条被读取器拒绝的属性：用 LCL 自己的机制，而不是删掉它们
+
+把每个属性都交给读取器之后，17 条被拒。其中最要紧的一条是 **`DesignSize`**——第一版审计先问 RTTI，把它列为“未知”，而它其实是 LCL **自带的** `TControl.designsize` 跳过项（登记表里就有）。**问 RTTI 会给出错误答案**；问读取器才对。
+
+处置方式的选择很关键。`f3_dfm_to_lfm.py` 的 `DROP_PROPS` 里已经写着理由：
+
+> 提前删掉一个真实属性比留着一个未知属性更糟，因为 LCL 加载器会报告它**不喜欢什么**，而被删掉的属性之所以没有报告，正是因为**没人再检查它**。
+
+`DROP_PROPS` 是给 Delphi 记账属性用的（`PixelsPerInch`、`Explicit*`、`OldCreateOrder`、`Ctl3D`）——那些值离开 Delphi 设计器就没有意义。这 17 条不同：每一条都是真实控件的真实属性，删掉等于**把作者的意图从转换产物里抹掉，而 .dfm 还留着**。
+
+LCL 有专门的机制，而且 **LCL 自己在用**：`RegisterPropertyToSkip`（`lresources.pp:607`），按**类**+属性名登记，`CreateLRSReader` 把它挂上（`lresources.pp:3196`），匹配走 `AClass.InheritsFrom`（`lresources.pp:680-698`）。Lazarus 对同样的 VCL 遗留就是这么处理的：`synedit.pp:10752` 登记 `TSynGutter.ShowCodeFolding`，`customlistview.inc:794-796` 登记 `TListItem.OverlayIndex`。
+
+**按类登记是这里的关键差别**：全树 `BevelOuter` 出现 **82 次 / 31 个窗体**，其中 97% 在 `TPanel` / `TImage` 上——**LCL 这两个控件是有 `BevelOuter` 的**（`extctrls.pp:1161`）。一个按名字删的表（本仓库 `DROP_PROPS` 就是）会连带删掉 **95 个本来能工作的属性**。
+
+| 类别 | 属性（类.属性，站点数） | 为什么安全 |
+|---|---|---|
+| 重复键 | `TBitBtn/TSpeedButton.ImageName`（50） | 每处都同时带 `ImageIndex`，而全仓库**零处**代码读 `ImageName` |
+| public 非 published | `TBitBtn.DoubleBuffered`（1） | LCL 在 `controls.pp:2322` 起的 **public** 段声明它，LFM 只能赋 published |
+| 换基类丢失 | `TBitBtn.WordWrap`（1） | LCL 在 `TButton` 上 published（`stdctrls.pp:945`），`TBitBtn` 不继承它 |
+| VCL 特有机制 | `TBitBtn/TListBox.StyleElements`（2） | vcl-styles-utils 概念，LCL 无 styles 服务 |
+| LCL 无对应绘制 | `TListView.BevelInner/BevelOuter`（2） | **按类登记**；`TPanel`/`TImage` 不受影响 |
+| 属性改名 | `TListItems.ItemData`（1） | LCL 用 `Items.Data`（`listitems.inc:547`）；且 `IconFrm.FormCreate` 会 `Items.Clear` 后从磁盘重建 |
+| **功能缺失** | `TListView.OnInfoTip`（1） | `IconFrm.pas:140` 有真实处理器；**图标浏览器会失去提示气泡**，LCL 无此事件 |
+| 折叠机制不同 | `TSynEdit.UseCodeFolding` / `CodeFolding`（各 4） | LCL 由 highlighter 能力位 + `TSynGutterCodeFolding` 驱动；且 `devCFG.pas:2551-2559` 从**代码**设置 |
+| **视觉差异** | `TSynGutter.Font`（20） | LCL gutter 无 Font，改用 `TSynEdit.Font`；驱动它的 `EditorOptFrm.pas:249-251` 属 SynEdit 移植工作 |
+
+`Gutter.Font.*` **只登记一条**（`TSynGutter.Font`）而不是五条：读取器逐段走点号路径，**在第一个缺失段就放弃整条路径**（`reader.inc:1297-1302` 然后 `:1270-1274`），而那一刻实例正是 gutter 本身。
+
+### 16.4 登记表本身也要被审计（而且第一版审计是错的）
+
+`PropertiesToSkip` 是**钝器**：登记一次就对该类**及其全部子类**生效，而且是**静默**抑制。第一版审计按“登记的属性必须不在类的 RTTI 里”检查全局表，**当场报出一条 FAIL**：
+
+```
+FAIL TForm.Scaled is registered to be skipped but the class DOES have it
+```
+
+——**LCL 自己登记的**，而且 TForm 确实有 `Scaled`。那类登记是给对象检查器用的，不是为了抑制赋值。所以“登记表被审计”只能指**本项目那张表**，两张表必须可区分：`VclPropertySkips` 因此把条目暴露成**数据**（`ENTRIES` + 访问器），探针只审自己的 13 条，并检查每条都带**说明**。于是：
+
+* 少登记一条 → 探针报 `REFUSED ... BevelOuter`（exit 1）
+* 多登记一条**类确实有**的属性 → 探针报 over-broad（exit 2）
+
+两条都是**注入实测**，不是设想。
+
+### 16.5 剩余的诚实边界
+
+* **`f3_removed_controls.py` 此前并没有断言 `CompOptionsList`**——`f3_load_routes.py` 的注释却写着“`f3_removed_controls.py` asserts it stays that way”。补上之后又发现它**第一版是空的**：它只搜类型名 `TCompOptionsList`，而 uses 子句里出现的是**单元名** `CompOptionsList`。注入回一条 `uses` 声明，**门禁照样绿**。现已改为登记单元名。
+* **`OnInfoTip` 是功能缺失**，不是排版差异：图标浏览器的气泡提示需要单独移植。
+* **`TSynGutter.Font` 是视觉差异**：LCL gutter 跟随编辑器字体。
+* 门禁全部通过**只说明这 13 个窗体的转换产物可加载**，不说明窗体**可用**：处理器是否与移植后的单元对得上，由 FPC 编译器在单元编译时检查。

@@ -14,9 +14,8 @@ object ToolEditForm: TToolEditForm
   Position = poMainFormCenter
   OnCreate = FormCreate
   DesignSize = (
-  484
-  304)
-end
+    484
+    304)
   object lblTitle: TLabel
     Left = 8
     Top = 12
@@ -150,20 +149,20 @@ end
     IntegralHeight = True
     ItemHeight = 15
     Items.Strings = (
+      '<DEFAULT>'
+      '<EXECPATH>'
+      '<EXENAME>'
+      '<PROJECTPATH>'
+      '<PROJECTFILE>'
+      '<PROJECTNAME>'
+      '<SOURCENAME>'
+      '<SOURCEPATH>'
+      '<SOURCESPCLIST>'
+      '<WORDXY>'
+      '<DEVCPPVERSION>')
     TabOrder = 4
     OnClick = lstMacroClick
     OnDblClick = btnInsertClick
-    '<DEFAULT>'
-    '<EXECPATH>'
-    '<EXENAME>'
-    '<PROJECTPATH>'
-    '<PROJECTFILE>'
-    '<PROJECTNAME>'
-    '<SOURCENAME>'
-    '<SOURCEPATH>'
-    '<SOURCESPCLIST>'
-    '<WORDXY>'
-    '<DEVCPPVERSION>')
   end
   object btnInsert: TBitBtn
     Left = 170
@@ -199,3 +198,4 @@ end
     ReadOnly = True
     TabOrder = 9
   end
+end

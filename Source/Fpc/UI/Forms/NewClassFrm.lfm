@@ -13,7 +13,6 @@ object NewClassForm: TNewClassForm
   Position = poMainFormCenter
   OnClose = FormClose
   OnShow = FormShow
-end
   object lblClassName: TLabel
     Left = 8
     Top = 12
@@ -74,57 +73,57 @@ end
     Height = 93
     Caption = 'Inheritance'
     TabOrder = 5
-  end
-  object lblAccess: TLabel
-    Left = 8
-    Top = 20
-    Width = 70
-    Height = 13
-    Caption = 'Access scope:'
-  end
-  object lblInherit: TLabel
-    Left = 8
-    Top = 44
-    Width = 82
-    Height = 13
-    Caption = 'Inherit from class:'
-  end
-  object lblHeaderFile: TLabel
-    Left = 8
-    Top = 68
-    Width = 80
-    Height = 13
-    Caption = 'Header filename:'
-  end
-  object cmbClass: TComboBox
-    Left = 124
-    Top = 40
-    Width = 293
-    Height = 21
-    Enabled = False
-    TabOrder = 1
-    OnChange = cmbClassChange
-  end
-  object cmbScope: TComboBox
-    Left = 124
-    Top = 16
-    Width = 293
-    Height = 21
-    Style = csDropDownList
-    Enabled = False
-    TabOrder = 0
-    Items.Strings = (
-    'private'
-    'protected'
-    'public')
-  end
-  object txtIncFile: TEdit
-    Left = 124
-    Top = 64
-    Width = 293
-    Height = 19
-    Enabled = False
-    TabOrder = 2
+    object lblAccess: TLabel
+      Left = 8
+      Top = 20
+      Width = 70
+      Height = 13
+      Caption = 'Access scope:'
+    end
+    object lblInherit: TLabel
+      Left = 8
+      Top = 44
+      Width = 82
+      Height = 13
+      Caption = 'Inherit from class:'
+    end
+    object lblHeaderFile: TLabel
+      Left = 8
+      Top = 68
+      Width = 80
+      Height = 13
+      Caption = 'Header filename:'
+    end
+    object cmbClass: TComboBox
+      Left = 124
+      Top = 40
+      Width = 293
+      Height = 21
+      Enabled = False
+      TabOrder = 1
+      OnChange = cmbClassChange
+    end
+    object cmbScope: TComboBox
+      Left = 124
+      Top = 16
+      Width = 293
+      Height = 21
+      Style = csDropDownList
+      Enabled = False
+      TabOrder = 0
+      Items.Strings = (
+        'private'
+        'protected'
+        'public')
+    end
+    object txtIncFile: TEdit
+      Left = 124
+      Top = 64
+      Width = 293
+      Height = 19
+      Enabled = False
+      TabOrder = 2
+    end
   end
   object txtCppFile: TEdit
     Left = 132
@@ -203,3 +202,4 @@ end
     Caption = 'Create Destructor'
     TabOrder = 3
   end
+end

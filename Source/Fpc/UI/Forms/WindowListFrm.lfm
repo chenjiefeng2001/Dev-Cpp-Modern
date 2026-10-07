@@ -14,7 +14,6 @@ object WindowListForm: TWindowListForm
   OnClose = FormClose
   OnCreate = FormCreate
   OnShow = FormShow
-end
   object Panel: TPanel
     Left = 0
     Top = 364
@@ -24,30 +23,30 @@ end
     BevelOuter = bvNone
     TabOrder = 0
     DesignSize = (
-    600
-    35)
-  end
-  object OkBtn: TBitBtn
-    Left = 412
-    Top = 4
-    Width = 91
-    Height = 25
-    Anchors = [akRight, akBottom]
-    Caption = '&OK'
-    ModalResult = 1
-    NumGlyphs = 2
-    TabOrder = 0
-  end
-  object CancelBtn: TBitBtn
-    Left = 503
-    Top = 4
-    Width = 91
-    Height = 25
-    Anchors = [akRight, akBottom]
-    Caption = '&Cancel'
-    ModalResult = 2
-    NumGlyphs = 2
-    TabOrder = 1
+      600
+      35)
+    object OkBtn: TBitBtn
+      Left = 412
+      Top = 4
+      Width = 91
+      Height = 25
+      Anchors = [akRight, akBottom]
+      Caption = '&OK'
+      ModalResult = 1
+      NumGlyphs = 2
+      TabOrder = 0
+    end
+    object CancelBtn: TBitBtn
+      Left = 503
+      Top = 4
+      Width = 91
+      Height = 25
+      Anchors = [akRight, akBottom]
+      Caption = '&Cancel'
+      ModalResult = 2
+      NumGlyphs = 2
+      TabOrder = 1
+    end
   end
   object UnitList: TListView
     Left = 8
@@ -79,3 +78,4 @@ end
     OnDblClick = UnitListDblClick
     OnKeyDown = UnitListKeyDown
   end
+end

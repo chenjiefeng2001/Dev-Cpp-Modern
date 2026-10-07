@@ -10,7 +10,6 @@ object DetailsForm: TDetailsForm
   Font.Name = 'Heebo'
   Font.Style = []
   Position = poScreenCenter
-end
   object Memo1: TMemo
     Left = 0
     Top = 0
@@ -34,15 +33,16 @@ end
     Align = alBottom
     BevelOuter = bvNone
     TabOrder = 1
+    object BitBtn1: TBitBtn
+      Left = 8
+      Top = 8
+      Width = 97
+      Height = 25
+      Caption = '&Close'
+      Default = True
+      NumGlyphs = 2
+      TabOrder = 0
+      OnClick = BitBtn1Click
+    end
   end
-  object BitBtn1: TBitBtn
-    Left = 8
-    Top = 8
-    Width = 97
-    Height = 25
-    Caption = '&Close'
-    Default = True
-    NumGlyphs = 2
-    TabOrder = 0
-    OnClick = BitBtn1Click
-  end
+end

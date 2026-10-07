@@ -50,8 +50,11 @@ on:
       - "tools/f3_image_extract.py"
       - "tools/f3_imgcoll_check.py"
       - "tools/build_svg_probe.ps1"
+      - "tools/build_form_probe.ps1"
+      - "Source/Fpc/UI/Compat/**"
       - "Tests/FpcCoreTests/svg/**"
       - "Tests/FpcCoreTests/imgcoll/**"
+      - "Tests/FpcCoreTests/forms/**"
       - "Source/**/*.dfm"
       - ".github/workflows/fpc_ci.yml"
   pull_request:
@@ -75,8 +78,11 @@ on:
       - "tools/f3_image_extract.py"
       - "tools/f3_imgcoll_check.py"
       - "tools/build_svg_probe.ps1"
+      - "tools/build_form_probe.ps1"
+      - "Source/Fpc/UI/Compat/**"
       - "Tests/FpcCoreTests/svg/**"
       - "Tests/FpcCoreTests/imgcoll/**"
+      - "Tests/FpcCoreTests/forms/**"
       - "Source/**/*.dfm"
   workflow_dispatch:
 
@@ -201,13 +207,6 @@ jobs:
       - name: "ImageIndex topology ledger (no out-of-bounds)"
         run: python3 tools/f3_imageindex_audit.py
 
-      # Negative assertion: TAnimate and TDdeServerConv must STAY removed. A
-      # deletion is not a property -- a merge or a revert can undo it, and the
-      # F3 ratchet only notices when the convertible count drops, which one
-      # reintroduced control in one form would not do.
-      - name: "Removed-control guard (TAnimate / TDdeServerConv stay gone)"
-        run: python3 tools/f3_removed_controls.py
-
       # Icon SEMANTICS: one action must use one icon, everywhere it appears.
       # Separate from the range audit on purpose -- that one proves in-range, this
       # one proves the 57 sites are internally consistent. Exits 0 and reports
@@ -240,6 +239,16 @@ jobs:
 
       - name: "TVirtualImage conversion gate"
         run: python3 tools/f3_imgcoll_check.py
+
+      # The CompOptions frame-port (F3-4). A negative assertion, and it
+      # asserts on the UNIT name for TCompOptionsList: the vendored control
+      # stays on disk (DevCpp.dpk needs it) while nothing may use it, and the
+      # string a uses clause contains is `CompOptionsList`, which does not
+      # contain `TCompOptionsList`. The first version of this entry asserted
+      # only the type name and the injection test put the unit straight back
+      # into CompOptionsFrm.pas with the gate still green.
+      - name: "Retired-control guard (TAnimate / TDdeServerConv / TCompOptionsList)"
+        run: python3 tools/f3_removed_controls.py
 
   # ---------------------------------------------------------------------------
   # The SVG work is the only part of F3 that has ever been RUN rather than
@@ -343,6 +352,38 @@ jobs:
       - name: "the converted ImageCollections.lfm loads and every PNG has ink"
         shell: pwsh
         run: ./Tests/FpcCoreTests/imgcoll/ImgCollProbe.exe
+
+      # -------------------------------------------------------------------------
+      # The two FORM probes. Everything above proves the data is intact; these
+      # two prove the converted FILES are loadable, which is the claim the whole
+      # F3 estimate rests on and which no text gate can make.
+      #
+      # They need the LCL built (this job's first step) and the SynEdit units,
+      # which is why they live here rather than in a job of their own: a second
+      # job would build the same two packages again for the same machine.
+      # -------------------------------------------------------------------------
+      - name: "Build the form probes (FormLfmProbe, PropRttiProbe)"
+        shell: pwsh
+        run: ./tools/build_form_probe.ps1 -Target all
+
+      # PropRttiProbe first, because its failures explain FormLfmProbe's: it
+      # reports, per property, whether the reader takes it, with the reader's
+      # own message. It self-tests first -- a harness that refuses everything
+      # looks exactly like a result -- and audits the property-to-skip registry
+      # for entries naming a property the LCL can actually take.
+      - name: "every converted property is one the LCL reader takes (expect 0 refused)"
+        shell: pwsh
+        run: ./Tests/FpcCoreTests/forms/PropRttiProbe.exe
+
+      # The headline result of the F3 work: all 13 forms the route tool calls
+      # CLEARED stream through the real LCL reader, as the class and under the
+      # name the DFM declared, with owned components AND parented controls, and
+      # the two frame-bearing forms go through the full Delphi embedded-frame
+      # protocol (inline frame + inherited children resolved by name from the
+      # frame's own registered resource).
+      - name: "all 13 CLEARED forms load through the real LCL reader"
+        shell: pwsh
+        run: ./Tests/FpcCoreTests/forms/FormLfmProbe.exe
 
   f3-form-ratchet:
     name: F3 form-conversion ratchet

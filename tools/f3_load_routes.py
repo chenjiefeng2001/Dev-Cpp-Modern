@@ -66,10 +66,30 @@ SVG_RETIRED = {"TSVGIconImageList"}
 # converted nodes + extracted PNGs are load-tested (ImgCollProbe.lpr).
 F33_RETIRED = {"TVirtualImage"}
 
-# Both exclusions are scoped to forms that actually received a converted .lfm
+# Retired by sprint F3-4 (the CompOptions frame-port, doc F3-SVG section
+# 15/16). Two different reasons, one outcome -- CompOptionsFrm and
+# ProjectOptionsFrm no longer name a control the route cannot account for:
+#
+#   TCompOptionsList  RETIRED, not ported. The vendored control's entire
+#                     value-add was hand-rolling a pick-list editor on top
+#                     of VCL private members (EditList, StyleServices);
+#                     LCL's TValueListEditor gives esPickList rows a
+#                     native cbsPickList editor (valedit.pas:1267), so the
+#                     frame's `vle` field is now the stock class and no
+#                     live source references the vendored unit any more
+#                     (f3_removed_controls.py asserts it stays that way).
+#   TCompOptionsFrame PORTED, not retired. The class still names itself in
+#                     three LFMs, but the frame is own code whose every
+#                     symbol is an LCL-native API (verified line by line,
+#                     section 15.3) -- the Pascal logic is unchanged, so
+#                     the unit compiles under both Delphi and Lazarus and
+#                     the class resolves at stream time.
+F34_RETIRED = {"TCompOptionsList", "TCompOptionsFrame"}
+
+# All exclusions are scoped to forms that actually received a converted .lfm
 # (blockers_of only runs on the converted set), so producer-side gaps such as
 # Packman/Main keep their real blockers.
-RETIRED = SVG_RETIRED | F33_RETIRED
+RETIRED = SVG_RETIRED | F33_RETIRED | F34_RETIRED
 
 
 def load(name):

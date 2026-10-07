@@ -15,7 +15,6 @@ object RemoveUnitForm: TRemoveUnitForm
   Position = poMainFormCenter
   OnClose = FormClose
   OnCreate = FormCreate
-end
   object UnitList: TListBox
     Left = 0
     Top = 0
@@ -36,16 +35,17 @@ end
     BevelOuter = bvNone
     TabOrder = 1
     DesignSize = (
-    342
-    27)
+      342
+      27)
+    object DelBtn: TButton
+      Left = 136
+      Top = 1
+      Width = 75
+      Height = 25
+      Anchors = [akTop]
+      Caption = 'Delete'
+      TabOrder = 0
+      OnClick = DelBtnClick
+    end
   end
-  object DelBtn: TButton
-    Left = 136
-    Top = 1
-    Width = 75
-    Height = 25
-    Anchors = [akTop]
-    Caption = 'Delete'
-    TabOrder = 0
-    OnClick = DelBtnClick
-  end
+end

@@ -16,7 +16,6 @@ object FilePropertiesForm: TFilePropertiesForm
   OnCreate = FormCreate
   OnDestroy = FormDestroy
   OnShow = FormShow
-end
   object Bevel7: TBevel
     Left = 8
     Top = 8
@@ -253,17 +252,18 @@ end
   object PropertiesPop: TPopupMenu
     Left = 400
     Top = 304
+    object PropertiesCopy: TMenuItem
+      Caption = 'Copy'
+      ShortCut = 16451
+      OnClick = PropertiesCopyClick
+    end
+    object N1: TMenuItem
+      Caption = '-'
+    end
+    object PropertiesSelAll: TMenuItem
+      Caption = 'Select All'
+      ShortCut = 16449
+      OnClick = PropertiesSelAllClick
+    end
   end
-  object PropertiesCopy: TMenuItem
-    Caption = 'Copy'
-    ShortCut = 16451
-    OnClick = PropertiesCopyClick
-  end
-  object N1: TMenuItem
-    Caption = '-'
-  end
-  object PropertiesSelAll: TMenuItem
-    Caption = 'Select All'
-    ShortCut = 16449
-    OnClick = PropertiesSelAllClick
-  end
+end

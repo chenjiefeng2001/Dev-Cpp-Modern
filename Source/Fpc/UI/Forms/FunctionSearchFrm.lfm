@@ -14,9 +14,8 @@ object FunctionSearchForm: TFunctionSearchForm
   OnCreate = FormCreate
   OnShow = FormShow
   DesignSize = (
-  469
-  377)
-end
+    469
+    377)
   object lblSearch: TLabel
     Left = 4
     Top = 8
@@ -71,3 +70,4 @@ end
     OnKeyDown = txtSearchKeyDown
     OnKeyPress = txtSearchKeyPress
   end
+end

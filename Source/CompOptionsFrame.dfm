@@ -14,7 +14,7 @@ object CompOptionsFrame: TCompOptionsFrame
     Align = alClient
     TabOrder = 0
     OnChange = tabsChange
-    object vle: TCompOptionsList
+    object vle: TValueListEditor
       Left = 4
       Top = 6
       Width = 565

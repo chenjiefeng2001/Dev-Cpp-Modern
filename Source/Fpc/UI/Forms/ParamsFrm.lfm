@@ -13,7 +13,6 @@ object ParamsForm: TParamsForm
   Font.Style = []
   Position = poMainFormCenter
   OnCreate = FormCreate
-end
   object grpParameters: TGroupBox
     Left = 8
     Top = 8
@@ -21,13 +20,13 @@ end
     Height = 56
     Caption = 'Parameters to pass to your program :'
     TabOrder = 0
-  end
-  object ParamEdit: TEdit
-    Left = 8
-    Top = 22
-    Width = 264
-    Height = 21
-    TabOrder = 0
+    object ParamEdit: TEdit
+      Left = 8
+      Top = 22
+      Width = 264
+      Height = 21
+      TabOrder = 0
+    end
   end
   object grpHost: TGroupBox
     Left = 8
@@ -36,24 +35,24 @@ end
     Height = 56
     Caption = 'Host Application :'
     TabOrder = 1
-  end
-  object LoadBtn: TSpeedButton
-    Left = 248
-    Top = 21
-    Width = 22
-    Height = 22
-    ImageIndex = 59
-    ImageName = 'iconsnew-65'
-    Images = dmMain.SVGImageListMenuStyle
-    Flat = True
-    OnClick = LoadBtnClick
-  end
-  object HostEdit: TEdit
-    Left = 8
-    Top = 22
-    Width = 234
-    Height = 21
-    TabOrder = 0
+    object LoadBtn: TSpeedButton
+      Left = 248
+      Top = 21
+      Width = 22
+      Height = 22
+      ImageIndex = 59
+      ImageName = 'iconsnew-65'
+      Images = dmMain.SVGImageListMenuStyle
+      Flat = True
+      OnClick = LoadBtnClick
+    end
+    object HostEdit: TEdit
+      Left = 8
+      Top = 22
+      Width = 234
+      Height = 21
+      TabOrder = 0
+    end
   end
   object OkBtn: TBitBtn
     Left = 136
@@ -75,3 +74,4 @@ end
     NumGlyphs = 2
     TabOrder = 3
   end
+end

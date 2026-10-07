@@ -13,7 +13,6 @@ object AddToDoForm: TAddToDoForm
   Position = poMainFormCenter
   OnClose = FormClose
   OnShow = FormShow
-end
   object Label1: TLabel
     Left = 8
     Top = 8
@@ -41,9 +40,9 @@ end
     Width = 277
     Height = 89
     Lines.Strings = (
+      'memDescr')
     ScrollBars = ssVertical
     TabOrder = 0
-    'memDescr')
   end
   object spnPri: TSpinEdit
     Left = 8
@@ -84,3 +83,4 @@ end
     Text = 'txtUser'
     OnKeyPress = txtUserKeyPress
   end
+end

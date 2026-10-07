@@ -388,7 +388,7 @@ object ProjectOptionsFrm: TProjectOptionsFrm
           Height = 187
           ExplicitWidth = 526
           ExplicitHeight = 187
-          inherited vle: TCompOptionsList
+          inherited vle: TValueListEditor
             Width = 518
             Height = 177
             DefaultColWidth = 215

@@ -172,7 +172,7 @@ object CompOptForm: TCompOptForm
           Height = 333
           ExplicitWidth = 476
           ExplicitHeight = 333
-          inherited vle: TCompOptionsList
+          inherited vle: TValueListEditor
             Width = 468
             Height = 323
             ExplicitWidth = 468

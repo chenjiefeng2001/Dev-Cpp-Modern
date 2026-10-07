@@ -30,7 +30,7 @@
     "svg_lists": 0
   },
   "CompOptionsFrame.lfm": {
-    "batch": "C",
+    "batch": "A",
     "rule": "dfm-to-lfm",
     "source": "CompOptionsFrame.dfm",
     "svg_lists": 0
