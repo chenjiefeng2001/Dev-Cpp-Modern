@@ -57,39 +57,24 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 FORMS_DIR = ROOT / "Source" / "Fpc" / "UI" / "Forms"
 MANIFEST = FORMS_DIR / "_generated.json"
 
-# Retired by the SVG work: the class name is gone from the emitted LFM, and the
-# control it became is load-tested (Tests/FpcCoreTests/svg/SvgLfmProbe.lpr).
-SVG_RETIRED = {"TSVGIconImageList"}
-
-# Retired by sprint F3-3: the converter renames TVirtualImage ->
-# TLclVirtualImage (Source/Fpc/UI/Controls/LclVirtualImage.pas), and the
-# converted nodes + extracted PNGs are load-tested (ImgCollProbe.lpr).
-F33_RETIRED = {"TVirtualImage"}
-
-# Retired by sprint F3-4 (the CompOptions frame-port, doc F3-SVG section
-# 15/16). Two different reasons, one outcome -- CompOptionsFrm and
-# ProjectOptionsFrm no longer name a control the route cannot account for:
+# THE RETIREMENT SET IS NOT DECLARED HERE ANY MORE.
 #
-#   TCompOptionsList  RETIRED, not ported. The vendored control's entire
-#                     value-add was hand-rolling a pick-list editor on top
-#                     of VCL private members (EditList, StyleServices);
-#                     LCL's TValueListEditor gives esPickList rows a
-#                     native cbsPickList editor (valedit.pas:1267), so the
-#                     frame's `vle` field is now the stock class and no
-#                     live source references the vendored unit any more
-#                     (f3_removed_controls.py asserts it stays that way).
-#   TCompOptionsFrame PORTED, not retired. The class still names itself in
-#                     three LFMs, but the frame is own code whose every
-#                     symbol is an LCL-native API (verified line by line,
-#                     section 15.3) -- the Pascal logic is unchanged, so
-#                     the unit compiles under both Delphi and Lazarus and
-#                     the class resolves at stream time.
-F34_RETIRED = {"TCompOptionsList", "TCompOptionsFrame"}
-
-# All exclusions are scoped to forms that actually received a converted .lfm
+# It used to be, as three hand-maintained sets (SVG_RETIRED / F33_RETIRED /
+# F34_RETIRED) unioned into one. That copy was the reason this tool and
+# f3_batch_plan.py disagreed about the same tree -- one subtracted the
+# retirements, the other did not, so LangFrm and EnviroFrm read as CLEARED here
+# and as "blocked by TVirtualImage" there. It now lives in
+# f3_form_survey.RETIRED, next to WIDGETSET and LCL_SUPPLIED, and each entry
+# carries the evidence that made the retirement real.
+#
+# WHAT IS STILL LOCAL, AND MUST STAY LOCAL: THE SCOPING.
+# =====================================================
+# All exclusions apply only to forms that actually received a converted .lfm
 # (blockers_of only runs on the converted set), so producer-side gaps such as
-# Packman/Main keep their real blockers.
-RETIRED = SVG_RETIRED | F33_RETIRED | F34_RETIRED
+# Packman/Main keep their real blockers. A blanket subtraction would erase
+# them. See `blockers_of` below for where that boundary is enforced.
+def retired_names(survey):
+    return set(survey.RETIRED)
 
 
 def load(name):
@@ -108,8 +93,17 @@ def converted_forms():
 
 
 def blockers_of(survey, dfm_path):
+    """Blockers of one form, minus the retirements.
+
+    THE SCOPING LIVES HERE, not in the set. This function is only ever called on
+    forms that already produced a converted .lfm, so subtracting the retirements
+    cannot invent a clearance for a form that was never converted -- which is
+    what protects Tools/Packman/Main's real producer-side gap. Call it on an
+    unconverted form and the scoping argument does not hold, so the caller in
+    main() is part of the contract, not an implementation detail.
+    """
     _, _, custom = survey.survey(dfm_path)
-    return sorted(set(custom) - RETIRED)
+    return sorted(set(custom) - retired_names(survey))
 
 
 def main() -> int:
@@ -209,7 +203,7 @@ def main() -> int:
     for src, types in sorted(declared.items()):
         if src in converted:
             continue
-        remaining = types - SVG_RETIRED
+        remaining = types - retired_names(survey)
         (hard if remaining else soft).append((src, sorted(remaining)))
     for src, types in hard:
         print(f"  {src}: {', '.join(types)}  -- no LCL counterpart yet")

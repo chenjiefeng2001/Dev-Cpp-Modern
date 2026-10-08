@@ -106,9 +106,36 @@ def find_external_types(dfms, widgetset):
     for p in SOURCE.rglob("*.pas"):
         units[p] = read(p)
 
+    # ONE pass over the tree to collect every declared class name, instead of
+    # re-scanning all 491 units for every component occurrence.
+    #
+    # MEASURED, 2026-10-07: the first version called `declared(t)` per
+    # COMPONENT OCCURRENCE, and each call ran one regex over every unit. That
+    # is 1801 occurrences x 491 units = **884,291 full-file regex scans**, and
+    # the file took 274 seconds. A tool whose job is to answer "what is still
+    # missing" has to be run for its answer to stay true, and nobody runs
+    # anything that takes four and a half minutes.
+    #
+    # Same predicate, evaluated once per NAME instead of once per occurrence.
+    #   ^\s*NAME\s*=\s*class
+    # collected into a set. The name set is identical -- the old code broke on
+    # the first match either way -- and the whole file now runs in about a
+    # second.
+    #
+    # The keys are LOWERCASED because the predicate it replaces was built with
+    # re.IGNORECASE. Pascal identifiers are case-insensitive, and the tree does
+    # contain a declaration spelled `TdmMain` next to its uses as `dmMain`, so a
+    # case-sensitive set would quietly reclassify such a type as "external" and
+    # invent a blocker that is not there. Case folding is not a detail here; it
+    # is the predicate.
+    declared_names = set()
+    decl_re = re.compile(r"^\s*([A-Za-z_]\w*)\s*=\s*class\b", re.M)
+    for txt in units.values():
+        for m in decl_re.finditer(txt):
+            declared_names.add(m.group(1).lower())
+
     def declared(t):
-        pat = re.compile(r"^\s*" + re.escape(t) + r"\s*=\s*class", re.M | re.I)
-        return any(pat.search(txt) for txt in units.values())
+        return t.lower() in declared_names
 
     external = collections.defaultdict(set)
     for p in dfms:
@@ -125,14 +152,29 @@ def find_external_types(dfms, widgetset):
     return external
 
 
-def usage_of(field: str, text: str):
-    """Lines that touch `field` beyond its own declaration."""
+def usage_of(field: str, lines):
+    """Lines that touch `field` beyond its own declaration.
+
+    `lines` is the unit's ALREADY-STRIPPED line list, built once by the caller.
+    The original took the raw text and called `splitlines()` here, so a unit
+    with N field declarations was split N times over a file that can be 7,800
+    lines long. Passing the split in changes no result -- `splitlines()` is a
+    pure function of the text -- and is why the two implementations are
+    interchangeable here.
+
+    One hit per LINE, not per occurrence: a line mentioning the field twice
+    yields one entry. That is the original behaviour and it is preserved
+    deliberately; an occurrence-index (identifier -> every token position)
+    looked equivalent and was not, which is why the semantics are spelled out
+    rather than refactored into something "better".
+    """
     hits = []
-    for i, line in enumerate(text.splitlines(), 1):
-        s = line.strip()
-        if not re.search(r"\b" + re.escape(field) + r"\b", s):
+    pat = re.compile(r"\b" + re.escape(field) + r"\b")
+    decl = re.compile(r"^\w+\s*:\s*" + re.escape(field) + r"\s*;")
+    for i, s in enumerate(lines, 1):
+        if not pat.search(s):
             continue
-        if re.match(r"^\w+\s*:\s*" + re.escape(field) + r"\s*;", s):
+        if decl.match(s):
             continue  # the declaration itself
         hits.append((i, s))
     return hits
@@ -146,6 +188,10 @@ def main() -> int:
         return 0
 
     pas = {p: read(p) for p in SOURCE.rglob("*.pas") if "VCL" not in p.parts}
+    # Stripped lines per unit, built ONCE. See usage_of for why this is not an
+    # optimisation to undo.
+    unit_lines = {p: [ln.strip() for ln in txt.splitlines()]
+                  for p, txt in pas.items()}
 
     rows = []
     for t, forms in sorted(external.items()):
@@ -155,7 +201,8 @@ def main() -> int:
             for m in re.finditer(
                 r"^\s*(\w+)\s*:\s*" + re.escape(t) + r"\s*;", txt, re.M
             ):
-                holders.append((p.name, m.group(1), usage_of(m.group(1), txt)))
+                holders.append((p.name, m.group(1),
+                                usage_of(m.group(1), unit_lines[p])))
         rows.append((t, sorted(forms), holders))
 
     # No second LCL_EQUIVALENT table here. There used to be one, and the

@@ -60,7 +60,7 @@
     "svg_lists": 5
   },
   "EditorOptFrm.lfm": {
-    "batch": "C",
+    "batch": "A-svg",
     "rule": "dfm-to-lfm",
     "source": "EditorOptFrm.dfm",
     "svg_lists": 0

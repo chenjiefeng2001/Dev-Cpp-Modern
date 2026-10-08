@@ -81,6 +81,136 @@ WIDGETSET = {
     "TSynEdit",
 }
 
+# Classes that are NOT placeable controls, yet whose presence in a DFM is not a
+# conversion blocker because the LCL supplies a class of the SAME NAME.
+#
+# WHY THIS IS A SEPARATE SET AND NOT AN ENTRY IN WIDGETSET
+# ==========================================================
+# WIDGETSET answers "can this control be PLACED in a Lazarus form?". A syntax
+# highlighter cannot be placed: it derives from TComponent, has no Left/Top, and
+# would be meaningless as a child control. So adding TSynCppSyn there would be a
+# category error -- it would assert something false about the class in order to
+# make a count come out right. The question this set answers is different and
+# narrower: "does the reader have a class of this name, and can it stream?".
+#
+# MEASURED, per entry -- not inferred from the name
+# ==================================================
+# `TSynCppSyn` (Sprint F3-6). The vendored Delphi copy is
+# Source/VCL/SynEdit/Source/SynHighlighterCpp.pas (211 lines); the LCL ships
+# SynHighlighterCpp in components/synedit/synhighlightercpp.pp -- NOTE the .pp
+# extension, which is why a search for "*.pas" over the Lazarus tree finds
+# nothing and the class looks absent. Both are named TSynCppSyn, both derive
+# from TSynCustomHighlighter, and in BOTH trees that derives from TComponent --
+# the property that lets the LCL reader own and stream a non-visual component
+# inside a form. Verified against the built unit list as well as the source:
+# components/synedit/units/x86_64-win64/win32/synhighlightercpp.ppu exists.
+#
+# WHAT IS *NOT* CLAIMED
+# =====================
+# The two token enums are NOT the same. The vendored TtkTokenKind carries
+# tkChar, tkFloat, tkHex and tkOctal on top of the LCL's eleven values, so a
+# highlighter written against the Delphi enumeration will not recompile
+# unchanged. That is a property of the PASCAL UNIT (EditorOptFrm.pas), not of
+# the DFM, and it belongs to the SynEdit port -- this entry claims only that
+# the class NAME resolves and streams, which is what unblocks the form.
+#
+# `TSynRCSyn` is deliberately ABSENT. DataFrm.dfm declares it and LCL 4.4 has no
+# synhighlighterrc unit at all (verified against both the source tree and the
+# built .ppu list). Recording a class as LCL-supplied without checking would
+# have unblocked a form whose reader then dies on "Class TSynRCSyn not found".
+LCL_SUPPLIED = {
+    "TSynCppSyn",
+    # F3-7. NOT an LCL class -- OURS: Source/Fpc/UI/Controls/SynHighlighterRc.pas
+    # writes a native highlighter against the LCL's own SynEditHighlighter,
+    # because LCL 4.4 ships TSynCppSyn and TSynPASyn but NO synhighlighterrc
+    # unit at all (verified against components/synedit/*.p* AND the built
+    # units/x86_64-win64/win32/*.ppu list). DataFrm.pas:42 declares
+    # `Res: TSynRCSyn` and GetHighlighter returns it for any .rc file, so the
+    # class is used by CODE, not merely declared in a DFM.
+    #
+    # The name is preserved deliberately: DataFrm.dfm already says
+    # `object Res: TSynRCSyn`, so retiring the vendored class needs NO
+    # converter rename rule and no .dfm edit -- only the unit moves. The
+    # alternative (porting the 537-line vendored unit, whose declaration is 62
+    # of those lines) was measured and rejected: it is roughly twice the work
+    # for the same result, against Delphi SynEdit internals LCL does not have.
+    # The runtime evidence is Tests/FpcCoreTests/syn/SynRcProbe.lpr, which
+    # tokenises real .rc text and asserts the token KINDS -- a highlighter that
+    # loads and returns nothing is the "converted but blank" shape this project
+    # has already caught twice.
+    "TSynRCSyn",
+}
+
+# ---------------------------------------------------------------------------
+# RETIRED: classes that used to block a form and no longer do.
+# =======================================================================
+# WHY THIS LIVES HERE AND NOT IN THE TOOLS THAT NEED IT
+# ===================================================
+# Two tools answer "what is still in the way", and they answered it differently
+# because each carried its own copy of this fact:
+#
+#   f3_load_routes.py   had a RETIRED set, subtracted it, AND scoped the
+#                       subtraction to forms that already produced an .lfm --
+#                       for a reason recorded in its own comment: a blanket
+#                       subtraction erases producer-side gaps such as
+#                       Tools/Packman/Main, which are real.
+#   f3_batch_plan.py    had NO subtraction at all, and reported LangFrm and
+#                       EnviroFrm as "BATCH B, blocked by TVirtualImage" on the
+#                       same tree where the route tool called them CLEARED.
+#
+# That is this project's recurring failure -- one fact, two hand-maintained
+# copies -- and the standing rule against it is "one definition, so 'this tool
+# added it and that one forgot' is impossible". So the SET moves here, next to
+# WIDGETSET and LCL_SUPPLIED, and each entry carries its OWN REASON: a bare
+# class name cannot be reviewed, and an unreviewable exclusion list is just a
+# list of classes someone decided were inconvenient.
+#
+# Each value is (sprint, why), and the "why" names the evidence that made the
+# retirement real -- a probe run, or a source-level fact -- rather than an
+# opinion about difficulty.
+#
+# NOT IN HERE, DELIBERATELY
+# ========================
+# * `TSynRCSyn` -- LCL 4.4 has no such unit (verified against the source tree
+#   AND the built .ppu list). DataFrm.dfm still declares it and is still blocked.
+# * `TClassBrowser`, `TCodeCompletion`, `TCppParser`, `TCppPreprocessor`,
+#   `TCppTokenizer`, `TControlBar`, `TdevFileMonitor`, `TdevShortcuts` -- the
+#   eight that block main.dfm. main.dfm is excluded from near-term scheduling
+#   (8 ports for 1 form), but "excluded from the schedule" is not the same
+#   statement as "resolved", and putting them here would make the tools report
+#   main.dfm as convertible when no replacement exists for any of them.
+# * `TImageCollection` -- no LCL counterpart; blocks DataFrm and Packman/Main.
+RETIRED = {
+    "TSVGIconImageList": (
+        "SVG work",
+        "renamed to TLclSvgImageList; the substituted control is load- AND "
+        "pixel-tested by Tests/FpcCoreTests/svg/SvgLfmProbe.lpr (117 payloads)"),
+    "TVirtualImage": (
+        "F3-3",
+        "renamed to TLclVirtualImage; Source/Fpc/UI/Controls/LclVirtualImage.pas "
+        "resolves the index against the 20 PNGs extracted from DataFrm.dfm, and "
+        "ImgCollProbe.lpr loads the converted fragment"),
+    "TCompOptionsList": (
+        "F3-4",
+        "RETIRED, not ported: LCL's TValueListEditor gives esPickList rows a "
+        "native cbsPickList editor, so the hand-rolled pick-list has no reason "
+        "to exist; f3_removed_controls.py asserts nothing re-uses the unit"),
+    "TCompOptionsFrame": (
+        "F3-4",
+        "PORTED, not retired: own code whose every symbol is LCL-native, so the "
+        "class still names itself in three LFMs but resolves at stream time "
+        "(CompOptionsFrm and ProjectOptionsFrm load it as a real TFrame)"),
+}
+
+
+def is_retired(t: str) -> bool:
+    return t in RETIRED
+
+
+def retirement_note(t: str) -> str:
+    """(sprint, reason) for a retired class, or '' if it is not retired."""
+    return RETIRED.get(t, ("", ""))[1]
+
 # Anything here needs a decision before a form can be converted.
 KNOWN_CUSTOM = {
     "TSkinManager", "TSkinData", "TStyleManager",
@@ -127,7 +257,8 @@ def survey(path: pathlib.Path):
     # not a form-conversion problem. What blocks conversion is a control that
     # cannot be placed in a form at all -- which is why the list is explicit.
     component_types = {t for _, t in comps[1:]} if len(comps) > 1 else set()
-    custom = {t for t in component_types if t not in WIDGETSET}
+    custom = {t for t in component_types
+              if t not in WIDGETSET and t not in LCL_SUPPLIED}
     return root, types, custom
 
 
@@ -142,6 +273,22 @@ def main() -> int:
     rollup = collections.Counter()
     blockers = collections.defaultdict(list)
     convertible = []
+    # Every type that ACTUALLY blocked a form, accumulated from the per-form
+    # verdict. The roll-up below used to recompute the marker from WIDGETSET,
+    # which disagreed with this set in two ways at once:
+    #
+    #   * it ignored LCL_SUPPLIED (fixed in F3-6), so TSynCppSyn read as custom
+    #     on a run that reported its forms as OK;
+    #   * it marked every form's OWN ROOT CLASS as custom -- 60-odd types such
+    #     as TAboutForm and TToolForm -- even though `survey()` deliberately
+    #     excludes the root (`comps[1:]`), because a form class is a code
+    #     problem, not a form-conversion problem. Measured before the fix: the
+    #     roll-up printed 62 types as custom while the per-form verdicts named
+    #     9. A reader comparing those two numbers has to discard one of them,
+    #     and a survey whose own two outputs disagree is worse than no survey.
+    #
+    # So the marker is now read off the verdict rather than recomputed.
+    blocking_types = set()
 
     print(f"self-authored .dfm: {len(dfms)}")
     print()
@@ -149,6 +296,7 @@ def main() -> int:
         root, types, custom = survey(p)
         for t in types:
             rollup[t] += 1
+        blocking_types |= custom
         for t in sorted(custom):
             blockers[t].append(p.name)
         if not custom:
@@ -227,8 +375,12 @@ def main() -> int:
     print()
     print("control type roll-up:")
     for t, n in rollup.most_common():
-        mark = "" if t in WIDGETSET else "   <-- custom"
+        mark = "   <-- custom" if t in blocking_types else ""
         print(f"  {n:4d}  {t}{mark}")
+    print()
+    print(f"  types in the roll-up        : {len(rollup)}")
+    print(f"  types that blocked a form   : {len(blocking_types)}"
+          "   <- the marker above is this set, not a recomputed one")
 
     # NOT a gate on purpose. Converting the whole form layer is the explicit
     # goal of F3, so failing the build until every form is convertible would

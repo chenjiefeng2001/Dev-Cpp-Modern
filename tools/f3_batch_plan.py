@@ -71,7 +71,26 @@ def main() -> int:
     for p in dfms:
         root, types, custom = survey.survey(p)
         n = sum(types.values())
-        if not custom:
+        # SUBTRACT THE RETIREMENTS -- as of F3-7 this tool finally did.
+        #
+        # It carried no retirement set at all, and that is why the two
+        # instruments disagreed: f3_load_routes.py subtracted
+        # f3_form_survey.RETIRED and called LangFrm / EnviroFrm CLEARED, while
+        # this file put them in "BATCH B, blocked by TVirtualImage" -- a class
+        # F3-3 had already replaced with TLclVirtualImage and load-tested via
+        # ImgCollProbe. Same tree, same question, two answers.
+        #
+        # NOTE THE DIFFERENT SCOPING, and why it is not a bug: `blockers_of` in
+        # f3_load_routes.py only ever runs on forms that already produced an
+        # .lfm, which is what stops the subtraction from inventing a clearance
+        # for Tools/Packman/Main's producer-side gap. This tool deliberately
+        # buckets ALL 53 forms, including the ones never converted, so a blanket
+        # subtraction here would report DataFrm as fine while it still carries
+        # `TSynRCSyn` -- which LCL 4.4 does not have at all. Hence the two
+        # different treatments of the SAME set, and hence the note in
+        # f3_form_survey.RETIRED listing what is deliberately NOT in it.
+        blocked_by = {t for t in custom if t not in survey.RETIRED}
+        if not blocked_by:
             # Batch A means "the converter can read it". It does NOT mean the form
             # works afterwards: a form that draws from an SVG icon list converts
             # cleanly and then renders nothing. That distinction is the whole reason
@@ -80,14 +99,14 @@ def main() -> int:
             svg = bool(survey.SVG_USE_RE.search(survey.read(p)))
             (batches["A"] if not svg else batches["A-svg"]).append((label(p), n))
         else:
-            kinds = {origin(t) for t in custom}
+            kinds = {origin(t) for t in blocked_by}
             if kinds == {"external"} and all(t in matrix.LCL_EQUIVALENT
                                              and matrix.LCL_EQUIVALENT[t] != "none"
-                                             for t in custom):
+                                             for t in blocked_by):
                 batches["B"].append((label(p), n))
             else:
                 batches["C"].append((label(p), n))
-            reasons[label(p)] = sorted(custom)
+            reasons[label(p)] = sorted(blocked_by)
 
     label = {
         "A": "MECHANICAL - no blocking control and no SVG dependency; "

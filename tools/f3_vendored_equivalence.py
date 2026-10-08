@@ -122,53 +122,75 @@ def recommend(base):
     return ("PORT",
             f"Base {base} is not an LCL class, so an adapter is needed before "
             f"the class can move. This is the only shape that is real work.")
-    dfms = sorted(p for p in survey.SOURCE.rglob("*.dfm") if "VCL" not in p.parts)
 
-    units = {p: read(p) for p in SOURCE.rglob("*.pas")}
 
-    def origin(t):
-        pat = re.compile(r"^\s*" + re.escape(t) + r"\s*=\s*class", re.M | re.I)
-        for p, txt in units.items():
-            if pat.search(txt):
-                return p
-        return None
+# WHY THE `tsyncustomhighlighter` SPECIAL CASE WAS DELETED
+# =======================================================
+# It used to read, for ANY class descending from TSynCustomHighlighter:
+#
+#     "LCL's SynEdit ships TSynCPPSyn / TSynRCSyn / TSynPASyn, which highlight
+#      the same languages as this class. Drop the vendored unit and use the LCL
+#      one."                                                        -> REPLACE
+#
+# That is HALF FALSE, and Sprint F3-6 measured which half:
+#
+#     TSynCppSyn  EXISTS in LCL 4.4 -- but in a .pp file
+#                 (components/synedit/synhighlightercpp.pp), so a search for
+#                 "*.pas" finds nothing and the class reads as absent.
+#     TSynRCSyn   DOES NOT EXIST. No source, and no synhighlighterrc.ppu in
+#                 components/synedit/units/x86_64-win64/win32/. Verified
+#                 against the built unit list, not only the source tree.
+#
+# A base class cannot tell those two apart, so the special case asserted the
+# good news for both. Retiring TSynRCSyn on this text would have unblocked
+# DataFrm.dfm and killed it at stream time with `Class TSynRCSyn not found`.
+#
+# The replacement answers from DATA instead: it asks
+# f3_form_survey.LCL_SUPPLIED, the registry that F3-6 built and that names
+# exactly the classes the LCL supplies under an identical name. That is this
+# tool's own stated rule -- "never from the name" -- applied to a verdict that
+# had been taken from one.
 
-    blockers = collections.Counter()
-    for p in dfms:
-        _, _, custom = survey.survey(p)
-        for t in custom:
-            blockers[t] += 1
 
-    vendored = {t: n for t, n in blockers.items() if origin(t) is not None}
-    print("VENDORED BLOCKER EQUIVALENCE ANALYSIS")
-    print("=" * 78)
-    print()
-    rows = []
-    for t, forms in sorted(vendored.items(), key=lambda kv: -kv[1]):
-        path = origin(t)
-        base, size = None, None
-        if path is not None:
-            _, base, size = find_declaration(t)
-        verdict, why = recommend(base)
-        rows.append((t, forms, path, base, size, verdict, why))
+def recommend(base, typename=None, survey=None):
+    b = (base or "").lower()
 
-    for t, forms, path, base, size, verdict, why in rows:
-        loc = path.relative_to(SOURCE).as_posix() if path else "?"
-        print(f"{t}  blocks {forms} form(s)")
-        print(f"    declared : {loc}")
-        print(f"    base     : {base}")
-        print(f"    size     : {size} lines")
-        print(f"    VERDICT  : {verdict}")
-        print(f"    why      : {why}")
-        print()
+    # LCL classes, confirmed against the widgetset types this project uses.
+    LCL_BASES = {
+        "tframe", "tcomponent", "twincustomcontrol", "tcustomimglist",
+        "tvaluelisteditor", "tcustomtreeview", "tcustomlistview",
+        "tstringgrid", "tstrings", "tobject", "twincontrol",
+    }
 
-    tally = collections.Counter(r[5] for r in rows)
-    print("=" * 78)
-    print("summary by verdict:")
-    for k, v in tally.most_common():
-        print(f"  {k}: {v} class(es)")
-    total_lines = sum(r[4] or 0 for r in rows)
-    print(f"total declared lines across blockers: {total_lines}")
+    # A highlighter base is NOT a verdict. It means the class is itself a
+    # highlighter, and the only question is whether the LCL ships one of the
+    # same NAME.
+    if b.startswith("tsyncustomhighlighter"):
+        if survey is not None and typename in getattr(survey, "LCL_SUPPLIED", ()):
+            return ("REPLACE",
+                    "The LCL ships a class of this exact name (registered in "
+                    "f3_form_survey.LCL_SUPPLIED), so the vendored unit can be "
+                    "dropped. The registry entry records where it was verified "
+                    "to live and what it was checked against.")
+        return ("PORT",
+                "A highlighter with no LCL counterpart of the same name "
+                "(checked against f3_form_survey.LCL_SUPPLIED, which is "
+                "populated only from classes actually found in the Lazarus "
+                "tree). A base class says the role, not the availability: "
+                "LCL 4.4 ships TSynCppSyn and NOT TSynRCSyn, and the two are "
+                "indistinguishable from here. Either write one against LCL's "
+                "own SynEditHighlighter, or drop the feature deliberately.")
+    if b in LCL_BASES:
+        return ("ADAPT",
+                f"Base {base} is an LCL class, so this subclass recompiles "
+                f"against LCL without an adapter.")
+    if b == "" or b == "(none)":
+        return ("ADAPT",
+                "No base class: self-contained and portable by inspection. "
+                "The port is mechanical.")
+    return ("PORT",
+            f"Base {base} is not an LCL class, so an adapter is needed before "
+            f"the class can move. This is the only shape that is real work.")
 def main() -> int:
     survey = load("f3_form_survey")
     dfms = sorted(p for p in survey.SOURCE.rglob("*.dfm") if "VCL" not in p.parts)
@@ -198,15 +220,17 @@ def main() -> int:
         base = size = None
         if path is not None:
             _, base, size = find_declaration(t)
-        verdict, why = recommend(base)
+        verdict, why = recommend(base, t, survey)
         rows.append((t, forms, path, base, size, verdict, why))
 
     for t, forms, path, base, size, verdict, why in rows:
         loc = path.relative_to(SOURCE).as_posix() if path else "?"
+        unit = len(path.read_bytes().decode("latin-1").splitlines()) if path else 0
         print(f"{t}  blocks {forms} form(s)")
         print(f"    declared : {loc}")
         print(f"    base     : {base}")
-        print(f"    size     : {size} lines")
+        print(f"    class    : {size:>5} lines   <- the class DECLARATION only")
+        print(f"    unit     : {unit:>5} lines   <- the whole file: the port cost")
         print(f"    VERDICT  : {verdict}")
         print(f"    why      : {why}")
         print()
@@ -216,15 +240,34 @@ def main() -> int:
     print("summary by verdict:")
     for k, v in tally.most_common():
         print(f"  {k}: {v} class(es)")
-    print(f"total declared lines across blockers: {sum(r[4] or 0 for r in rows)}")
+
+    # BOTH totals, because printing only the first is what made this number read
+    # as a budget.
+    #
+    # MEASURED 2026-10-07: `size` is the class DECLARATION -- find_declaration
+    # stops at the `end;` that closes it -- and it was labelled "size" and
+    # summarised as "total declared lines across blockers", which every reader
+    # took as the cost of porting. The two SynEdit classes are the clearest case
+    # and both are 8.7x off: TSynRCSyn 62 vs 537, TSynCppSyn 211 vs 1835.
+    #
+    # For a REPLACE/ADAPT verdict the declaration is the right thing to weigh --
+    # it is the API surface a consumer sees. For SIZING the work it is off by an
+    # order of magnitude, because the implementation is ~90% of it.
+    #
+    # Found while deciding what to do about TSynRCSyn: i.e. by trying to use the
+    # number to budget a decision and finding it could not budget anything.
+    total_decl = sum(r[4] or 0 for r in rows)
+    total_unit = sum(
+        len(r[2].read_bytes().decode("latin-1").splitlines()) if r[2] else 0
+        for r in rows)
     print()
-    print("REPLACE = drop the vendored unit, use the LCL class that already exists.")
+    print(f"total across blockers: {total_decl} lines of class declaration, "
+          f"{total_unit} lines of unit")
+    print("                    (schedule against the second figure)")
+    print()
+    print("REPLACE = the LCL ships a class of this exact name; drop the vendored unit.")
     print("ADAPT   = the class recompiles against an LCL base without an adapter.")
-    print("PORT    = the base has no LCL counterpart; real work.")
-    return 0
-    print()
-    print("ADAPT = swap for an LCL class that already exists.")
-    print("PORT  = the class itself must move; no LCL counterpart exists.")
+    print("PORT    = no LCL counterpart; real work.")
     return 0
 
 
