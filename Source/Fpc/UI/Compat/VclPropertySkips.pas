@@ -70,7 +70,7 @@ interface
 uses
   Classes, SysUtils, LResources, Controls, Graphics, ImgList, StdCtrls,
   Buttons, ExtCtrls, ComCtrls, Spin, ValEdit, CheckLst, Forms, Dialogs,
-  ExtDlgs, SynEdit, SynGutter;
+  ExtDlgs, SynEdit, SynGutter, SynHighlighterCpp;
 
 // Every entry this project registers, as DATA, so an external gate can audit
 // it. Not a convenience: `PropertiesToSkip` is a flat list that the LCL also
@@ -180,8 +180,67 @@ implementation
 //   (reader.inc:1297-1302, then :1270-1274), and at the moment of that
 //   lookup the instance IS the gutter. `Gutter.Font` is therefore both the
 //   sufficient spelling and the only one that can work.
+//
+// SPRINT F3-6 -- the six below come from EditorOptFrm, the first CLEARED form
+// to carry a SynEdit highlighter and a TSynStringGrid.
+// =======================================================================
+// `TSynCppSyn.Options` -- 3 sites, and ONE entry for all of them.
+//   `Options` is a third-party patch, not a SynEdit feature: the vendored
+//   declaration is annotated `// <-- Codehunter patch` and declares
+//   TSynEditHighlighterOptions, a type that appears nowhere else in the
+//   vendored tree and nowhere at all in LCL. LCL's TSynCustomHighlighter
+//   has no Options property (measured: `Options prop: NONE`).
+//   All three values are OFF or zero -- AutoDetectEnabled = False,
+//   AutoDetectLineLimit = 0, Visible = False -- so nothing is switched ON
+//   that LCL then fails to honour. The loss is the CAPABILITY to
+//   auto-detect a language from file content, which the VCL could express
+//   and LCL cannot; it was not in use here.
+//
+// `TSynEdit.AddedKeystrokes` / `RemovedKeystrokes` -- 4 collection blocks
+//   across 3 TSynEdits, plus one empty `<>`.
+//   THE VCL's key-command binding tables, and a real FUNCTIONAL LOSS: they
+//   remap keys to editor commands, and here they remap F1 to context help
+//   (5 sites) and add Ctrl+F1 (16496) to it, on `CodeIns` and `seDefault`;
+//   `cppEdit` additionally clears the Backspace and Enter bindings.
+//   Neither property exists in ANY Lazarus SynEdit unit (measured across
+//   components/synedit/*.p* for `property AddedKeystrokes` /
+//   `property RemovedKeystrokes`: zero hits), so there is nothing to
+//   redirect to -- not a differently-named property, not a different unit.
+//
+//   The loss is BOUNDED and the bound was measured rather than assumed:
+//   `AddedKeystrokes` / `RemovedKeystrokes` occur in exactly two DFM files
+//   (EditorOptFrm, CPUFrm) and in ZERO lines of Pascal. So no code reads or
+//   writes them, and under LCL these key overrides are dropped from the
+//   design-time default. The bindings recorded here are the VCL stock
+//   defaults (Backspace, Enter, F1) plus the F1 remap, so the F1 -> context
+//   help mapping is what a user would notice losing.
+//
+//   ONE entry per property, not one per inner `Command` / `ShortCut`: the
+//   reader takes the skip on the collection property, calls SkipValue and
+//   abandons the path, so the item rows never become properties. That was
+//   verified by building it this way first and re-running the form probe --
+//   adding `Command` and `ShortCut` as well would have been an over-broad
+//   registry entry, which is the failure mode the audit in PropRttiProbe
+//   exists to catch.
+//
+// `TSynGutter.BorderStyle` -- 3 sites, every one `gbsNone`.
+//   LCL's TSynGutter has no BorderStyle at all (measured: the only
+//   BorderStyle-bearing gutter property in the LCL is none of them), and
+//   `gbsNone` is "draw no border" -- which is what LCL's gutter does. The
+//   value asked for and LCL's behaviour agree, so nothing is lost; the
+//   property is skipped because the NAME does not exist, not because the
+//   intent differs.
+//
+// `TSynGutter.GradientEndColor` -- 1 site, `clBackground`.
+//   A VISUAL DIFFERENCE, recorded rather than waved through: LCL's
+//   TSynGutter paints a flat background and has no gradient, so the
+//   gradient the VCL blended to the background colour is not reproduced.
+//
+// `TSynEdit.ScrollHintFormat` -- 1 site, `shfTopToBottom`.
+//   VCL-only (measured absent from components/synedit/*.p*). Scrollbar
+//   hint text direction; LCL's TSynEdit exposes no equivalent. Recorded.
 const
-  ENTRIES: array[0..12] of TVclSkipEntry = (
+  ENTRIES: array[0..18] of TVclSkipEntry = (
     (Class_: TBitBtn; PropertyName: 'ImageName';
      Note: 'VCL image selection by name; the co-located ImageIndex binds the item'),
     (Class_: TSpeedButton; PropertyName: 'ImageName';
@@ -207,7 +266,19 @@ const
     (Class_: TSynEdit; PropertyName: 'CodeFolding';
      Note: 'LCL folds via highlighter capabilities; the VCL name is absent'),
     (Class_: TSynGutter; PropertyName: 'Font';
-     Note: 'LCL TSynGutter has no Font; gutter text uses TSynEdit.Font')
+     Note: 'LCL TSynGutter has no Font; gutter text uses TSynEdit.Font'),
+    (Class_: TSynCppSyn; PropertyName: 'Options';
+     Note: 'Codehunter-patch TSynEditHighlighterOptions; LCL highlighter has no Options'),
+    (Class_: TSynEdit; PropertyName: 'AddedKeystrokes';
+     Note: 'VCL key-command table; absent from every Lazarus SynEdit unit'),
+    (Class_: TSynEdit; PropertyName: 'RemovedKeystrokes';
+     Note: 'VCL key-command table; absent from every Lazarus SynEdit unit'),
+    (Class_: TSynGutter; PropertyName: 'BorderStyle';
+     Note: 'LCL TSynGutter has no BorderStyle; all 3 sites are gbsNone, so behaviour matches'),
+    (Class_: TSynGutter; PropertyName: 'GradientEndColor';
+     Note: 'LCL TSynGutter paints flat; the VCL gutter blended to this colour'),
+    (Class_: TSynEdit; PropertyName: 'ScrollHintFormat';
+     Note: 'VCL-only scrollbar hint direction; no LCL counterpart')
   );
 
 function VclSkipEntryCount: Integer;

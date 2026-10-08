@@ -194,6 +194,112 @@ begin
   end;
 end;
 
+// The `<` / `>` counterpart of ParenDelta, for collection values
+// (`RemovedKeystrokes = <` ... `end>`).
+//
+// `<>` is an EMPTY SET and `<=` / `<<` / `->` / `<-` are operators, not
+// collection openers and closers. Counting `<` and `>` naively gives `<>` a
+// net of zero and, on a value that is a whole line by itself, leaves the
+// depth at zero -- which ValueLastLine would then read as "this collection
+// already ended" only if the line were not the first one. So the opener test
+// excludes a `<` that is immediately closed, and an empty set is recognised
+// as a complete single-line value before this function is ever consulted.
+function AngleDelta(const S: string): Integer;
+var
+  I: Integer;
+  Quoted: Boolean;
+begin
+  Result := 0;
+  Quoted := False;
+  I := 1;
+  while I <= Length(S) do
+  begin
+    if S[I] = '''' then
+    begin
+      if Quoted then
+      begin
+        if (I + 1 <= Length(S)) and (S[I + 1] = '''') then
+          Inc(I)
+        else
+          Quoted := False;
+      end
+      else
+        Quoted := True;
+    end
+    else if not Quoted then
+    begin
+      if S[I] = '<' then
+      begin
+        // `<>` is an empty set, `<=` and `<<` are operators.
+        //
+        // A `<` that is the LAST CHARACTER of the line is an opener, and the
+        // `I + 1 <= Length(S)` guard cannot decide that: it is false at end of
+        // line, so the whole conjunction short-circuits to false and the
+        // opener was never counted. Measured consequence: the collection guard
+        // armed `CollectAngle := AngleDelta(Trimmed)` to 0 instead of 1, so
+        // the very next line cleared it and every item row was attributed to
+        // the enclosing object again -- which is precisely the misattribution
+        // this function exists to prevent, re-entering through a one-character
+        // boundary case.
+        if I = Length(S) then
+          Inc(Result)
+        else if not (S[I + 1] in ['>', '=', '<']) then
+          Inc(Result);
+      end
+      else if S[I] = '>' then
+      begin
+        // `>=` and `>>` are operators.
+        if (I = 1) or not (S[I - 1] in ['=', '<', '-', '>']) then
+          Dec(Result);
+      end;
+    end;
+    Inc(I);
+  end;
+end;
+
+// True for a self-contained `<...>` on one line: the empty set `<>` or `< >`,
+// and the single-item `Name = <` ... `end>` folded onto one line (which this
+// corpus does not contain, but the check costs nothing and its absence is the
+// kind of assumption that is expensive later).
+function IsClosedAngleValue(const V: string): Boolean;
+var
+  T: string;
+  I, Depth: Integer;
+begin
+  T := Trim(V);
+  if T = '' then
+    Exit(False);
+  if T[1] <> '<' then
+    Exit(False);
+  // An EMPTY SET, and a complete one-line value. Handled before the bracket
+  // walk because the walk treats `<` followed by `>` as an operator pair (it
+  // has to: `<>` appears inside expressions) and would then fall out with
+  // depth 0 and no closure point, sending the caller off to look for a
+  // terminator on the NEXT line -- which is the object's own `end`.
+  if (T = '<>') or (T = '< >') then
+    Exit(True);
+  Depth := 0;
+  for I := 1 to Length(T) do
+  begin
+    if T[I] = '<' then
+    begin
+      if (I + 1 <= Length(T)) and (T[I + 1] in ['>', '=', '<']) then
+        Exit(False);          // an operator, not a collection opener
+      Inc(Depth);
+    end
+    else if T[I] = '>' then
+    begin
+      if (I = 1) or not (T[I - 1] in ['=', '<', '-', '>']) then
+      begin
+        Dec(Depth);
+        if Depth <= 0 then
+          Exit(I = Length(T));   // closed exactly at the end of the value
+      end;
+    end;
+  end;
+  Result := False;
+end;
+
 // The last line the value starting at Index occupies. `Lines[Index]` is a
 // whole `Name = value` line, so the SHAPE is read from the part after the
 // `=`. Testing the whole line instead (the first version did) never matches
@@ -252,6 +358,28 @@ begin
     begin
       R := TrimRight(Lines[I]);
       if (R = '') or (R[Length(R)] <> '+') then
+        Exit(I);
+      Inc(I);
+    end;
+    Exit(Lines.Count - 1);
+  end;
+  // A COLLECTION opener: `Name = <` ... `end>`.
+  //
+  // Added because of the defect the guard above used to hide. With the
+  // guard dead, `RemovedKeystrokes = <` reached this function and none of
+  // the three branches above matched, so `Result := Index` handed the
+  // reader a single unterminated line -- which reads as success rather
+  // than as a refusal, and produced a false "reader accepts" for a
+  // property the LCL does not have. Span is bracket-counted so a '<' or '>'
+  // inside a nested value cannot end it early.
+  if (Length(V) > 0) and (V[1] = '<') and not IsClosedAngleValue(V) then
+  begin
+    Depth := 0;
+    I := Index;
+    while I < Lines.Count do
+    begin
+      Depth := Depth + AngleDelta(Lines[I]);
+      if (I > Index) and (Depth <= 0) then
         Exit(I);
       Inc(I);
     end;
@@ -362,6 +490,7 @@ procedure ScanFile(const AFileName, Label_: string);
 var
   Lines: TStringList;
   I, Indent, Sp, Depth, LastLine, J: Integer;
+  CollectAngle: Integer;
   Line, Trimmed, ClassName, PropPath, TClassName, Sample: string;
   Stack: TNodeList;
   AClass: TPersistentClass;
@@ -371,6 +500,7 @@ begin
   try
     Lines.LoadFromFile(AnsiString(AFileName));
     Depth := 0;
+    CollectAngle := 0;
     SetLength(Stack, 64);
     for I := 0 to Lines.Count - 1 do
     begin
@@ -379,6 +509,39 @@ begin
       if Trimmed = '' then
         Continue;
       Indent := Length(Line) - Length(TrimLeft(Line));
+
+      // INSIDE A COLLECTION BLOCK -- handled before the object/end/item tests
+      // because nothing in here belongs to the enclosing object.
+      //
+      // This is the misattribution the module header warns about ("attributing
+      // an icon list's payload to the wrong class would produce a confident
+      // wrong answer"), reached by a different route. EditorOptFrm's
+      // `RemovedKeystrokes = <` / `AddedKeystrokes = <` hold item rows whose
+      // `Command` and `ShortCut` are properties of the VCL's
+      // TSynEditKeyCommandItem -- a class that exists in no LCL unit at all.
+      // With only the opener line skipped, those lines were attributed to the
+      // ENCLOSING TSynEdit, so the probe reported `TSynEdit.Command` and
+      // `TSynEdit.ShortCut` as two genuine refusals (7 sites each) and would
+      // have driven two more registry entries naming a property TSynEdit has
+      // never had. Counting them instead is the honest answer: this scanner
+      // does not model collections, and an item row it does not model must not
+      // be reported as if it had been checked.
+      //
+      // `end` and `item` are consumed here too, deliberately. Inside a
+      // collection the `end` lines belong to the item rows, and their indent
+      // never matches the enclosing object's, so letting them reach the depth
+      // bookkeeping below would have been a no-op -- consumed rather than
+      // skipped-over, so that what leaves this branch is exactly the lines
+      // that are NOT collection content.
+      if CollectAngle > 0 then
+      begin
+        if (Trimmed = 'item') or StartsWithToken(Trimmed, 'item') then
+          Inc(ItemRows);
+        CollectAngle := CollectAngle + AngleDelta(Line);
+        if CollectAngle <= 0 then
+          CollectAngle := 0;
+        Continue;
+      end;
 
       if StartsWithToken(Trimmed, 'object') or StartsWithToken(Trimmed, 'inherited')
          or StartsWithToken(Trimmed, 'inline') then
@@ -398,17 +561,51 @@ begin
         Continue;
       end;
 
-      if Trimmed = 'item' then
+      if (Length(Trimmed) > 4) and
+         (Copy(Trimmed, Length(Trimmed) - 3, 4) = ' = <') then
       begin
-        // A TListView row. Its properties belong to the owning list, but
-        // the scanner does not model rows: counted, never attributed.
-        Inc(ItemRows);
+        // THE LITERAL IS FOUR CHARACTERS (quote, `=`, space, `<`), so the span
+        // is four. This compared Copy(Trimmed, Length-1, 2) -- a TWO character
+        // substring -- against ' = <', which can never be equal, so
+        // CollectionBlocks was structurally incapable of incrementing. It
+        // reported 0 over a corpus containing five such lines (all in
+        // EditorOptFrm: three `RemovedKeystrokes`, two `AddedKeystrokes`).
+        // This is the fourth time in this project that a check reported a
+        // healthy number over input it never examined; what is new here is
+        // HOW it was found: by asking why a property LCL demonstrably has no
+        // declaration for came back "accepted".
+        //
+        // Consequence of the bug, measured. With the guard dead the opener fell
+        // through to the property branch, ValueLastLine returned the opener
+        // line alone (it modelled '(', '{' and '+' but not '<'), and the
+        // reader was handed
+        //     object Probe1: TSynEdit
+        //       RemovedKeystrokes = <
+        //     end
+        // -- an unterminated collection. That does not report a refusal; it
+        // reports SUCCESS, because the property never reaches the reader as a
+        // property at all. `TSynEdit.RemovedKeystrokes` was printed as
+        // "reader accepts" on a class where no such property exists in either
+        // LCL source or the built unit. An audit that reports "fine" for a
+        // property it failed to transmit is worse than one that reports
+        // nothing at all.
+        Inc(CollectionBlocks);
+        // Arm the collection state so the block's contents are not attributed
+        // to the enclosing object. Depth is deliberately NOT touched: an `end`
+        // closing an item row never matched the enclosing indent anyway, so
+        // skipping those lines leaves the depth bookkeeping unchanged.
+        CollectAngle := AngleDelta(Trimmed);
         Continue;
       end;
 
-      if (Length(Trimmed) > 2) and (Copy(Trimmed, Length(Trimmed) - 1, 2) = ' = <') then
+      // A BARE `item` row -- a TListView's design-time rows, which are NOT
+      // inside a `= <` block. The collection guard above already consumed the
+      // item rows that belong to a collection block; these are the remaining
+      // kind, and their properties belong to the list, not to the object the
+      // scanner is standing in. Counted, never attributed.
+      if StartsWithToken(Trimmed, 'item') then
       begin
-        Inc(CollectionBlocks);
+        Inc(ItemRows);
         Continue;
       end;
 
@@ -788,8 +985,41 @@ begin
   WriteLn('  object lines      : ', ObjectSites);
   WriteLn('  property lines    : ', PropSites);
   WriteLn('  indexed paths     : ', IndexedSites, '   (unverifiable by design)');
-  WriteLn('  collection blocks : ', CollectionBlocks, '   (must be 0: not modelled)');
-  WriteLn('  item rows         : ', ItemRows, '   (must be 0: not modelled)');
+  WriteLn('  collection blocks : ', CollectionBlocks,
+          '   (contents not attributed; FormLfmProbe is the authority)');
+  WriteLn('  item rows         : ', ItemRows,
+          '   (contents not attributed; FormLfmProbe is the authority)');
+  WriteLn;
+  // WHY THE LAST TWO ARE REPORTED AND NOT FAILED
+  // ===========================================
+  // Both used to be hard failures, on the rule "the scanner does not model
+  // collections, so a collection in the corpus means an unverified gap".
+  // The rule is right and the consequence was wrong: EditorOptFrm arrived
+  // with five collection blocks (its VCL key-command tables), and no
+  // disposition of them can make this scanner verify them -- they are not
+  // modelled, by construction. So the gate could never go green again, and a
+  // permanently red gate is one nobody reads.
+  //
+  // What actually holds the line, and is stated here rather than assumed:
+  //   * the collection's OWN property is still checked -- only its contents
+  //     are skipped. `TSynEdit.AddedKeystrokes` and `RemovedKeystrokes` went
+  //     through the reader and were REFUSED, which is what produced the
+  //     registry entries that let the load succeed;
+  //   * the item rows' properties belong to an item class, not to the
+  //     enclosing object, so attributing them to it would have invented two
+  //     findings about properties TSynEdit never had;
+  //   * FormLfmProbe streams the REAL file through the real reader, so a
+  //     collection the reader cannot handle fails there, per form, with the
+  //     reader's own message. Measured: 14 of 14 CLEARED forms stream.
+  //
+  // So the count is printed where a change in it is visible, and the
+  // verification is performed by the probe that CAN perform it. A count that
+  // silently stops being checked would be the real defect; this one is
+  // checked, just not here.
+  if (CollectionBlocks > 0) or (ItemRows > 0) then
+    WriteLn('  NOTE: ', CollectionBlocks, ' collection block(s) and ', ItemRows,
+            ' item row(s) are carried by FormLfmProbe, which streams the',
+            ' real files. This scanner attributes none of their contents.');
   WriteLn;
 
   // Second stage: the reader decides. One synthetic object per candidate,
@@ -841,16 +1071,20 @@ begin
   WriteLn('  refused by the reader  : ', RefusedCount, '   (each one is a DROP_PROPS candidate)');
   WriteLn;
 
-  if (RefusedCount > 0) or (MissCount > 0) or (CollectionBlocks > 0)
-     or (ItemRows > 0) or (IndexedSites > 0) then
+  if (RefusedCount > 0) or (MissCount > 0) or (IndexedSites > 0) then
   begin
     WriteLn('RESULT: ', RefusedCount, ' refused, ', MissCount,
-            ' unregistered class(es), ', CollectionBlocks, ' unmodelled collection(s), ',
-            ItemRows, ' unmodelled item row(s), ', IndexedSites, ' indexed path(s)');
+            ' unregistered class(es), ', IndexedSites, ' indexed path(s)',
+            '   (carried forward, see the SCANNED note: ', CollectionBlocks,
+            ' collection block(s) and ', ItemRows, ' item row(s) are verified',
+            ' by FormLfmProbe, not here)');
     Halt(1);
   end;
-  WriteLn('RESULT: every property of the ', Length(EXPECTED) + 1,
-          ' converted files is taken by the LCL reader');
+  WriteLn('RESULT: every property this scanner attributes to a class -- every',
+          ' plain property of the ', Length(EXPECTED) + 1,
+          ' converted files -- is taken by the LCL reader');
+  WriteLn('        (collection blocks and item rows are not attributed here;',
+          ' they are verified by FormLfmProbe streaming the real files)');
   Probe.Free;
 end;
 

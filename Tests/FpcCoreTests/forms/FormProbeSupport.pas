@@ -57,15 +57,16 @@ interface
 uses
   Classes, SysUtils, Forms, Controls, Graphics, ImgList, ExtCtrls, Buttons,
   StdCtrls, ComCtrls, Spin, ValEdit, Dialogs, CheckLst, ExtDlgs, SynEdit,
-  LclVirtualImage;
+  SynHighlighterCpp, Grids, ColorBox, LclVirtualImage;
 
 type
-  // The thirteen window classes the route tool reports as CLEARED, each
+  // The fourteen window classes the route tool reports as CLEARED, each
   // under exactly the name its LFM's first line uses.
   TAStyleFormatterOptionsForm = class(TForm);
   TAboutForm = class(TForm);
   TClangFormatterOptionsForm = class(TForm);
   TCompOptForm = class(TForm);
+  TEditorOptForm = class(TForm);
   TEnviroForm = class(TForm);
   TFormatterOptionsForm = class(TForm);
   TIconForm = class(TForm);
@@ -99,7 +100,7 @@ const
   // after any form changes status. F3-4 moved CompOptionsFrm and
   // ProjectOptionsFrm in by retiring the vendored TCompOptionsList and
   // porting the frame.
-  EXPECTED: array[0..12] of TFormExpectation = (
+  EXPECTED: array[0..13] of TFormExpectation = (
     (FileName: 'AStyleFormatterOptionsFrm.lfm';
      InstanceName: 'AStyleFormatterOptionsForm';
      ClassName: 'TAStyleFormatterOptionsForm'),
@@ -112,6 +113,9 @@ const
     (FileName: 'CompOptionsFrm.lfm';
      InstanceName: 'CompOptForm';
      ClassName: 'TCompOptForm'),
+    (FileName: 'EditorOptFrm.lfm';
+     InstanceName: 'EditorOptForm';
+     ClassName: 'TEditorOptForm'),
     (FileName: 'EnviroFrm.lfm';
      InstanceName: 'EnviroForm';
      ClassName: 'TEnviroForm'),
@@ -204,6 +208,7 @@ begin
   RegisterClass(TAboutForm);
   RegisterClass(TClangFormatterOptionsForm);
   RegisterClass(TCompOptForm);
+  RegisterClass(TEditorOptForm);
   RegisterClass(TEnviroForm);
   RegisterClass(TFormatterOptionsForm);
   RegisterClass(TIconForm);
@@ -233,6 +238,16 @@ begin
   RegisterClass(TBevel);
   RegisterClass(TRadioGroup);
   RegisterClass(TTimer);
+  // EditorOptFrm (F3-6) brought three widgetset classes this list had never
+  // been asked about, because no earlier CLEARED form used them. All three are
+  // LCL-native and were verified by declaration, not by name: TTrackBar in
+  // lcl/comctrls.pp (base TCustomTrackBar), TColorBox in lcl/colorbox.pas
+  // (base TCustomColorBox) and TStringGrid in lcl/grids.pp (base
+  // TCustomStringGrid). Registering the real classes rather than stubs is the
+  // point -- EditorOptFrm sets real properties on all three.
+  RegisterClass(TTrackBar);
+  RegisterClass(TColorBox);
+  RegisterClass(TStringGrid);
   // ComCtrls
   RegisterClass(TPageControl);
   RegisterClass(TTabSheet);
@@ -251,8 +266,16 @@ begin
   // is not FPC-compilable yet) and the F3-3 control.
   RegisterClass(TSynEdit);
   RegisterClass(TLclVirtualImage);
+  // The REAL LCL C++ highlighter, not a stub (F3-6). This is the class the
+  // sprint retired the vendored TSynCppSyn in favour of: Lazarus ships it as
+  // SynHighlighterCpp in components/synedit/synhighlightercpp.pp -- note the
+  // .pp extension, which is why searching Lazarus for "*.pas" finds nothing and
+  // the class reads as absent. Registering the genuine type is what makes the
+  // EditorOptFrm result meaningful: a stub would stream the same LFM while
+  // proving nothing about whether the LCL can actually build the highlighter.
+  RegisterClass(TSynCppSyn);
 
-  Result := 14 + 28;   // 13 form stubs + the frame, then 28 widget classes
+  Result := 15 + 33;   // 14 form stubs + the frame, then 33 widget classes
 end;
 
 end.
