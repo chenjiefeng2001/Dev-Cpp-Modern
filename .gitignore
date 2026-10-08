@@ -132,6 +132,18 @@ Tests/FpcCoreTests/svg/*.exe
 # The form probes link the same LCL and for the same reason (tools/build_form_probe.ps1,
 # and the lcl-svg-runtime CI job).
 Tests/FpcCoreTests/forms/*.exe
+# ImgCollProbe links the same LCL too, and is built by the SAME script as the two
+# groups above (tools/build_svg_probe.ps1 builds all eight probes). Its line was
+# simply never added when the probe was introduced, so it was the one binary in
+# this tree that `git status` would have offered to commit: a ~3 MB rebuildable
+# artefact, produced by a command already in CI.
+Tests/FpcCoreTests/imgcoll/*.exe
+# SynRcProbe links the same LCL and is built by tools/build_syn_probe.ps1, for the
+# same reason as the three groups above.
+Tests/FpcCoreTests/syn/*.exe
+# Its captured output. `*.err` was already ignored, which left out.txt as the one
+# untracked file a probe run leaves behind in every other probe directory.
+Tests/FpcCoreTests/syn/out.txt
 
 # 编辑器 / 崩溃转储 / 临时文件
 *.exe.manifest.bak
