@@ -1,0 +1,14 @@
+{
+  "ambiguous_unit_names": [
+    "aboutfrm",
+    "bzip2",
+    "config",
+    "libtar",
+    "main"
+  ],
+  "forms": 13,
+  "forms_reaching_main": 13,
+  "max_own_loc": 50027,
+  "max_own_units": 83,
+  "note": "closure floor of the CLEARED forms; see doc/F3-SVG section 18"
+}

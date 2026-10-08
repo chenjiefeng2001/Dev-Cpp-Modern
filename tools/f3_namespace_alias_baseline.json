@@ -1,0 +1,70 @@
+{
+  "already_ok": [
+    "Generics.Collections",
+    "System.UItypes"
+  ],
+  "already_ok_count": 2,
+  "component_only": [],
+  "component_only_count": 0,
+  "main_closure_own_units": 82,
+  "note": "HISTORICAL MEASUREMENT, taken before any compatibility shim existed (doc/F3-SVG section 20). Frozen on purpose: the classification below is what was measured, not what is currently true. See 'shims' for how these are being satisfied. Do NOT re-derive these numbers from the live tree -- the shim makes Vcl.VirtualImage resolvable, which would silently move it out of 'renamed' and make the baseline agree with the present by rewriting the past.",
+  "prefix_only": [
+    "System.Classes",
+    "System.Contnrs",
+    "System.DateUtils",
+    "System.FileCtrl",
+    "System.Math",
+    "System.SyncObjs",
+    "System.SysUtils",
+    "System.Types",
+    "System.Variants",
+    "System.WideStrUtils",
+    "Vcl.ComCtrls",
+    "Vcl.Controls",
+    "Vcl.Dialogs",
+    "Vcl.ExtCtrls",
+    "Vcl.ExtDlgs",
+    "Vcl.ImgList",
+    "Vcl.Printers",
+    "Vcl.StdCtrls",
+    "Vcl.Themes",
+    "Winapi.CommCtrl",
+    "Winapi.Messages",
+    "Winapi.ShellAPI"
+  ],
+  "prefix_only_count": 22,
+  "real_missing": [
+    "System.Actions",
+    "System.AnsiStrings",
+    "System.Generics.Collections",
+    "System.IOUtils",
+    "System.ImageList",
+    "System.Threading",
+    "Vcl.BaseImageCollection",
+    "Vcl.ImageCollection",
+    "Vcl.Imaging.pngimage",
+    "Vcl.VirtualImageList",
+    "Vcl.WinXCtrls",
+    "Vcl.WinXPanels"
+  ],
+  "real_missing_count": 12,
+  "renamed": [
+    "Vcl.VirtualImage"
+  ],
+  "renamed_count": 1,
+  "shims": {
+    "Vcl.VirtualImage": {
+      "unit": "Source/Fpc/UI/Compat/Vcl.VirtualImage.pas",
+      "kind": "type alias",
+      "binds": "TVirtualImage = TLclVirtualImage",
+      "new_classes": 0,
+      "delphi_tree_edited": false,
+      "satisfies_group": "renamed",
+      "why": "Sprint F3-6's TSynRCSyn mechanism: the Delphi tree keeps the unit name and the FPC search path supplies the implementation. It must be a TYPE ALIAS, not a subclass -- a subclass makes DFM streaming a type error, measured by compiling both shapes.",
+      "scope_added": {
+        "own_units": 1,
+        "own_loc": 68
+      }
+    }
+  }
+}
