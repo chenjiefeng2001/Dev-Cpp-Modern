@@ -39,6 +39,13 @@ on:
       - "tools/qa_check.py"
       - "tools/f3_form_survey.py"
       - "tools/f3_form_ratchet.py"
+      - "tools/f3_probe_inject.py"
+      - "tools/f3_retirement_check.py"
+      - "tools/f3_compile_cost.py"
+      - "tools/f3_batch_plan.py"
+      - "tools/f3_external_matrix.py"
+      - "tools/f3_probe_inject.py"
+      - "tools/f3_load_routes.py"
       - "tools/f3_form_baseline.txt"
       - "tools/f3_svg_extract.py"
       - "tools/lcl_svg_struct_check.py"
@@ -51,10 +58,18 @@ on:
       - "tools/f3_imgcoll_check.py"
       - "tools/build_svg_probe.ps1"
       - "tools/build_form_probe.ps1"
+      - "tools/build_syn_probe.ps1"
+      - "tools/f3_namespace_alias.py"
+      - "tools/f3_namespace_alias_baseline.json"
+      - "tools/f3_ppu_surface.py"
+      - "tools/f3_ppu_surface_baseline.json"
+      - "tools/f3_shim_feasibility.py"
       - "Source/Fpc/UI/Compat/**"
+      - "Source/Fpc/UI/Controls/SynHighlighterRc.pas"
       - "Tests/FpcCoreTests/svg/**"
       - "Tests/FpcCoreTests/imgcoll/**"
       - "Tests/FpcCoreTests/forms/**"
+      - "Tests/FpcCoreTests/syn/**"
       - "Source/**/*.dfm"
       - ".github/workflows/fpc_ci.yml"
   pull_request:
@@ -67,6 +82,13 @@ on:
       - "tools/qa_check.py"
       - "tools/f3_form_survey.py"
       - "tools/f3_form_ratchet.py"
+      - "tools/f3_probe_inject.py"
+      - "tools/f3_retirement_check.py"
+      - "tools/f3_compile_cost.py"
+      - "tools/f3_batch_plan.py"
+      - "tools/f3_external_matrix.py"
+      - "tools/f3_probe_inject.py"
+      - "tools/f3_load_routes.py"
       - "tools/f3_form_baseline.txt"
       - "tools/f3_svg_extract.py"
       - "tools/lcl_svg_struct_check.py"
@@ -79,10 +101,18 @@ on:
       - "tools/f3_imgcoll_check.py"
       - "tools/build_svg_probe.ps1"
       - "tools/build_form_probe.ps1"
+      - "tools/build_syn_probe.ps1"
+      - "tools/f3_namespace_alias.py"
+      - "tools/f3_namespace_alias_baseline.json"
+      - "tools/f3_ppu_surface.py"
+      - "tools/f3_ppu_surface_baseline.json"
+      - "tools/f3_shim_feasibility.py"
       - "Source/Fpc/UI/Compat/**"
+      - "Source/Fpc/UI/Controls/SynHighlighterRc.pas"
       - "Tests/FpcCoreTests/svg/**"
       - "Tests/FpcCoreTests/imgcoll/**"
       - "Tests/FpcCoreTests/forms/**"
+      - "Tests/FpcCoreTests/syn/**"
       - "Source/**/*.dfm"
   workflow_dispatch:
 
@@ -240,6 +270,44 @@ jobs:
       - name: "TVirtualImage conversion gate"
         run: python3 tools/f3_imgcoll_check.py
 
+      # ONE retirement set, one home (F3-7).
+      #
+      # Two tools answer "which forms are still blocked", and for most of
+      # 2026-10 they answered differently on the same tree: the route tool
+      # subtracted a local RETIRED set and called LangFrm/EnviroFrm CLEARED,
+      # while f3_batch_plan.py had no such set and reported them as blocked by
+      # TVirtualImage -- a class F3-3 had already replaced and load-tested.
+      # Nothing failed; the two just disagreed. This asserts the set has one
+      # declaration site, that both instruments agree on the forms the
+      # retirements decided, and that every rename in the converter's
+      # CLASS_RENAME is recorded -- the reverse direction, which is the one
+      # with teeth.
+      - name: "Retirement set is single-sourced and both tools agree"
+        run: python3 tools/f3_retirement_check.py
+
+      # ...and that it can fail. A fork re-introduced in either tool, and a
+      # converter rename with no retirement entry, must both be reported.
+      - name: "Retirement gate self-test (each check can fail)"
+        run: python3 tools/f3_retirement_check.py --self-test
+
+      # The compile-surface ratchet (F3-7).
+      #
+      # doc F3-SVG section 18 measured the thing four sprints of planning had
+      # been estimating -- what it costs to compile ONE form -- and the answer
+      # was "all of it, every time": 13 of 13 CLEARED forms share one closure of
+      # 81 self-authored units / 49,223 LOC, reached through
+      # devcfg -> MainUi -> main. A number that large has to be watched or the
+      # next innocuous `uses` clause spends it silently.
+      #
+      # Only GROWTH fails. A shrink is progress, and like every ratchet here it
+      # is never auto-accepted -- --write-baseline is a deliberate act, because
+      # the tempting move is to re-baseline downward the first time a tool
+      # miscounts. It miscounted once already (the tokeniser split dotted unit
+      # names, under-reporting by 17 units), which is exactly why it is a gate
+      # with an injection test rather than a number in a wiki.
+      - name: "Compile-surface closure floor (must not grow)"
+        run: python3 tools/f3_compile_cost.py --ratchet
+
       # The CompOptions frame-port (F3-4). A negative assertion, and it
       # asserts on the UNIT name for TCompOptionsList: the vendored control
       # stays on disk (DevCpp.dpk needs it) while nothing may use it, and the
@@ -332,11 +400,27 @@ jobs:
         run: |
           $out = ./Tests/FpcCoreTests/svg/RasterProbe.exe 2>&1 | Out-String
           $out
-          if ($out -notmatch 'rendered ok : 110') {
+          # WHITESPACE-TOLERANT, and it has to be.
+          #
+          # The probe prints a column-aligned line
+          #     rendered ok      : 110
+          # (six spaces before the colon, because the neighbouring label
+          # "parse/raise fail" is longer). The assertion used to be a literal
+          # 'rendered ok : 110' under -notmatch, which cannot match that line,
+          # so this step threw on EVERY run and the job could never go green.
+          # Measured locally, not reasoned about: -notmatch on the literal is
+          # True while the same output matches 'rendered ok\s+: 110'.
+          #
+          # A check that can never pass is the same defect as one that can
+          # never fail -- it teaches the reader to ignore the badge.
+          if ($out -notmatch 'rendered ok\s+:\s*110') {
             throw "expected 110/117 to render when bypassing the control"
           }
           if ($out -notmatch 'RESULT: INCOMPLETE') {
             throw "RasterProbe must still report INCOMPLETE; it bypasses the normaliser"
+          }
+          if ($out -notmatch 'parse/raise fail\s*:\s*7') {
+            throw "expected exactly 7 zero-chord payloads to fail without the normaliser"
           }
 
       # ImgCollProbe is the runtime answer for the OTHER step-3 conversion.
@@ -371,19 +455,130 @@ jobs:
       # own message. It self-tests first -- a harness that refuses everything
       # looks exactly like a result -- and audits the property-to-skip registry
       # for entries naming a property the LCL can actually take.
+      #
+      # Its count of "unmodelled" collection blocks and item rows is NOT a
+      # failure: those contents belong to item classes this scanner does not
+      # model, and attributing them to the enclosing object is what made it
+      # report two phantom refusals (`TSynEdit.Command`, `TSynEdit.ShortCut`)
+      # in F3-6. FormLfmProbe below is the authority for them, because it
+      # streams the real files.
       - name: "every converted property is one the LCL reader takes (expect 0 refused)"
         shell: pwsh
         run: ./Tests/FpcCoreTests/forms/PropRttiProbe.exe
 
-      # The headline result of the F3 work: all 13 forms the route tool calls
+      # The headline result of the F3 work: all 14 forms the route tool calls
       # CLEARED stream through the real LCL reader, as the class and under the
       # name the DFM declared, with owned components AND parented controls, and
       # the two frame-bearing forms go through the full Delphi embedded-frame
       # protocol (inline frame + inherited children resolved by name from the
       # frame's own registered resource).
-      - name: "all 13 CLEARED forms load through the real LCL reader"
+      #
+      # 14 as of Sprint F3-6, which retired the vendored TSynCppSyn in favour
+      # of the LCL's own SynHighlighterCpp and so unblocked EditorOptFrm -- the
+      # first CLEARED form to carry a syntax highlighter, a TSynStringGrid and
+      # a TColorBox. The number is never typed here on trust: EXPECTED in
+      # FormProbeSupport.pas is the route tool's CLEARED set, and the two
+      # disagreeing is itself the finding.
+      - name: "all 14 CLEARED forms load through the real LCL reader"
         shell: pwsh
         run: ./Tests/FpcCoreTests/forms/FormLfmProbe.exe
+
+      # -------------------------------------------------------------------------
+      # TSynRCSyn. F3-7's decision was to write a NATIVE LCL highlighter rather
+      # than port the vendored 537-line one, so this probe is what makes that
+      # decision checkable instead of plausible. LCL 4.4 has SynHighlighterCpp
+      # but no synhighlighterrc at all, and Source/DataFrm.dfm declares
+      # `object Res: TSynRCSyn`, so the class has to exist and behave.
+      #
+      # "Loads" is the weak claim and it is NOT what this gate asserts: the real
+      # highlighter emits 54 tokens across 7 distinct kinds on a realistic .rc,
+      # which a stub returning tkUnknown cannot do. The eight DirecAttri-style
+      # published properties are also checked for RESOLVABILITY via
+      # GetDefaultAttribute, which is a strictly stronger claim than
+      # "assignable" -- and it is a real one, because SYN_ATTR_DIRECTIVE was
+      # missing from that case list while every property was still assignable.
+      #
+      # It self-tests first, and the anti-vacuity case comes before the broken
+      # ones on purpose: a matcher that rejected every possible output would
+      # otherwise pass a self-test built only from broken highlighters.
+      - name: "Build SynRcProbe"
+        shell: pwsh
+        run: ./tools/build_syn_probe.ps1
+
+      - name: "the native LCL RC highlighter loads AND tokenises"
+        shell: pwsh
+        run: ./Tests/FpcCoreTests/syn/SynRcProbe.exe
+
+      # -------------------------------------------------------------------------
+      # main.pas's blocker list, split into SPELLING and REAL WORK (F3-8).
+      #
+      # Sections 18 and 19.8 recommended attacking main.pas rather than
+      # inverting the MainUi facade. Before that becomes a schedule, the
+      # "absent unit" column has to stop mixing two different things: units
+      # whose only problem is Delphi's namespace spelling (`System.SysUtils`
+      # where FPC wants `SysUtils`), and units that genuinely do not exist here
+      # (`Vcl.WinXCtrls`). Measured on the current tree: of 37 absent dotted
+      # units in main's closure, 2 already resolve under their dotted names,
+      # 22 are spelling alone, and only 13 need real work.
+      #
+      # It lives HERE, not in the pure-text gate job, because the central claim
+      # is verified by COMPILING: the tool generates one program using every
+      # group-A unit with its prefix dropped and builds it. "Spelling" therefore
+      # means the compiler accepted it, not that the tail resembles a unit
+      # somebody has heard of. A text-only job could not establish that, and
+      # this is precisely the claim that decides how big the main.pas job is.
+      #
+      # Only GROWTH fails, same discipline as the compile-surface ratchet. The
+      # injection matrix proves it can fail: it repoints the unit search at an
+      # empty tree and requires the counts to move.
+      - name: "main.pas blockers: namespace spelling vs real work"
+        shell: pwsh
+        run: python tools/f3_namespace_alias.py --ratchet
+
+      # -------------------------------------------------------------------------
+      # The group-A feasibility table, checked against the COMPILER's record
+      # rather than against a regex over Pascal text.
+      #
+      # f3_shim_feasibility.py reads symbols out of unit source, and section 22.3
+      # already recorded that failing: FPC's RTL units are `{$I}` shells, so the
+      # first run called five real names "unreferenced". This step runs the same
+      # classifier twice -- once from source, once from the .ppu the compiler
+      # itself produced -- and freezes the outcome.
+      #
+      # It lives HERE for the same reason the namespace gate does: choosing the
+      # .ppu is done by COMPILING a probe with the project's own flags and
+      # reading `PPU Loading` back out of `fpc -vt`. There are three copies of
+      # sysutils.ppu (rtl, rtl-objpas, rtl-unicode), one per language mode, and
+      # picking the wrong one would silently describe a different build.
+      #
+      # The ratchet fails on growth of the refuted-authorisation set, on any move
+      # in a category, and on any disagreement between the two surfaces. Its
+      # current known-bad entry is Winapi.Messages, where the source reader says
+      # "unused" and the compiler's record holds two constants the tree needs.
+      - name: "group-A surface: source text vs the compiler's own .ppu"
+        shell: pwsh
+        run: |
+          python tools/f3_ppu_surface.py --self-test
+          python tools/f3_ppu_surface.py --ratchet
+
+      # -------------------------------------------------------------------------
+      # The two probes above are gates, and a gate is only as good as its
+      # ability to fail. F3-6 found three defects in PropRttiProbe that were all
+      # printing healthy numbers over input they had never examined -- the
+      # collection guard compared a 2-character substring against a 4-character
+      # literal and so could not increment, `ValueLastLine` fed the reader a
+      # truncated value that reads as SUCCESS, and item rows were attributed to
+      # the enclosing object. So this step breaks each of them on purpose and
+      # requires the probe to notice.
+      #
+      # It re-introduces one registry entry and one survey retirement too, and
+      # verifies every restore by MD5. It runs here, after the LCL is built,
+      # because two of the four injections need a rebuild -- and the harness
+      # ABORTS on a build failure rather than running a stale binary, which is
+      # the trap the F3-SVG plan records as its fourth instance.
+      - name: "the form and roadmap gates can actually fail (injection matrix)"
+        shell: pwsh
+        run: python tools/f3_probe_inject.py
 
   f3-form-ratchet:
     name: F3 form-conversion ratchet

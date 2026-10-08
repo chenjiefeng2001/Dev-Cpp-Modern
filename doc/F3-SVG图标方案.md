@@ -407,12 +407,12 @@ property Size: Integer read GetSize write SetSize default 32;   // 像素边长
 | 1 数据抽取 | ✅ 完成并校验（**双 DFM 覆盖**：`DataFrm` + `NewProjectFrm`，6 列表 / 117 图标，重名即拒） |
 | 2 `TLclSvgImageList` 控件 | ✅ **编译 + 运行验证通过**；7 个 `EZeroDivide` 已修复，走控件 **116/116、`fail=0`**（§11.4b），`EXPECTED_MAX_FAILURES` 收紧到 0 |
 | 3 DFM 转换规则 | ✅ **完成，并由 §12.7 的探针首次真正加载验证**（6 列表 / 117 图标 / 边长与像素全对） |
-| 4 接入 13 个窗体 | ✅ **消费端完成**：15 个 LFM + 68 处绑定全部解析。**生产端 2/3 完成**：`DataFrm` 的 5 个列表 + `NewProjectFrm` 的 1 个列表均已出片段；`Tools/Packman/Main`（无 LCL 对应控件）被**明确拒绝**而非静默放行 |
+| 4 接入 14 个窗体 | ✅ **消费端完成**：15 个 LFM + 68 处绑定全部解析。**生产端 2/3 完成**（消费端已解锁 14 个，见 §17）：`DataFrm` 的 5 个列表 + `NewProjectFrm` 的 1 个列表均已出片段；`Tools/Packman/Main`（无 LCL 对应控件）被**明确拒绝**而非静默放行 |
 
 步骤 3/4 已纯代码完成并经真实 LCL 运行验证（§12）。**当前剩余项**（均不阻塞已交付部分）：
 
 1. **`Tools/Packman/Main`**：需要 `TSVGIconImageCollection` / `TSVGIconVirtualImageList` 的 LCL 对应控件（18 处集合）。
-2. **消费端 15 个 LFM 本身尚未被 `lazbuild` 加载**：它们含大量 vendored / 自有控件（`TCompOptionsFrame`、`TSynCppSyn`、`TClassBrowser` 等），受 C 批阻塞；已验证的只是 SVG 列表片段这一层。
+2. ~~**消费端 15 个 LFM 本身尚未被 `lazbuild` 加载**~~ **已关闭（§16/§17）**：SVG 消费端中**无阻塞控件**的 14 个窗体现在全部通过真实 LCL 读取器加载（`FormLfmProbe` 14/14）。仍被挡着的是 `main.dfm`（8 个 vendored/external 阻断项，按 §13.3 结论**排除出近期排期**）与 `DataFrm.dfm`（`TSynRCSyn` + `TImageCollection`，§17.2）。**已加载 ≠ 已可用**：窗体的 Pascal 单元能否对 LCL 编译仍待 FPC 验证。
 3. §7 尚未验证的三项（主题改色、高 DPI 光栅化质量）是质量问题。
 
 > 原第 1 项「抽取器覆盖面」已由 §14.8 关闭：`f3_svg_extract.py` 现读双 DFM，`NewProjectFrm` 的 `SVGIconImageList`（1 条 `Empty`，37 px）已入 `SvgData`，该窗体的片段随之产出。
@@ -927,3 +927,1153 @@ FAIL TForm.Scaled is registered to be skipped but the class DOES have it
 * **`OnInfoTip` 是功能缺失**，不是排版差异：图标浏览器的气泡提示需要单独移植。
 * **`TSynGutter.Font` 是视觉差异**：LCL gutter 跟随编辑器字体。
 * 门禁全部通过**只说明这 13 个窗体的转换产物可加载**，不说明窗体**可用**：处理器是否与移植后的单元对得上，由 FPC 编译器在单元编译时检查。
+
+## 17. Sprint F3-6：退役 vendored `TSynCppSyn`，`EditorOptFrm` 解锁（2026-10-07）
+
+§16 结束时，SVG 消费端只剩两个窗体被挡着：`EditorOptFrm`（`TSynCppSyn`）与
+`main.dfm`（8 个阻断项）。本节记录退役前者之后发生的事。**结论先行：14 个
+CLEARED 窗体现在全部通过真实 LCL 读取器加载**；而通往这个结论的路上，先要修掉
+**审计工具自身三个正在输出健康数字的缺陷**，否则"0 处被拒"这个结论从一开始就不成立。
+
+| 探针 / 门禁 | 结果 |
+|---|---|
+| `f3_load_routes.py` | CLEARED **13 → 14**，仍阻断 **2 → 1**（只剩 `main.dfm`） |
+| `FormLfmProbe` | **`Streamed forms: 14 of 14`**，`Ancestor fallbacks : 0` |
+| `PropRttiProbe` | **`refused by the reader : 0`**（15 个文件 / 4318 条归属属性） |
+| `f3_form_ratchet.py` | 可转换数 **44 → 45**，基线已显式写入 |
+| `f3_probe_inject.py`（新增） | 4 处注入**全部被拒**，4 个文件按 MD5 逐一还原 |
+
+### 17.1 一个"这个类不存在"的假象，以及它为什么出现
+
+第一件事是复核 §13.3 声称的"REPLACE 级：LCL 自带 `TSynCPPSyn`"。按类名去找，
+在 Lazarus 里**什么都找不到**：
+
+```
+components/synedit\*.pas    ->  没有
+components\synedit\**\*.pas ->  没有
+```
+
+**原因不是 LCL 没有这个类，而是它的源文件不叫 `.pas`。** Lazarus 把 SynEdit
+的高亮器写成 **`.pp`**：
+
+```
+components\synedit\synhighlightercpp.pp                            <- 源文件在这里
+components\synedit\units\x86_64-win64\win32\synhighlightercpp.ppu  <- 已编译
+```
+
+类名两棵树完全一致：vendored 侧 `TSynCppSyn = class(TSynCustomHighlighter)`
+（`Source/VCL/SynEdit/Source/SynHighlighterCpp.pas`，211 行），LCL 侧同名同基类。
+基类 `TSynCustomHighlighter` 在**两棵树里都派生自 `TComponent`**——这正是读取器
+能够 own 并流式化一个非可视组件的前提。
+
+> **为什么这条值得单独写**：本项目此前已经吃过两次"按名字找类，找不到就断言不存在"
+> 的亏（`TVirtualImage`、`TToolButton`）。这一次它不是记错，而是**检索式本身错了**。
+> 因此 `f3_form_survey.py` 里的新集合**不接受名字匹配**，注释里写明了两侧各自的
+> 证据位置（源码 `.pp` + 已编译 `.ppu`）。
+
+### 17.2 顺带更正本文档此前的一处断言：`TSynRCSyn` 在 LCL 里**不存在**
+
+§12/§13 写过"LCL SynEdit 自带 `TSynCPPSyn` / `TSynRCSyn` / `TSynPASyn`"。
+逐个核实后：
+
+| 类 | LCL 4.4 | 结论 |
+|---|---|---|
+| `TSynCppSyn` | 有（`synhighlightercpp.pp`） | 可退役 |
+| `TSynPASyn` | 有（`synhighlighterpas.pp`） | — |
+| `TSynRCSyn` | **无**。`components/synedit` 下既无源码也无已编译单元 | **不得退役** |
+
+**若照原文整条采信**，`DataFrm.dfm`（唯一使用 `TSynRCSyn` 的窗体）会被一并
+解锁，然后在读取器上死于 `Class TSynRCSyn not found`——即 §13.4 所说的
+"生产端缺口"。因此 `TSynRCSyn` 被**刻意留在阻断集合里**，`DataFrm` 至今仍被
+`TSynRCSyn` + `TImageCollection` + SVG 列表三者共同挡着。
+
+**这条也说明为什么"一个清单条目"必须逐个核实**：`TSynRCSyn` 与 `TSynCppSyn`
+名字前缀相同、用法相同（都是 `object x: TSyn…Syn`）、都来自 vendored SynEdit。
+凭"同一批"的印象一并处理，就会把一个不存在的类登记成可用的。
+
+### 17.3 两份清单不是同一类东西（`WIDGETSET` vs `LCL_SUPPLIED`）
+
+新增集合**没有**并入既有的 `WIDGETSET`，因为两者回答的是不同问题：
+
+| 集合 | 回答的问题 | 判据 |
+|---|---|---|
+| `WIDGETSET` | 这个控件**能被放进窗体**吗 | 它是不是可摆放的 TControl |
+| `LCL_SUPPLIED` | LCL 有没有**同名**类、读取器能流式化吗 | 类名解析 + 基类是 TComponent |
+
+高亮器**不能被摆放**：它派生自 `TComponent`，没有 `Left`/`Top`，作为子控件毫无意义。
+把它塞进 `WIDGETSET` 等于为了让计数好看而对类本身做出**错误的断言**。
+
+`LCL_SUPPLIED` 当前只有一个成员 `TSynCppSyn`，并附一条**明确不声称**的内容：
+
+> 两棵树的 token 枚举**并不相同**。vendored 的 `TtkTokenKind` 在 LCL 的 11 个值之外
+> 还有 `tkChar` / `tkFloat` / `tkHex` / `tkOctal`。因此**照原样针对 Delphi 枚举写的
+> 高亮器代码不会原样重编译通过**。这是 **Pascal 单元**（`EditorOptFrm.pas`）的问题，
+> 属于 F2 的 SynEdit 移植，不属于窗体问题。此条目只声称"类名能解析、能流式化"，
+> 而这正是解锁窗体所需的那一条。
+
+### 17.4 顺带补上的三个控件类
+
+`EditorOptFrm` 是第一个带 `TSynStringGrid` / `TColorBox` / `TTrackBar` 的 CLEARED
+窗体，此前从未向探针的类注册表提过要求。三个都是 LCL 原生类，**按声明核实**
+而非按名字推断：
+
+| 类 | 位置 | 基类 | 出现次数 |
+|---|---|---|---|
+| `TTrackBar` | `lcl/comctrls.pp` | `TCustomTrackBar` | 2 |
+| `TColorBox` | `lcl/colorbox.pas` | `TCustomColorBox` | 5 |
+| `TStringGrid` | `lcl/grids.pp` | `TCustomStringGrid` | 1 |
+
+探针注册的是**真实类**而非桩——`EditorOptFrm` 在这三者上都赋了真实属性。
+
+### 17.5 六条新的属性跳过登记，以及它们各自的代价
+
+沿用 §16.3 的纪律：**用 LCL 自己的 `RegisterPropertyToSkip` 按类登记，而不是在
+转换器里删掉**。6 条新增（登记表共 19 条），逐条附实测理由：
+
+| 类.属性 | 站点 | 代价 |
+|---|---|---|
+| `TSynCppSyn.Options` | 3 | **能力缺失**。`Options` 是第三方补丁（vendored 源码里明写 `// <-- Codehunter patch`），`TSynEditHighlighterOptions` 这个类型在 vendored 树里再无第二处、在 LCL 里根本没有。三个值全是关闭态（`AutoDetectEnabled=False` / `AutoDetectLineLimit=0` / `Visible=False`），故"没有开着却被忽略的功能"。**一条登记覆盖三条**，因为读取器在首个缺失段放弃整条路径 |
+| `TSynEdit.AddedKeystrokes` / `RemovedKeystrokes` | 4 个集合块 | **功能缺失，且代价可量化**。这是 VCL 的按键命令绑定表：把 F1 改绑到上下文帮助（5 处）、再加 Ctrl+F1（16496）。两棵树**任何一个 LCL 单元都没有这两个属性**，所以没有可改名的对应物——不是换个名字，是没有。**边界已实测**：这两个名字在全仓只出现在 **2 个 DFM**（`EditorOptFrm`、`CPUFrm`）、**0 行 Pascal**，因此无代码读写，丢掉的是设计期默认值 |
+| `TSynGutter.BorderStyle` | 3 | **无代价**。LCL 的 `TSynGutter` 没有 `BorderStyle`，而三处全是 `gbsNone`（不画边框）——与 LCL 的画法一致。跳过是因为**名字不存在**，不是因为意图有别 |
+| `TSynGutter.GradientEndColor` | 1 | **视觉差异**。LCL gutter 平涂，无渐变；VCL 原本向该颜色混合 |
+| `TSynEdit.ScrollHintFormat` | 1 | VCL 专属滚动条提示方向，LCL 无对应物 |
+
+> **只登记集合本身，不登记内部的 `Command` / `ShortCut`**：`AddedKeystrokes` 的
+> 跳过会让读取器 `SkipValue` 并放弃整条路径，内部行根本不会成为属性。**这是
+> 实测出来的，不是推断的**——先按这样只登记集合，14/14 通过；再把 `Command` /
+> `ShortCut` 也登记上去，就成了 §16.4 所说的"过宽登记"，而探针的登记表审计正是
+> 为抓这一类而存在。
+
+### 17.6 本批最重要的产出：**审计工具自己在输出健康数字**
+
+三个缺陷，形态与本项目此前记录的三次同类（"断言覆盖不到未走的路径"），但**这次是被
+一个"数"引出来的，不是被一个失败引出来的**。
+
+**① 集合守卫比较了 2 个字符和 4 个字符的字面量。**
+
+```pascal
+// 原始（永远为假）
+if (Length(Trimmed) > 2) and (Copy(Trimmed, Length(Trimmed) - 1, 2) = ' = <') then
+// 正确（字面量 ' = <' 共 4 个字符）
+if (Length(Trimmed) > 4) and (Copy(Trimmed, Length(Trimmed) - 3, 4) = ' = <') then
+```
+
+`Copy` 取 2 字符，与 4 字符字面量**恒不相等**，于是 `CollectionBlocks` **在结构上
+无法自增**。它在真实含有 **5 个**集合块的语料上打印 `0`。
+
+**② `ValueLastLine` 不认识 `<`，于是"被拒"变成了"通过"。**
+
+守卫失效后，集合开括号落到属性分支，而 `ValueLastLine` 只建模 `(`、`{`、`+`。
+于是读取器收到的是：
+
+```
+object Probe1: TSynEdit
+  RemovedKeystrokes = <
+end
+```
+
+**一个未闭合的集合不会报拒绝，它报成功**——因为这个属性根本没有以属性的形式
+到达读取器。实测后果：`TSynEdit.RemovedKeystrokes` 被打印为 `reader accepts`，
+**而这个属性在 LCL 的任何单元里都没有声明**（`components/synedit/*.p*` 全树 0 命中）。
+
+> **一个把自己没送出去的东西报成"没问题"的审计，比一个什么都不报的审计更糟。**
+> 而发现它的不是任何一个计数，是一句追问：**"LCL 明显没有这个属性，为什么它
+> 回来了 accepted？"**
+
+**③ 内部 `item` 行被归属到了外层对象。**
+
+只跳过开括号一行，`item` 行的 `Command` / `ShortCut` 就按当前深度落到了外层
+`TSynEdit` 头上，于是探针报出两条**并不存在**的拒绝（各 7 处站点）——并且会把人
+引向两条**给 `TSynEdit` 加上它从来没有过的属性**的登记。这正是本文件开头写的
+"把载荷归属到错误的类，会得到一个自信的错误答案"，只是从另一条路走进来。
+
+修复方式不是"再加两个登记"，而是让扫描器**拒绝归属**它不建模的集合内容
+（`CollectAngle` 状态），并把 `item` 行单独计数。
+
+**④ 修 ① ③ 时我自己引入的第四个缺陷**，同样被注入矩阵抓到：`AngleDelta` 的
+守卫 `(I + 1 <= Length(S)) and not (...)` 在 `<` 位于**行末**时为假，于是开括号
+从未被计入，集合状态被置 0。**一个字符的边界情况，让刚修好的缺陷原样回来。**
+
+### 17.7 反空转验证，以及"没重建就跑"这个老陷阱
+
+新增 `tools/f3_probe_inject.py`：把上述每一处缺陷**逐个还原**，要求探针必须发现。
+
+| 注入 | 断言 | 结果 |
+|---|---|---|
+| 集合守卫退回 2 字符 | `CollectionBlocks` 掉回 0 | ✅ 被拒 |
+| `AngleDelta` 丢失行末 `<` | 内部属性重新被归属给 `TSynEdit` | ✅ 被拒 |
+| 抽掉一条跳过登记 | `FormLfmProbe` 不再 14/14 | ✅ 被拒 |
+| 从 `LCL_SUPPLIED` 抽掉 `TSynCppSyn` | 可转换数 45 → 44 | ✅ 被拒 |
+
+四处全部按 **MD5 逐字节还原**。
+
+> **工具自身也踩了一次"没重建就跑"**：首次运行时，`build_form_probe.ps1` 因注入
+> 后数组越界而编译失败，而脚本继续去跑了**上一个**可执行文件——它通过了，于是
+> 一个坏门禁被记成了好门禁。这正是 F3-SVG 方案记录的第四次"旧二进制"。因此
+> **构建失败直接中止**，绝不接着跑；还原同样以 MD5 校验，而不是假定写入成功。
+>
+> **第二次是同一个陷阱的另一端，而且是自己造成的**：注入需要重建（改了源却不重建，量到的就是上一个二进制），但**还原之后没有任何人重建**。于是脚本以「4/4 被拒、
+> 文件已还原」退出 0，却把 `FormLfmProbe.exe` / `PropRttiProbe.exe` 留在了**由被
+> 注入的源编译出来的状态**。随后在干净树上跑探针，两个都失败了——读起来完全像是
+> 本工具造成的回归。现已在退出前强制重建，并在注入矩阵之后复跑两个探针，确认
+> 14/14 与 0 被拒。
+>
+> > **两次都是「旧二进制」，方向相反**：一次是构建失败后仍然运行，另一次是构建
+> > 成功、但构建的是**错的源**。**一个以反空转为职责的工具，不能自己成为那个
+> > 空转的来源**——这是本节唯一一处由本工具制造、而不是被本工具抓住的缺陷。
+
+### 17.8 顺带修掉一处"永远不可能通过"的 CI 断言
+
+CI 里 `RasterProbe` 那一步断言 `'rendered ok : 110'`，而探针打印的是**列对齐**的：
+
+```
+rendered ok      : 110          <- 冒号前 6 个空格
+parse/raise fail : 7
+```
+
+在 `-notmatch` 下，该断言**每次运行都会 throw**，这个作业从来不可能变绿。
+本地双向实测：字面量 `-notmatch` 为 `True`，`'rendered ok\s+:\s*110'` 匹配。
+
+> **一个永远通不过的检查，和一个永远不会失败的检查，是同一种缺陷**——两者都
+> 教会读者忽略这个徽章。已改为空白容忍，并顺带补上第三条断言（必须恰好 7 个
+> 零弦载荷失败），把原来只钉住一半的不变量补全。
+
+### 17.9 本批的诚实边界
+
+* **`EditorOptFrm` 的 LFM 能加载，它的 Pascal 单元还不能对 LCL 编译。** 门禁全绿
+  只说明**转换产物可加载**，不说明窗体**可用**（§16.5 的边界原样成立）。具体的
+  障碍在 §17.3 已列出（token 枚举缺 4 个值），属于 F2 的 SynEdit 移植。
+* **集合块与 `item` 行不由 `PropRttiProbe` 归属**，因此该探针**无法验证**它们。
+  它们的权威是 `FormLfmProbe`：它直接流式化真实文件，读取器处理不了的集合会在
+  那里带着读取器自己的消息失败（实测 14/14 通过）。计数照旧打印，只是从"硬失败"
+  改为"报告"——否则这扇门将永远无法变红，而**永远变红的门禁等于没有门禁**。
+* **`TSynGutter.Font` 的视觉差异仍未解决**：LCL gutter 无字体，跟随
+  `TSynEdit.Font`，而驱动它的 `EditorOptFrm.pas:249-251` 属 SynEdit 移植。
+* **本批没有动 Delphi 构建**：改动集中在 `Source/Fpc/`（`qa_check` 已豁免该目录）
+  与 `Tests/FpcCoreTests/`。本机无 Delphi，`devcpp.exe` 仍未编译验证。
+* **一处我自己差点写进文档的错误结论**：为核对 API 时用了**大小写敏感**的检索去查
+  `WhiteSpaceAttribute`，全树 0 命中，几乎被记成"LCL 缺这个属性"。真实拼写是
+  `WhitespaceAttribute`（小写 `s`），而 Pascal 标识符**大小写不敏感**，两棵树都声明了它。
+  这是本项目记录过的"测量结果被重新推导"的又一例，形态是**检索式**而非结论。
+
+### 17.10 复审：本批自身，以及它顺手暴露的三处漂移
+
+F3-6 交付后做了一次全量复审（18 门禁 + 8 探针 + 注入矩阵全绿），并**专门回头审本批
+自己改过的东西**。三处发现，两处当场修，一处列为下一步。
+
+#### ① 调查询的"custom"标记与逐窗体判定不是同一口径（当场修）
+
+`f3_form_survey.py` 的逐窗体判定走 `survey()`，本批已把 `LCL_SUPPLIED` 加进去；
+但同一文件末尾的 control type roll-up 仍只查 `WIDGETSET`。同一次运行里，
+`TSynCppSyn` 在逐窗体一栏是 OK、在 roll-up 一栏是 `<-- custom`。
+
+顺带查出**一个更早就存在、规模更大的同类问题**：`survey()` 有意**排除根类**
+（`comps[1:]`，因为窗体类是代码问题、不是窗体转换问题），而 roll-up 遍历的是
+**全部**类型。于是**每个窗体自己的类**都被标成 custom。实测：
+
+| | 修复前 | 修复后 |
+|---|---|---|
+| roll-up 中标 `<-- custom` 的类型 | **62** | **16** |
+| 其中真正阻断过窗体的类型 | 16 | 16 |
+
+16 与逐窗体判定逐一对上（`TCompOptionsFrame` / `TVirtualImage` / `TImageCollection` /
+`TSVGIconImageList` / `TSynRCSyn` / `TControlBar` / `TdevFileMonitor` / `TClassBrowser` /
+`TCppParser` / `TCodeCompletion` / `TdevShortcuts` / `TCppPreprocessor` / `TCppTokenizer` /
+`TVirtualImageList` / `TSVGIconImageCollection` / `TSVGIconVirtualImageList`）。
+
+修法不是"再查两个集合"，而是**标记直接从判定结果读**（累积 `blocking_types`），
+不再重算——这与 F1-m-0 那次"`qa_check` 直接 import `mainform_baseline`"是同一条纪律。
+
+> 这是本项目**第三次**"上报口径 ≠ 检查口径"（F1-g 的 `uses main` 计数、F1-m-0 的
+> 第四项、本次）。三次的形状都是**同一文件内两处各自算同一个量**。
+
+#### ② `f3_external_matrix.py` 跑 274 秒（当场修，137×）
+
+实测该文件耗时 **274.2 秒**。定位：`find_external_types` 对**每一次控件出现**都调
+`declared(t)`，而它每次都用一条正则扫**全部 491 个单元**：
+
+```
+1801 次控件出现 × 491 个单元 = 884,291 次全文件正则扫描
+```
+
+修法：把 `^\s*NAME\s*=\s*class` 一次性收成集合，之后是字典查找。
+
+| | 修复前 | 修复后 |
+|---|---|---|
+| 耗时 | **274.2 s** | **2.0 s** |
+| 输出 | — | **逐字节相同**（MD5 比对） |
+
+两点必须说清楚：
+
+* **输出逐字节相同**是硬证据，已存 MD5 比对。加速悄悄改了答案，比慢更糟。
+* 谓词原本带 `re.IGNORECASE`。**这个不能丢**——Pascal 标识符大小写不敏感，树上确实
+  存在 `TdmMain` 与其使用处 `dmMain` 并存的情形；改成大小写敏感的集合会把这类类型
+  重新判成 "external"，**凭空造出一个不存在的阻断项**。因此集合的键统一小写。
+
+顺带把 `usage_of` 的重复 `splitlines()` 提出来（语义逐字不变），但**这不是瓶颈**——
+第一次我改错了地方：先怀疑 `usage_of`，改完仍是 330 秒，才回头去测真正的时间分布。
+**"优化前先测"这条纪律在性能问题上同样成立。**
+
+#### ③ 两个工具对"什么还挡着"给出不同答案（**未修，列为下一步**）
+
+`f3_load_routes.py` 与 `f3_batch_plan.py` 都在回答"哪些窗体还挡着"，但：
+
+* `f3_load_routes.py` 有一份 `RETIRED = {TSVGIconImageList, TVirtualImage,
+  TCompOptionsList, TCompOptionsFrame}`，并**按"只对已产出 LFM 的窗体生效"**做减法
+  （注释写明：全局减法会抹掉 `Packman/Main` 这类真实的生产端缺口）。
+* `f3_batch_plan.py` **没有**任何退役减法，直接用 `survey()` 的原始判定。
+
+于是同一棵树，`LangFrm` / `EnviroFrm` 在 route 工具里是 **CLEARED**（`TVirtualImage`
+已于 F3-3 退役），在 batch 工具里却是 **BATCH B / 被 `TVirtualImage` 挡住**。
+
+而方案文档 §"最终批次划分"那张表写的是 **B = 0**——它早于 F3-3/F3-4，**是一张
+2026-10-06 的快照，但表头没有日期**，读起来像现状。
+
+> **这正是本项目反复记录的那一类**："一处定义，杜绝'这个工具加了那个忘了'"。
+> 退役清单目前有两份语义不同的副本。**正确修法**是把退役集合连同**每条的理由**放进
+> `f3_form_survey.py` 作为唯一事实源，`f3_load_routes.py` 改为 import 它但**保留自己
+> 的作用域限定**（只对已产出 LFM 的窗体生效），`f3_batch_plan.py` 同样 import。
+> 详见下一步方案。
+
+## 18. F3-7 的第一个结论是**否定**的：没有"便宜的窗体"可编译
+
+§17 的下一步写的是"从最便宜的窗体起步，把'已转换'变成'可编译'"。**动手前先量，
+量出来的结论推翻了这条排序本身。**
+
+新增 `tools/f3_compile_cost.py`（纯测量，不是门禁），按**自研单元的传递 `uses` 闭包**
+排序，而不是按控件数。
+
+#### 18.1 控件数不是编译成本
+
+| 窗体 | 控件 | 自研单元 | 自研 LOC |
+|---|---|---|---|
+| `IconFrm` | **6** | **81** | **49,223** |
+| `ParamsFrm` | **8** | **81** | **49,223** |
+| `EditorOptFrm` | **124** | **81** | **49,223** |
+
+控件数从 6 到 124 相差 20 倍，**闭包完全相同**。§17 建议的"从 `ParamsFrm`（8 个控件）
+起步"是错的——它是最便宜的**之一**，也是最贵的**之一**。
+
+> **这正是 §13.6 那句话的一个具体反例**："还有几个窗体被挡着"是情绪指标。
+> 同一个道理在这里叫：**"最便宜的窗体"和"最少控件的窗体"是两件事。**
+
+#### 18.2 成本下限的成因：一条链，与 27 个入口
+
+```
+IconFrm → devcfg → MainUi → main        （实测的最短 uses 路径）
+```
+
+`main.pas`（**7,785 行**）在**每一个** CLEARED 窗体的闭包里。而：
+
+* **全仓只有一个自研单元 `uses main`** —— `MainUi.pas`（这正是 F1 的成果）
+* **但 27 个单元 `uses MainUi`**
+
+即 `main.pas` 藏在 `MainUi` 的 27 路扇入之后。**反事实实测**：切断全部 27 条
+`→ MainUi` 边之后——
+
+| | 自研单元 | 最大自研 LOC | 到达 `main` 的窗体 |
+|---|---|---|---|
+| 基线 | **81**（13/13 完全一致） | **49,223** | **13 / 13** |
+| 只切 `devcfg → MainUi` | 81 | 49,223 | 13 / 13（**无变化**） |
+| 切断全部 27 条 `→ MainUi` | **42–44** | **27,647** | **0 / 13** |
+
+**下限是真实的、可减的，但减不动**——只切 `devcfg → MainUi` 这一条**完全不产生
+变化**，因为图是稠密的，`devcfg` 还有别的路走到 `MainUi`。
+
+#### 18.3 由此得到的那条**架构**结论
+
+> **反腐层在"引用"层面解耦了，在"编译"层面没有。**
+
+F1 用 13 个批次把 `MainForm.*` 降到 0，`uses main` 降到 0，`MainUi` 成为唯一宿主。
+这在**源码引用**上是彻底的。但 **`uses` 的 implementation 段仍然要求编译**，
+所以 27 个消费者单元**编译期**依然耦合到那个 7,785 行的上帝窗体。
+
+这不是 bug，是**架构的价码**，而且是这个价码第一次被量化：
+
+| 层次 | 状态 |
+|---|---|
+| 源码引用耦合 | ✅ 0（F1 的成果） |
+| **编译依赖耦合** | ❌ **27 个单元 → `MainUi` → `main.pas`** |
+
+#### 18.4 对 F3-7 的处置（这是一个**否定结果**，不是一个里程碑）
+
+原计划"编译一个窗体"**不成立为里程碑**：13 个窗体的成本下限都是同一个
+**81 单元 / 49,223 LOC** 的闭包，而它由 `main.pas` 决定。**要编译任何一个窗体，
+就得先编译 `main.pas`**——而 `main.pas` 正是 §13.3 已判定"排除出近期排期"的那一个
+（8 类阻断，8 换 1）。
+
+因此下一步**不是**"从便宜窗体起步"，而是**先把这个结论本身变成门禁**：
+
+1. **已完成**：`tools/f3_compile_cost_baseline.json` 记录当前闭包下限
+   （**81 单元 / 49,223 LOC / 13-of-13 到达 `main`**）；`--ratchet` 下限上升即失败，
+   下降必须 `--write-baseline` 显式确认（与 `f3_form_ratchet` 同一纪律）。已接入 CI，
+   并由 `f3_probe_inject.py` 注入一条 `uses` 边验证它**真的会失败**。
+2. **它同时是 F3/F4 的排期输入**：这不是一个工具，是一份"编译一个窗体到底要做什么"
+   的账单。任何人再问"下一步做什么"，答案在这里，不在估计里。
+3. **若要真正降低下限**，唯一低杠杆切口是把门面**按层拆开**——让纯配置/领域单元
+   只依赖一个不含 `main` 的窄门面。实测把 27 条 `→ MainUi` 全切可降到
+   **42–44 单元 / 27,647 LOC、0/13 到达 `main`**，但那 27 条边**正是 F1 的成果**
+   （消费者只经门面、不碰上帝窗体）。**这是设计决策，不是重构，应单独发一票。**
+
+#### 18.5 本节抓到的两处自身缺陷
+
+**① 工具自身的名字解析踩了同一个坑（而这个坑本项目已经记录过）。**
+`unit_path` 原先用 `setdefault` 按 `rglob` 顺序建表，于是
+`aboutfrm` 解析到了 `Source/Tools/PackMaker/Aboutfrm.pas`——**和
+`Source/AboutFrm.pas` 同名但完全不同的两个单元**。后果不是数字偏一点，而是
+**自信地报错方向**：量出 `AboutFrm` 闭包只有 1 个单元 / 48 行（走进了 PackMaker 的
+无关窗体），于是它成了"最便宜的窗体"。
+
+实测**全仓 8 个单元名歧义**：`aboutfrm` / `bzip2` / `config` / `frmmain` /
+`libtar` / `main` / `uhighlighterprocs` / `umain`。其中 `main` 正是方案文档早就警告过
+的"`Source/main.pas`、`Tools/PackMaker/main.pas`、`Tools/Packman/Main.pas` 三个不同
+文件"。现已改为**显式报告歧义**并打印两边，而不是静默取一个。
+
+**② `strip_lines` 的返回契约没有文档，猜了两次才对。**
+第一版按 `(list, x)` 解包、第二版按 `list[str]` 用，都崩在第一个文件上；实测才发现
+返回的是 `list[(str, bool)]`。两次都是**崩溃**而不是静默出错——这算是运气好，
+但"契约要写在读者会看到的地方"这条已经补进注释。
+
+> 这两处都不影响 §18.1–18.3 的结论（那些数字是在修复之后重测的），但它们各自
+> 都曾经**制造**过一个看起来合理的错误结论。
+
+#### 18.6 注入矩阵当场抓到本节自己的**第三处**工具缺陷
+
+把 §18.4 的棘轮接入 `tools/f3_probe_inject.py`（注入一条 `uses` 边，要求闭包增长
+被拒）之后，**第一轮就被判 MISS**——棘轮没抓到。查下来是工具自身的三个缺陷：
+
+**① 分词器把带点的单元名劈开了。** `[A-Za-z_]\w*` 会把 `Core.Events` 切成 `Core`
+和 `Events` 两个 token，两者都解析不到任何单元。症状**不是一个明显的错误**，而是
+一列 `absent: 33` 的、看起来很合理的名字，以及**闭包明明加了一条边却不变**。改成
+`[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*` 后，闭包从 **64 → 81 单元、40,838 → 49,223
+LOC**——**17 个单元一直被漏掉**。
+
+> **本节所有数字都是在修好之后重测的。** 但值得单独记的是：**没有任何一个数字自己
+> 暴露了问题**。表格看着合理，是"注入矩阵报了一个 MISS"把它抓出来的——§17.7 那条
+> 纪律的第四次兑现。
+
+**② 前两次注入都选错了依赖，因此"棘轮抓不到"是假警报。**
+`FileAssocs`、`Core.Events` **都已经在闭包里**——闭包饱和到大多数新增都不可见。
+只有取**真正在闭包之外**的单元（最终选 `Theme`：一个项目类型单元去依赖 UI 主题，
+本身就不该发生）才能测到棘轮。
+
+> **一条容易被误读的结论**：若第三次仍选错，会得到"棘轮抓不到"的印象，然后可能
+> 直接把这个棘轮删掉。**门禁没有被证明无效，它是被用错了方式测的**——而 `MISSED`
+> 会被如实打印、不会被悄悄吞掉，正是这里的关键。
+
+**③ 第一次注入的锚点是 `uses`，而 `ProjectTypes.pas` 里有两处**（interface 与
+implementation）。`apply()` 拒绝执行，而不是随便挑一处——**这个拒绝是对的**，也正是
+本文件可以相信的原因：陈旧模式是**硬停止**，不是空操作。
+
+## 19. F3-7 第二步：用原生 LCL `TSynRCSyn` 解开 `DataFrm` 的高亮器阻断（2026-10-07）
+
+§18 的结论是"没有便宜的窗体"，并且把编译下限变成门禁。但它同时留下一个**已经量好、
+只差决定**的问题：`DataFrm.pas:26` 的 `uses` 里有 `SynHighlighterRC`，LCL 4.4 **没有**
+这个单元。本文是那个决定，以及它的运行时证据。
+
+### 19.1 三个选项，以及为什么只有第三个能长期成立
+
+| 选项 | 代价 | 结论 |
+| --- | --- | --- |
+| **移植** vendored `SynHighlighterRC.pas` | 类声明 62 行，**完整单元 537 行**；且它是 Delphi SynEdit 的代码 | ❌ |
+| 退化为 `TSynAnySyn` 空壳 | 语法高亮整体消失（属"功能损失"） | ❌ |
+| **写原生 LCL 实现** | 735 行，只依赖 LCL 自己的 `SynEditHighlighter` | ✅ |
+
+移植的代价是原生的**两倍**，而且那 537 行里有相当一部分依赖 Delphi SynEdit 的内部
+约定——LCL 侧没有对应物。原生实现是唯一"**工作量更小且不背 Delphi 包袱**"的选项。
+
+> 这里的"537 行"是 `f3_vendored_equivalence.py` 修好之后才拿到的数字。该工具此前
+> 报的是类声明的 62 行——**两个数字都不是错的**，但混用会让人以为移植只要 62 行。
+> 工具现在同时打印两者，并标注哪个是移植成本。
+
+**类名保留为 `TSynRCSyn`**：`DataFrm.dfm` 写的就是 `object Res: TSynRCSyn`，
+所以**不需要转换器 rename 规则、不需要改任何 `.dfm`**，只有单元位置变了。
+
+**它不是"声明了没人用"的类**：`Source/DataFrm.pas:42` 声明 `Res: TSynRCSyn`，
+`GetHighlighter`（:217-223）对任何 `.rc` 文件返回它，`UpdateHighlighter`（:197-206）
+还会赋值 8 个 published 属性。
+
+### 19.2 关键事实核对：LCL 确实没有 `synhighlighterrc`
+
+`17.2` 曾断言它在 LCL 里不存在，那一节是**对的**，但当时只查了 `components/synedit/*.pas`。
+本次连**已编译产物**一起核对：
+
+```
+components\synedit\synhighlightercpp.pp   有 TSynCppSyn
+components\synedit\synhighlighterpas.pp   有 TSynPASyn
+components\synedit\synhighlighterrc.*     不存在
+units\x86_64-win64\win32\synhighlighterrc.ppu   不存在
+```
+
+> 注意 `.pp` 扩展名：`17.1` 记录了"只搜 `*.pas` 会以为 LCL 没有 `TSynCppSyn`"这个
+> 同款陷阱。这次连 `*.pp` 和 `.ppu` 一起查，就是为了不重复它。
+
+### 19.3 运行时证据，以及"能加载"这个弱主张为什么不够
+
+`Tests/FpcCoreTests/syn/SynRcProbe.lpr`（39 项断言）**不是**"构造函数没崩"级别的检查：
+
+- 真实 `.rc` 文本 → **54 个 token、7 种不同 kind**
+  （`directive comment identifier space keyword number string`）。
+  **均匀返回 `tkUnknown` 的空壳做不到这一点**，这是本探针存在的理由。
+- 跨行 `/* ... */`、`//` 到行尾、裸 `/` 是符号而非注释、十六进制、十进制后接字母、
+  **双引号转义 `"a""b"` 是单个字符串**、指令在字符串前停止、
+  `NAME { "res\name.rc" }` 是**单个** identifier。
+- 8 个 published 属性**可赋值**。
+
+### 19.4 探针自己抓到的四个缺陷（以及三个"断言写反了"）
+
+这一节记录的是**探针的错误**，因为它们比高亮器的错误更值得留档——一个只会报健康的
+探针比没有探针更糟。
+
+1. **`SYN_ATTR_DIRECTIVE` 从 `GetDefaultAttribute` 里漏掉了。**
+   8 个属性全部"可赋值"的检查**照样通过**，而 `DirecAttri` 对基于索引的查找
+   永远返回 `nil`。也就是说：该属性可赋值、已发布、`UpdateHighlighter` 也在拷贝，
+   **却在任何非 `GetTokenAttribute` 的路径上从未被使用**。
+   > 教训：**"属性存在"和"属性可达"是两件事**，只有后者的检查才有效。已补 9b 项断言。
+
+2. **自测的两条断言是**反**的。** 原写法 `(Length(Kinds) = 0) or (AllUnknown = 0)`，
+   对一个产出 4001 个 `tkUnknown` 的坏高亮器**判为失败**——而" runaway guard 触发"
+   恰恰是**期望结果**。另一条名为"空 token 流不被静默接受"、实际断言
+   `Length(Kinds) = 0`，与自己的名字相反。已重写为"坏高亮器必须**不匹配**真实期望"，
+   并把检查名改成实际发生的事（该 stub `GetEol` 恒为 `False`，永远不是空流）。
+
+3. **自测缺少反空洞性检查。** 只用坏高亮器构造的自测，**一个永远判失败的匹配器
+   也能通过**。因此**反空洞性用例放在坏用例之前**：真实高亮器必须满足标尺。
+
+4. **`GetDefaultAttribute` 是 `protected`。** 探针里直接调用得到
+   `no member`——**编译器是对的**。解法不是削弱检查，而是用 `TProbeRCSyn` 子类
+   合法暴露它。（顺带发现签名带 `Index: integer` 参数。）
+   > 副作用：`H.ClassName` 变成 `TProbeRCSyn`，所以"类名必须是 `TSynRCSyn`"改查
+   > `TSynRCSyn.ClassName` + `H is TSynRCSyn`。这是探针脚手架造成的**假失败**。
+
+**反空转**：手工删掉 `SYN_ATTR_DIRECTIVE` 分支后重建，探针
+`exit=1` 且精确报 `every SYN_ATTR_ index resolves to its attribute`；
+恢复后 `exit=0`。**门禁能失败，已验证。**
+
+### 19.5 两个高亮器本身的行为修正
+
+| 缺陷 | 症状 | 修正 |
+| --- | --- | --- |
+| `DoNext` 到达行尾未产出 token 时不置 `tkNull` | 块注释吃到行尾后 `tkComment` **无限重复**（探针以 4001 token 抓出） | 行尾显式发布 `tkNull` |
+| 探针每行调 `ResetRange` | 跨行块注释状态被抹掉 | `ResetRange` 只在整段文本前调一次——它属于**重扫**，不属于线性遍历 |
+| `"a""b"` 被切成两个字符串 | RC 里带转义引号的 caption 全错 | 双引号按转义处理，**整串一个 token** |
+| `NAME { ... }` 要求 `{` 紧跟标识符 | 真实文件里 `IDB_ABOUT { "res\about.rc" }` 有空格，于是被切成 **7** 个 token | 允许并吞掉中间空白 |
+
+> 三条**探针期望**也曾经写错（把 bug 编码成了期望），已更正并注明原因：
+> 跨行注释的行首空格**在**注释内；指令 token **含**其后空白；`SetLine` 收到的行
+> **不含行尾符**，所以 token 文本里没有 `#13#10`。
+> **一个把当前输出抄下来的期望，等于把 bug 抄进期望。**
+
+### 19.6 编译下限基线**上移**了，这是正确的
+
+原生单元进入了 `DataFrm` 的闭包，`f3_compile_cost.py --ratchet` 如实报出增长：
+
+```
+max_own_units   81 -> 82
+max_own_loc     49,223 -> 49,959
+```
+
+这**不是回归，而是本次交付物本身**：735 行换来一个原本必须移植 537 行 Delphi 代码
+才能得到的类。它是 `--write-baseline` **显式**记录的，不是自动接受的——
+§18.4 那条纪律在这里第一次**因为成功而触发**。
+
+> 同时这恰好构成对 §18 结论的一次压力测试：`DataFrm` 的闭包变了，
+> 而 13-of-13 仍然全部到达 `main.pas`——**门面那条边没有被绕开**。
+
+### 19.7 `DataFrm` 仍然**未**解锁（诚实边界）
+
+解除高亮器阻断后，`DataFrm.dfm` 仍被 **`TImageCollection`（2 处）**与
+退役清单里的 `TSVGIconImageList` 阻挡。**本节不解锁任何窗体。**
+
+### 19.8 编译下限与门面的关系：**暂不反转 `MainUi`**
+
+§18.4 把"要不要切 27 条 `→ MainUi`"标为"应单独发一票"。这一节给出建议：
+
+**建议：先攻 `main.pas` 的 Pascal 侧可编译性，暂不反转门面。** 理由：
+
+1. 门面反转的收益（42–44 单元 / 27,647 LOC / 0-of-13 到 `main`）是**实测**的，
+   但它要付出 F1 刚建立的那 27 条边——**消费者只经门面、不碰上帝窗体**。
+2. `main.pas` 阻断是 **8 类换 1 个**（`TControlBar`、`TClassBrowser`、
+   `TCppParser`…），本质是**依赖收敛**，与门面方向无关。
+3. 因此门面反转是 `main.pas` **确实无法推进时的后备方案**，不是并行的第二件事。
+   并行做等于同时改两处耦合，而两处耦合的验证手段目前都还没有。
+
+`main.dfm`（565 控件 / 8 类）仍然延期：它只在 `main.pas` 可编译之后才有意义。
+
+## 20. F3-8：`main.pas` 的 37 个带点单元里，**13 个是真工作，22 个只是拼写**（2026-10-07）
+
+§19.8 建议"先攻 `main.pas`、暂不反转 `MainUi`"。这条建议要变成排期，就得先回答
+一个问题：**`main.pas` 到底有多难？**
+
+§18 的答案看起来很难：13 个窗体的闭包都经过 `main.pas`，而 `main.pas` 的 `uses` 里有
+48 个**带命名空间点**的单元，全部"absent"。如果照字面读，那是 48 个单元的移植工作量。
+
+**这个读法是错的，而且错在两个方向上都发生过。**
+
+### 20.1 结论
+
+`main.pas` 闭包中 37 个 absent 的带点单元，分成三类：
+
+| 类 | 数量 | 含义 |
+|---|---|---|
+| **0. 已可解析** | **2** | FPC 就用这个带点名字发布（`Generics.Collections`、`System.UItypes`） |
+| **A. 仅拼写** | **22** | 去掉前缀就是 FPC/LCL 的单元。**不写新代码** |
+| **R. 已在我们自己的单元里** | **1** | `Vcl.VirtualImage` → `LclVirtualImage.pas`（F3-3 已做） |
+| **C. 是控件不是单元** | **0** | 名义上属于我们、但不能出现在 `uses` 里 |
+| **B. 真缺失** | **12** | 哪都没有。**这才是工作** |
+
+**25 / 37（68%）不需要写任何新代码。真正的工作量是 12 个单元。**
+
+> ⚠️ **本表描述的是解析状态，不是行动方案**，而且两件事必须分开读：
+>
+> - **R 行**当时写的是"只差改 `uses`"，**这个行动方案已被 §21 证伪**——
+>   那 4 处 `uses` 在 Delphi 树里，改动会破坏 Delphi 构建。实际交付的是
+>   **一个 FPC 侧 shim**，不是 4 次改名。
+> - **A 行（22 个）"不写新代码"是真的**（单元本来就在），但 **§22 实测表明
+>   shim 机制对它们几乎不适用**：22 个里只有 **1 个**满足安全可行条件。
+>   **"不需要新代码" ≠ "可以用 shim 解决"。**
+>
+> 本节的测量没有错；被推翻的是据此推导的行动。**这是"测量"与"计划"必须分开归档
+> 的一个具体例子。**
+
+### 20.2 "仅拼写"这个判断是**编译验证**的，不是查表
+
+关键在于不能只比较名字。`Vcl.Themes` 的尾巴是 `themes`，LCL 确实有 `themes` 单元——
+但 `uses Themes` 在这个 widgetset 下能不能链接，**只有编译器知道**。
+
+所以 `tools/f3_namespace_alias.py` 会**生成一个程序**，把所有 A 类单元去前缀后一起
+`uses`，然后**真的编译它**：
+
+```
+VERIFICATION -- compile one program using ALL of group A, prefixes dropped
+   PASSED: 22 unit(s) compile. Group A is spelling, not work.
+```
+
+如果某个单元归进了 A 却编译不过，工具会打印编译器的原话并声明上面的表**不可信**。
+
+> 这个设计和 `SynRcProbe` 是同一个：**"能加载"是个比想象中弱得多的主张。**
+> §17.6 记录的正是"审计工具自己在输出健康数字"，所以这里不给自己留这条路。
+
+### 20.3 这张表被三次修正，每次都错在**更有说服力的方向**上
+
+这一节是本节最值得留下的部分。三次都是**每一行单独看都合理**，错的是整体方向。
+
+**① 按源码文件名统计 → 声称 `SysUtils` / `Classes` / `Math` / `Forms` 都不存在。**
+`.pp` 是 **3** 个字符、`.pas` 是 4 个，统一 `f[:-4]` 会把 `forms.pp` 变成 `form`。
+于是**九个 FPC 必然提供的 RTL 单元**被报成"真缺失"。
+> 修法：按**已编译的 `.ppu`** 统计，而不是源码。`.ppu` 才是"为这个 target 和
+> widgetset 构建过"的证据，源码只是一个承诺。
+
+**② 补了 FPC 的 units 树 → 33%。** 上一版只扫 LCL/components，而 `SysUtils` 在
+`fpc\...\units\...\rtl`——**另一棵树**。结论从 56% 掉到 33%，方向是**把工作说得更重**。
+
+**③ 又漏掉 FPC 自己的命名空间单元 → 13%。** 只比尾巴，把 `Generics.Collections`
+判成"真缺失"，而 FPC 就是用这个名字发布它（`rtl-generics`）。**一个已经存在的单元被放
+上了移植清单。**
+
+**④ 去掉 `classify()` 过滤 → 混进 `System.UItypes`。** 按"带点"一刀切，把这个
+**本次构建已经编译好**的单元也扫了进来。"真缺失"这张表的全部含义是"这得我们写"，
+而这里什么都不用写。
+
+> **三处修正，结论依次 33% → 56% → 65% → 59%(A)/13(B)。**
+> 更值得记的是：**没有一版的数字自己暴露了问题。** 三张表都能打印、都能自洽、
+> 都能支持一个看起来很合理的结论。是"分类的定义"每次都必须重新检查，才把它们抓住。
+
+最终分类里有**一条断言**：五类必须构成 absent 带点单元的**划分**，否则直接报错。
+> **一个加起来不等于 100% 的结论，比没有结论更糟。**
+
+### 20.3b 第五类（R）是本节最有用的一条发现
+
+`Vcl.VirtualImage` 没有对应单元、尾巴也不是 LCL 单元——按"两类分法"它落在
+**真缺失**里，读起来就是**有人得去写它**。
+
+**没有人要写。** `Source/Fpc/UI/Controls/LclVirtualImage.pas` 从 §14（F3-3）就在，
+转换器里也早有 `TVirtualImage -> TLclVirtualImage`。剩下的只是**在 4 处 `uses` 里
+把单元名改掉**（`DataFrm` / `EnviroFrm` / `LangFrm` / `main`）。
+
+> **把已完成的工作重新排进待办，比低估成本更贵**：它会让路线图看起来永远做不完。
+
+这一类必须是**查出来的**，不能靠命名直觉猜。它问的是"转换器已经把这个类映射到某个类了，
+那个类对应的单元在不在我们仓库里"——答案在 `f3_dfm_to_lfm.py` 的 `CLASS_RENAME`
+里，是**一个有记录的唯一答案**。
+
+**而 R 类自己也被抓到两次错：**
+
+1. **按子串匹配**把 `System.ImageList` 也判成 R（因为 `TLclSvgImageList` 结尾是
+   `ImageList`）。但 `TLclSvgImageList` 不是 Delphi 的 `System.ImageList`。
+   > 更值得注意的是：**工具打印了它匹配到的文件**，所以这条错误是**肉眼可读的**，
+   > 仍然被提交了。**打印证据不等于验证证据。**
+   > 修法：要求**转换器的源类名**与该单元名对应，而不是目标类名包含它。
+
+2. **C 类按文件名匹配**，把 `Vcl.ImageCollection` 判成"我们的控件"。
+   而 `ImageCollectionData.pas` 里声明的是 `TImageCollItem` 和
+   `TImageCollectionRec`——**两个 record**，`Source/Fpc` 下**根本没有
+   `TImageCollection`**。
+   > 修法：查**类声明**（`T… = class`），不查文件名。
+   > 这正是 `DataFrm` 的既有阻断项——§19.7 说它**未**解锁，这里是同一个事实的
+   > 第二个独立读数。
+
+### 20.4 12 个真工作（按性质分组，不是按名字）
+
+| 单元 | 性质 |
+|---|---|
+| `Vcl.WinXCtrls` / `Vcl.WinXPanels` | LCL 无对应，需要真移植或替代 |
+| `Vcl.Imaging.pngimage` | 需接到 LCL 的 PNG 路径 |
+| `System.AnsiStrings` / `System.IOUtils` / `System.Threading` | 小工具级缺失 |
+| `System.Actions` | LCL 有 `ActnList`，**接近别名但需确认语义** |
+| `System.ImageList` / `System.Generics.Collections` | 名字接近现有单元，**但都不是同一个东西**（见 §20.3b 第 1 条） |
+| `Vcl.ImageCollection` / `Vcl.BaseImageCollection` | `DataFrm` 的**既有**阻断项，同一条线 |
+| `Vcl.VirtualImageList` | 与已完成的 `TLclVirtualImage` 相邻，但**列表 ≠ 单控件** |
+
+> **注意 `Vcl.VirtualImage` 已经不在这张表里**——它在 R 类（§20.3b）。
+
+**这里已经有一个可执行的结论**：`Vcl.VirtualImage` 归入 R 类（§20.3b），**不是移植**。
+
+所以 12 个真工作里，真正"从零开始"的只有这些：`System.Actions`、`System.AnsiStrings`、
+`System.Generics.Collections`、`System.IOUtils`、`System.ImageList`、`System.Threading`、
+`Vcl.Imaging.pngimage`、`Vcl.WinXCtrls`、`Vcl.WinXPanels`（**9 个**，小工具或真移植）。
+另外 3 个（`Vcl.ImageCollection` / `Vcl.BaseImageCollection` / `Vcl.VirtualImageList`）
+**属于 `DataFrm` 的既有阻断项**，与 §19.7 是同一条线，**不是新增负担**。
+
+### 20.5 门禁与反空转
+
+`tools/f3_namespace_alias.py --ratchet` 锁定 **12 / 0 / 1 / 22 / 2** 五个数，**只增长即失败**，
+下降必须 `--write-baseline` 显式确认（与 `f3_compile_cost.py` 同一纪律）。
+
+注入矩阵新增第 **8** 条：把单元搜索指向一棵**空目录**，要求 A 类整体塌进 B 类、
+计数上移、门禁失败。
+
+> 第一次跑它**没有通过**，而且错得很有意思：注入锚点写的是那条路径字符串本身，
+> 而它在 `UNIT_DIRS` 和 `FU_ORDER` 里**各出现一次**。陈旧模式守卫**正确地**报了
+> "occurs 2 time(s), expected 1" 并停机——但那不是陈旧，是**歧义**，结果整个矩阵
+> 无声死掉。改成锚在 `UNIT_DIRS = [` 上。
+>
+> 顺带修了注入框架的一个真缺陷：`MISSED` 时只打印含 `FORK`/`HOLE`/`RESULT` 的行，
+> 所以命名空间棘轮失败时**一行证据都没有**，MISSED 报告成了一句空断言。
+
+### 20.6 CI 位置：这一条**必须**在有工具链的 job 里
+
+`--ratchet` 会**真的编译**那个验证程序，所以它不在 `qa-gate-profiles`
+（纯文本、ubuntu、无编译器）里，而在 `lcl-svg-runtime`（windows + Lazarus）里，
+与其它棘轮和 `SynRcProbe` 并列。
+
+> 这是本节唯一一个"看起来可以省掉"的安排：如果只做名字比较，就可以塞进纯文本 job。
+> 但那正是 §20.2 要避免的事。**分类的可信度来自它验证了，不是来自它跑得快。**
+
+### 20.7 对 §19.8 的影响：结论不变，理由更硬了
+
+§19.8 建议**先攻 `main.pas`、暂不反转 `MainUi`**，理由是"`main.pas` 的阻断是依赖
+收敛，与门面方向无关"。本节**没有推翻**它，只是把"有多难"从"48 个 absent 单元"
+改成"**25 处无需新代码 + 12 个真工作**"。
+
+- 这**降低了** `main.pas` 的估计成本 → 更支持先攻它，而不是反转门面。
+- 12 个真工作里 **3 个**与 `DataFrm` 既有阻断重合，**9 个**是小工具级缺失。
+- 且其中 **1 个根本不用做**——`Vcl.VirtualImage` 在 F3-3 就已完成（§20.3b）。
+  这条发现的直接收益是：**一个已完成的类不会回到待办列表上**。
+
+**诚实边界**：本节**没有**让任何窗体变得更接近可编译，**没有**改任何 `.pas`，
+唯一新增的代码是那个一次性验证程序（编译在临时目录，不入库）。
+门禁锁定的是**分类**，不是进度。
+
+## 21. F3-8 续：**FPC 侧兼容 shim** 打通门面，且不动 Delphi 源码一个字符（2026-10-07）
+
+§20.3b 有一条发现当时只能**改 4 处 `uses`** 来兑现：`Vcl.VirtualImage` 落在 R 类
+（我们已有 `LclVirtualImage.pas`，F3-3 就写完了）。
+
+但那 4 处 `uses` 全在 **Delphi 树**（`Source/*.pas`，`main.pas` 还在 `devcpp.dpr` 里）。
+把它们改成 `uses LclVirtualImage` 会**把一个只存在于 FPC 树的单元塞进 Delphi 编译器
+的搜索路径**——而 `tools/qa_check.py --profile delphi` 这个门禁存在的全部意义就是拦住
+这件事。
+
+所以**改 `uses` 这个方案本身是错的**。本节是它的替代方案，并且顺带证明了更强的一句话：
+> **门面可以通过 FPC 侧兼容层扩展，完全不污染 Delphi 源码树。**
+
+### 21.1 做法：保留源码可见的单元名，让 FPC 搜索路径提供实现
+
+这是 F3-6 `TSynRCSyn` 已经用过的机制，只是当时没人注意它还能这样用：
+
+| | Delphi 树看到的 | FPC 树看到的 |
+|---|---|---|
+| `TSynRCSyn` | `Source/VCL/SynEdit/Source/SynHighlighterRC.pas` | `Source/Fpc/UI/Controls/SynHighlighterRc.pas` |
+| `TVirtualImage` | VCL 自带 | **`Source/Fpc/UI/Compat/Vcl.VirtualImage.pas`（新增）** |
+
+`Source/main.pas` **一个字都没改**，仍然写着 `uses Vcl.VirtualImage`；FPC 侧 `-Fu`
+把那个名字解析到我们写的 shim。新文件 68 行，**0 个新类**。
+
+### 21.2 决定成败的一个细节：**必须是类型别名，不能是子类**
+
+这是**编译两种形状**定出来的，不是读代码看出来的：
+
+```pascal
+type TVirtualImage = class(TLclVirtualImage) end;   →  Error: Incompatible types:
+                                                            got "TLclVirtualImage"
+                                                            expected "TVirtualImage"
+type TVirtualImage = TLclVirtualImage;              →  编译、运行、身份保持
+```
+
+子类是**另一个类型**。DFM 流式化会把基于 `LclVirtualImage` 的组件**赋值**到
+Delphi 树声明为 `TVirtualImage` 的字段（`EnviroFrm.pas:104`、
+`main.pas:586`），子类让这一步变成类型错误。**别名让两个名字指向同一个类型**，
+这正是流式化需要的。
+
+> 运行时验证用的就是这两个字段的真实形状，赋值后确认**同一个实例**经两个名字都可达。
+
+### 21.3 shim 契约：四条不变量，**逐条被打破验证**
+
+写成散文的不变量不是不变量。所以每一条都做了"故意破坏 → 门禁必须报错"：
+
+| # | 不变量 | 破坏方式 | 捕获 |
+|---|---|---|---|
+| 1 | 存在且声明该单元名 | 声明成 `unit SomethingElse` | ✅ |
+| 2 | 位于 `Source/Fpc/` 之下 | 放到 `Source/ShimMisplaced.pas` | ✅ |
+| 3 | 以**别名**重导出到真实符号 | 别名指向不存在的类型 | ✅ |
+| 3b | 不得新声明一个类 | `= class(...)` | ✅ |
+| 4 | Delphi 树仍引用该名字 | 3 处引用全改掉 | ✅ |
+
+**这个过程本身抓到三个缺陷，都值得留档：**
+
+**① 不变量 2 一开始是**不可违反**的。** `shim_for()` 当时只扫 `Source/Fpc`，
+所以"放错位置"的 shim **根本找不到**，那条负责拒绝它的检查**永远不会被执行**。
+**一个没人能违反的不变量不是不变量。** 改成扫整个 `Source/`（排除 `VCL`/`Archive`），
+不变量 2 才真正可达。
+
+> 排除 `VCL` 是必须的：vendored 树里**真的**有 `unit SynHighlighterRC`。把它当成
+> 我们的 FPC shim 会让整个机制的意义**反转**。
+
+**② 不变量 1 被计数棘轮"抢跑"了。** 契约检查原本排在计数之后，且计数一失败就
+`return 1`。而"声明错名字"**同时**会改变计数，于是计数路径先返回，**契约消息永远
+不打印**。失败被检测到了，但**理由是错的**——而一个只在其余检查都通过时才说话的契约，
+等于没有被执行。现在两组失败**一起报告**。
+
+**③ 不变量 4 的测试一开始什么都没测。** 它只改了 `LangFrm.pas` 一处，
+而 `EnviroFrm.pas` 和 `main.pas` **仍在引用**该名字——不变量**正确地通过了**，
+测试却宣称它在测"引用是否消失"。**一个测不到东西的测试比没有测试更危险**，
+因为它显示绿色。
+
+### 21.4 历史测量不许被改写：shim 范围是**相加**的，不是**覆盖**的
+
+这里我犯了一个错，值得按顺序记：**先跑了 `--write-baseline`**，于是基线里
+`renamed` 从 `[Vcl.VirtualImage]` 变成 `[]`——**历史测量被洗掉了**。这与"不要篡改
+历史分类"直接冲突。
+
+改法不是"重新写一遍数字"，而是让基线**同时**承载两件事：
+
+```json
+"main_closure_own_units": 82,          ← 冻结的测量值（shim 存在之前）
+"shims": { "Vcl.VirtualImage": { "scope_added": { "own_units": 1, ... } } }
+```
+
+棘轮算的是 **历史值 + 已声明 shim 范围**，并且：
+
+- **shim 必须存在才给范围。** 第一版无条件发放，于是**删掉 shim 也能过**
+  （基线说 +1，树里没有那个单元，棘轮判定 `82 <= 83` 通过）。
+  **一个背后什么都没有的额度，就是一个没有意义的额度。** 现在逐个校验存在性。
+- **单元数下降必须由 shim 解释。** 否则报"无法解释的改善"，而不是自动接受。
+
+> **一个不需要写代码的改进，允许通过；一个由 shim 解释的下降，打印出解释；
+> 一个无人解释的下降，直接失败。**
+
+### 21.5 这一节解开的**机制**问题，比解开的那一个单元重要
+
+`Vcl.VirtualImage` 本身只是 1 个单元。但本节证明的是**一条可复用的边界**：
+
+> **Delphi 树保持原样，源码可见的单元名不变，FPC 搜索路径供给实现。**
+
+这条边界对 §20 的 A 类（**22 个仅拼写**）同样适用——而且**很可能**比逐个改写更便宜。
+但**本节不推广**：22 个 shim 同时落，棘轮的变化就**无法归因**了。
+§20.6 那条纪律在这里第三次兑现——**一次只动一个，才有 before/after。**
+
+### 21.6 诚实边界
+
+- `DataFrm` **仍未解锁**（`TImageCollection` 系列，见 §19.7 / §20.4）。
+- 本节**没有**让任何窗体更接近可编译；`main.pas` 的 12 个真工作一个都没少。
+  shim 满足的是 §20 里**原本就不需要写代码**的那一项。
+- A 类 22 个 shim **一个都没做**（按决定）。
+- Delphi 树 `git diff` 为**空**，已核验。
+
+> 本节的产物是**一个 68 行的文件 + 一条可复用的边界 + 四条被验证的不变量**。
+> 不是 22 个文件的批量改动。
+
+详见 `tools/f3_namespace_alias.py` 的 `check_shim_invariants()`。
+
+## 22. F3-8 收尾：**shim 泛化假设被证伪**，`Vcl.VirtualImage` 是特殊成功案例（2026-10-07）
+
+§21 建立了 shim 机制并在**一个**单元上验证成功。诚实的下一步不是推广，而是问：
+**这个机制能覆盖 §20 的 A 类（22 个仅拼写）吗？**
+
+**答案是否定的。** 本节是那次实验的结论，**没有写任何 shim、没有改任何源码**。
+
+### 22.1 决定性事实：FPC **没有**传递性接口可见性
+
+`Vcl.VirtualImage` 之所以能用 shim，是因为**只命名了一个符号，且那个符号是类型**。
+同样的机制并不普适，而原因**是测出来的**：
+
+```pascal
+unit Vcl.Forms;
+interface
+  uses Forms;              { 这不够 }
+implementation
+end.
+```
+```
+t.pas(4,8) Error: Identifier not found "TForm"
+```
+
+限定别名可以（`TForm = Forms.TForm;`，实测编译并运行）。但**只有类型可以**：
+重导出 *例程* 必须重复 `external 'dll' name '...'`；*变量* / *常量* 需要重新声明。
+
+> 所以"能不能 shim"这个问题，真实形式是：**需要多少个符号、分别是哪一类**。
+
+### 22.2 分类结论（`tools/f3_shim_feasibility.py`，逐名测量）
+
+| 分类 | 数量 | 下一步 |
+|---|---:|---|
+| **1. 可安全 shim** | **1** | `Winapi.Messages`（1 个 type，**单独评估，不视为下一项实现**） |
+| **2. 已可解析** | **0** | — |
+| **3. 不适合 shim** | **18** | 需要 routine/var/const，走各自的实际兼容路径 |
+| **4. 真正无需符号** | **1** | `System.Math`（符号面实测 120 个，`main.pas` 引用 **0** 个） |
+| **5. 不确定** | **2** | `System.SysUtils` / `System.WideStrUtils`，**暂停，不猜** |
+
+**shim 泛化假设已被证伪，实验完成。** 门面应转向**逐名兼容策略**，不是批量 shim。
+
+### 22.3 本次最值钱的防错结论：**证据提取失败 ≠ 符号不存在**
+
+这个工具**第一次运行的结果是危险的**，而且如果被采纳，会**批准删除真实工作**。
+
+第一次跑出来 5 个名字被判为"**QUESTIONABLE — 该单元没有任何符号被引用，
+仅凭 uses 条目不足以立项**"，其中包括 `System.SysUtils`。
+
+**那是提取器的产物。** FPC 的 RTL 单元是**空壳**：`sysutils.pp` 内容是
+`{$I sysutils.inc}`，`classes.pp` 是 `{$I classes.inc}`。不跟随 include 就只能看到
+**5 个**和 **0 个**导出符号——于是每一个 RTL 名字都成了"未使用"。
+
+> **这是本工具唯一不能犯的错误方向**：它会把"要做的真工作"判成"不必做"。
+> 其余方向（把 trivial 判成麻烦）只是浪费时间。
+
+**两条护栏现在挡住了这个方向：**
+
+1. **可疑的小符号面 → 拒绝分类。** 尾巴单元只暴露 <25 个符号时，
+   那是"提取失败"的证据，不是"单元未被使用"的证据。
+   （正是这条拦下了 `System.WideStrUtils`。）
+2. **`{$I}` 解析歧义 → `INDETERMINATE`，不猜。** FPC 为多个平台各备一份同名
+   `.inc`（`execd.inc` 有 morphos、amiga …），"取第一个命中"会把**别的平台的声明**
+   注入进来当证据。所以 `System.SysUtils` 报 INDETERMINATE 而不是被分类。
+
+> **`INDETERMINATE` 是一个正式结果，不是缺口。** 要可靠判定需要平台条件求值器。
+> **保留未知，好过为了让表格好看而猜。**
+
+`System.Math` 的第 4 类是**实测**的：`math` 导出 120 个符号，`main.pas` 对
+`Pi` / `Max` / `Min` / `Sqrt` / `Abs` / `Odd` **一个都没用**，且 `uses` 里确实列了它。
+这可以单独考虑移除该 `uses` 条目——**但删 Delphi 树的 `uses` 与本节的边界冲突，
+需要单独决策。**
+
+### 22.4 facade 估算正式改写
+
+**不要再说：**
+
+> `main.pas` 有 22 个名字可以做 shim。
+
+**应该说：**
+
+> **22 个 dotted names 中，只有 1 个满足当前 shim 机制的安全可行条件；18 个需要
+> 其他兼容机制；1 个经符号面实测为未使用；2 个尚不能可靠判定。**
+
+这比"22 个 shim"精确得多，而且它的**精度来自测量而不是乐观**。
+
+§20 的测量（37 → 2 / 22 / 1 / 0 / 12）**依然成立**，因为它描述的是**解析状态**；
+被推翻的是**行动方案**——"仅拼写"**不等于**"shim 可行"，`Vcl.VirtualImage` 的成功
+是**特例**，不是模板。
+
+### 22.5 `Vcl.VirtualImage` 的价值反而更高了
+
+它现在定义了一条**实测边界条件**：
+
+> **单一 type alias 可行；跨 routine / var / const 的重导出不行。**
+
+这条边界比"我们有一种 shim 机制"有用得多——它**告诉排期哪些名字不要用这条路**，
+而这正是 §20 无法回答的问题。
+
+### 22.6 本节状态：测量已完成，未实施
+
+- **没有**写 A 类 shim（一条都没有）。
+- **没有**改 Delphi 树（`git diff` 为空）。
+- **没有**提交（HEAD 仍 `756e0bd`，0 未推送）。
+- 两个 `INDETERMINATE` 留在报告里，等一个可靠的 platform-conditional include
+  evaluator。**不要为了让表格完整而猜。**
+
+> ⚠️ **本节的分类表已被 §23 作废，行动项 6（`Winapi.Messages`）已被关闭。**
+>
+> §22.2 那张 1 / 0 / 18 / 1 / 2 的表是**用源码文本算出来的**，而 §23 实测那个读者
+> **读的是别的平台的单元**（`SysUtils` 与 `Classes` 来自 `rtl\amicommon`，即 Amiga；
+> `Messages` 来自 `lcl\nonwin32` 空壳）。所以本节的表**保留在这里作为历史记录**，
+> 它的测量过程没有被改写，只是它的结论不再被引用。
+>
+> §22.3 那条防错结论（**证据提取失败 ≠ 符号不存在**）**依然成立**，而且被 §23 用另一种
+> 方式兑现：不是更用力地解析源码，而是换一个**不会坏**的证据源。
+> §22.6 的最后一行所要求的"一个可靠的求值器"，在 §23 里**已经不需要了**——
+> `ppudump` 一直都在。
+
+## 23. F3-8 续二：符号面改用**编译器自己的记录**，§22 的整张表随之作废（2026-10-08）
+
+§22 留下两个 `INDETERMINATE`，并把缺的那个工具写成了"platform-conditional include
+evaluator"。**诊断是对的，处方是错的**：机器上已经有那个求值器，而且它是决定性的那一个。
+
+### 23.1 处方错在哪：`.ppu` 就是那张符号面
+
+```
+ppudump -VS <unit>.ppu        # 接口符号表，带 kind
+```
+
+§20.3 已经写下过这条原则——"`.ppu` 才是'为这个 target 和 widgetset 构建过'的证据，
+源码只是一个承诺"——并把它用在**单元是否存在**上。这一节把它用到**符号面**上，
+而这正是手写 `{$I}` 跟随失败的地方。
+
+新增 `tools/f3_ppu_surface.py`。它**不改分类规则**：`f3_shim_feasibility.classify()`
+的证据来源被做成参数，同一套规则跑两遍，只换证据。
+
+### 23.2 选哪个 `.ppu`：**问编译器，不猜**
+
+`sysutils.ppu` 有三份（`rtl` / `rtl-objpas` / `rtl-unicode`，按语言模式各一份），
+猜错就是静默地描述另一次构建。所以工具用项目自己的 flag 编一个探针，
+以 `-vt` 读回 `PPU Loading`：
+
+```
+PPU Loading ...\rtl\sysutils.ppu
+PPU Loading ...\rtl-objpas\widestrutils.ppu
+```
+
+**实测而非假设**：回来的就是 `rtl\` / `rtl-objpas\` / `fcl-base\`，没有 `rtl-unicode`。
+
+### 23.3 §22 的表整张作废，原因是三个都朝危险方向的缺陷
+
+#### ① 它读的是**另一个平台**的那份单元
+
+`compiled_unit_paths()` 用 `setdefault` 建表，`rglob` 先给谁就算谁：
+
+| 名字 | 实际打开的文件 |
+|---|---|
+| `SysUtils` | `rtl\amicommon\sysutils.pp`（**Amiga**） |
+| `Classes` | `rtl\amicommon\classes.pp`（**Amiga**） |
+| `Messages` | `lcl\nonwin32\messages.pp`（**非 Windows 的空壳**） |
+
+**这张表里最重要的三个名字，是照着一个本项目根本不编译的平台判定的。**
+`Winapi.Messages` 为什么会被判成"未被引用"——全部答案就在这里：空壳里几乎没有声明。
+
+#### ② 它把**类成员和 record 字段**当成单元符号
+
+声明正则在任意嵌套深度匹配，于是 `TThread = class` 里的 `constructor Create;`
+变成一个叫 `Create` 的 routine，`X : Longint;` 变成一个叫 `X` 的变量。
+实测 22 个名字上共 **177** 个这种符号，而 `Create` / `Assign` / `Clear` / `Add`
+几乎出现在任何文件里，于是它们在消费端"被用上了"。
+
+> 机制有硬证据，不是断言：
+> `lcl\printers.pas:224` `TPrinter = class(TObject)`、`:114` `procedure BeginDoc; virtual;`；
+> `rtl\objpas\classes\classes.inc:147` `constructor Create;`。
+> 类成员属于**类自己的**符号表，随类型一起来，shim 从不需要单独命名它们——
+> 这正是 `.ppu` 接口符号表里没有它们的原因。
+
+#### ③ `strip_comments` 数的是**字面量里的花括号**
+
+```pascal
+if CurLine[col] = '{' then          // Source/Editor.pas:2986
+```
+
+这个 `{` 开启了一段**永不结束**的注释，其后每一行都被静默删除。
+实测：**121 个 Delphi 树单元里有 10 个**的尾部对所有符号搜索不可见，
+包括 `Editor.pas:3087` 的 `Printer.Title := FDocTitle`，以及 `main.pas` 的未知一段。
+
+**吞掉一行 = 让一个符号看起来"未被使用"**，而"未被使用"正是唯一能授权删掉工作的分类。
+这条缺陷**污染了两列**，因为消费端扫描是两份证据共用的。
+
+### 23.4 修正后的分类，以及被它推翻的结论
+
+| 分类 | §22（源码列） | 本节（编译器列） |
+|---|---:|---:|
+| 1. SHIM CANDIDATE | 1 | **6** |
+| 3. NOT SAFELY SHIM-ABLE | 19 | **10** |
+| 4. QUESTIONABLE | 1 | **3** |
+| 5. INDETERMINATE | 2 | **3** |
+
+**两个 §22 的结论被推翻：**
+
+1. **`Winapi.Messages` 不是 shim 候选**——它需要 **2 个 const**（`WM_THEMECHANGED`、
+   `WM_UPDATEUISTATE`），而 §22 说它是唯一候选。§22.6 第 6 条**关闭**：候选归零。
+2. **§22 的"22 个里只有 1 个能 shim"作废**，因为那个 1 是 `nonwin32` 空壳的产物。
+
+**§20 的测量（37 → 2 / 22 / 1 / 0 / 12）不受影响**：它描述的是**解析状态**，
+而本节推翻的是"解析状态 = 符号面"这个假设。
+
+### 23.5 两个 `INDETERMINATE`：**一个是解开了，另一个不解开**
+
+- `System.SysUtils` → **3. NOT SAFELY SHIM-ABLE**（需要 2 const + 30 routine）。已定。
+- `System.WideStrUtils` → 仍是 **INDETERMINATE**，而且**理由更窄了**：不是"符号面读不出来"，
+  而是"`widestrutils.ppu` 只有 **22** 个公开符号，低于 25 的地板"。
+  这一次是**编译器的记录**这么说的，所以它是一个**测量结论**，不是提取失败。
+
+> 换句话说：**indeterminate 的成因分两种**，一种是"我的提取器坏了"，一种是真的小。
+> 分开它们靠的是换一个不会坏的证据源，而不是更用力地猜。
+
+### 23.6 第 4 类带着一条**常设警告**，因为它比看上去危险
+
+`Vcl.Themes` / `Vcl.ImgList` / `System.Variants` 现在落在第 4 类
+（"这个尾部单元里没有符号被引用，那条 `uses` 本身不足以立项"）。
+这句话是关于**尾部单元的符号面**的，**不是**关于 Delphi 那个单元的——
+本仓库枚举不出后者的符号面（vendored 树里只有 SynEdit 和 SVGIcon，没有 VCL 本体）。
+
+所以"尾部单元没声明"与"这一行 `uses` 是历史残留"在机械上**无法区分**。
+四个名字都**手工核对过消费端**：
+
+| 名字 | 消费端 | 核对结果 |
+|---|---|---|
+| `Vcl.Themes` | 9 个单元 | `TThemeName` 是 `Theme.Manager.pas:16` **本地**声明的；`TStyleManager` 来自 `Vcl.Styles` |
+| `Vcl.ImgList` | `EnviroFrm.pas` | 该文件引用 `TVirtualImage`，**不**引用 `TImageList` |
+| `System.Variants` | 2 个单元 | 无引用 |
+| `System.Math` | `main.pas` | 120 个符号，引用 0（§22 已记录，仍成立） |
+
+### 23.7 本节自己抓到的六个缺陷（全部在被推翻的方向上）
+
+1. **我第一版把一个诊断贴错了标签。** 那一节叫"读错 `.ppu` 的样子"，
+   然后塞满了 `Create` / `Destroy` / `FItems` / `dwFlags`——真实成因是类成员。
+   **一个朝着错误成因喊的诊断比没有诊断更糟**：它教会读者这一节是噪声。
+   改法不是改措辞，是**用编译器自己的嵌套去分类**（`-VD` 把嵌套定义缩进，
+   类成员另带 `Class : ... DefId n`），于是这一节从指控变成测量。
+2. **第一轮报 177 个"无法解释"。** 因为把列 0 锚定的正则 `-VS` 用到了 `-VD` 上，
+   而后者**每一行都缩进**。**177 这个数本身就是线索**：22 个单元里 177 个无法解释的
+   分歧不是发现，是坏掉的扫描。
+3. **剩下的 3 个（`X` / `Y` / `IsEmpty`）单独查了**，因为直接归入"良性"太便宜。
+   `types.pp:87` 是 `TPoint = Windows.TPoint`——一个**别名**，所以字段 `X`/`Y`
+   属于 `types` **不拥有**的那个 record。编译器两处都没记，所以它们不是单元符号。
+4. **自测当场抓到棘轮的洞：基线文件不存在时 `--ratchet` 直接通过**（第一版顺手建了基线并
+   `return 0`）。这比 §21.4 的"无内容的额度"高一层：那里是额度无人兑现，
+   这里是**整个比较**无人兑现。已改为缺基线即失败，且只有 `--write-baseline` 能建。
+5. **两次键名笔误**（`refuses` / `refutes`、`explain` / `explained`），
+   两次都是 `KeyError` 而不是**静默的错误答案**——这算是运气。
+6. **"复用仓库里已有的正确实现"被实测否决。** 最顺的下一步是把 `strip_comments`
+   改成委托给 `comment_bleed.strip_lines`（`f3_compile_cost.py` 就是这么写的，
+   而且注释里明写"不要成为第二条实现"）。实测**更差**：判定从 3/2 变成 **3/16**
+   INDETERMINATE，因为它的字符串状态跨行延续，而喂进去的正是 FPC 的按平台变体。
+
+> 所以真正的教训不是"复用共享实现"，而是 **"别再手写这个"**。
+> 源码列有**三个实测缺陷**且都在危险方向上，它不值得修，值得**替换**——
+> 它作为对照列保留下来，好让"为什么换"的比较可复现。
+
+### 23.8 门禁与状态
+
+- `tools/f3_ppu_surface.py --self-test`：**9 项**，其中 3 项专门证明棘轮会失败
+  （无基线、写入后自洽、新增一条被反驳的授权）。
+- `--ratchet`：`tools/f3_ppu_surface_baseline.json` 冻结三个数
+  （矛盾 0 / 被反驳授权 1（`Winapi.Messages`）/ 漏读 43）+ 22×2 个分类；
+  **增加、移动都失败**，下降必须 `--write-baseline` 显式确认。
+- 接入 CI（`lcl-svg-runtime`，**必须**在有工具链的 job 里：选 `.ppu` 要真的编译）。
+- **没有写任何 shim，没有改 Delphi 树**（`git diff` 为空）。
+
+### 23.9 这一节对排期的净影响
+
+- **`main.pas` 的 12 个真工作没有变化**——本节一个单元都没解开。
+- 但**"那 22 个名字怎么办"这个问题现在有了答案**，而答案比乐观和悲观都更具体：
+
+  > **6 个可以用类型别名解决（合计 18 行别名），10 个需要各自的兼容机制，
+  > 3 个的 `uses` 条目很可能是残留（已逐个核对），3 个不可判定。**
+
+- §19.8 的建议（**先攻 `main.pas`、暂不反转 `MainUi`**）**不变**：这一节没有让任何单元
+  靠近可编译，只是把一个**错误的成本估计**换成了正确的。

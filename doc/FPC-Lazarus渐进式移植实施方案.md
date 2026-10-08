@@ -1719,7 +1719,7 @@ C 批 8 个窗体被 14 个 vendored 类阻塞。工具读取每个类的**自�
 
 **SVG 依赖优先级高于批次分类**：`LangFrm` / `EnviroFrm` 按字母测试属 B 批（唯一阻塞是 `TVirtualImage`，有 LCL 等价物），但该控件的图源是 `dmMain.SVGImageListMenuStyle` —— 因此它们同样归入 SVG 依赖，**B 批归零**。
 
-**最终批次划分**
+**最终批次划分（2026-10-04 快照，已过时——见下方重算）**
 
 | 批次 | 窗体 | 组件 | 说明 |
 |---|---|---|---|
@@ -1727,6 +1727,28 @@ C 批 8 个窗体被 14 个 vendored 类阻塞。工具读取每个类的**自�
 | **A-svg** | **9** | 190 | 转换后空白，**须排在 SVG 工作之后** |
 | B | 0 | — | 原 2 个窗体经核实均依赖 SVG，已并入 A-svg |
 | C | 10 | — | 需 vendored/own 类重建 |
+
+> **这张表是 2026-10-04 的快照，数字已不再成立**，且它当时没有日期、读起来像现状。
+> 保留它的原因是：它是「B 批归零」这个**结论**的原始证据，而该结论至今仍然成立。
+> **当前数字由 `tools/f3_batch_plan.py` 重算，不要从这张表读**：
+
+| 批次 | 窗体 | 组件 | 与快照的差异 |
+|---|---|---|---|
+| **A** | **36** | 584 | +2（`LangFrm` / `EnviroFrm` 的 `TVirtualImage` 已于 F3-3 退役） |
+| **A-svg** | **14** | 575 | +5（其中 `EditorOptFrm` 是 F3-6 新解锁的） |
+| B | **0** | 0 | 不变——**结论未变** |
+| **C** | **3** | 642 | **−7**（`CompOptionsFrm` / `ProjectOptionsFrm` 于 F3-4 移植 frame；`EditorOptFrm` 于 F3-6） |
+
+> **C 批只剩 3 个窗体，正是 §13.3 与 §17.9 反复记录的结论**：`main.dfm`（8 类阻断，
+> 8 换 1，排除出近期排期）、`DataFrm.dfm`（`TSynRCSyn` 在 LCL 4.4 不存在 +
+> `TImageCollection`）、`Tools/Packman/Main.dfm`（2 个 SVG producer 控件，PORT 级真活）。
+>
+> **顺带修掉的一处工具漂移**（F3-7）：上表这组数字此前**与 `f3_load_routes.py` 不一致**
+> ——后者做退役减法、前者不做，于是同一棵树上 `LangFrm` / `EnviroFrm` 一边是 CLEARED、
+> 一边是「被 `TVirtualImage` 挡住」。退役集合现已归一到 `f3_form_survey.RETIRED`
+>（每条附理由），两个工具都 import 它，并由 `tools/f3_retirement_check.py` 断言
+> 「只有一个声明处 + 两工具一致 + 转换器的每个 rename 都有退役记录」。
+> `--self-test` 证明这三项检查都会失败。
 
 > **B 批归零是一次有价值的负面结果**：它说明「字段级替换即可」的乐观估计不成立 —— 那两个窗体表面上只需换 `TVirtualImage`，实际图源在 SVG 链路上。**若按原计划先做 B 批，会得到两个看起来转好了、实际预览区空白的窗体。**### F4：现代视觉补偿（3–4 周）
 - 矢量图标：LCL 原生 SVG 或 BGRAControls 替代 `SVGIconImageList`，工具栏 200%/4K 清晰。
@@ -1901,20 +1923,24 @@ order-probe cond=TRUE detail=value=0
 
 ---
 
-## 10. F3 当前状态：13 个窗体已被真实加载验证（2026-10-06）
+## 10. F3 当前状态：14 个窗体已被真实加载验证（2026-10-07，F3-6 更新）
 
 | 项 | 状态 |
 |---|---|
-| 转换产物可加载性 | ✅ **`FormLfmProbe` 13/13 全绿**（真实 LCL 读取器，非结构对比） |
-| 属性层可赋值性 | ✅ **`PropRttiProbe` 0 条被拒**（14 文件 / 3457 条属性赋值逐条过读取器） |
+| 转换产物可加载性 | ✅ **`FormLfmProbe` 14/14 全绿**（真实 LCL 读取器，非结构对比；F3-6 新增 `EditorOptFrm`） |
+| 属性层可赋值性 | ✅ **`PropRttiProbe` 0 条被拒**（15 文件 / 4318 条归属属性逐条过读取器） |
 | Delphi 构建 | ⚠️ **本机无 Delphi，未编译验证**；改动以 `{$IFDEF}` 隔离，`.dfm` 的 `TCompOptionsList` → `TValueListEditor` 是 VCL 与 LCL **都成立**的写法（`valedit.pas:17` 两侧同名） |
-| 剩余阻断 | `EditorOptFrm`（`TSynCppSyn`）、`main.dfm`（8 类，按 §13.3 排除出近期排期）、`Tools/Packman/Main`（无 LCL 对应控件，转换器**明确拒绝**） |
+| 剩余阻断 | `main.dfm`（8 类，按 §13.3 排除出近期排期）、`DataFrm`（`TSynRCSyn` + `TImageCollection`）、`Tools/Packman/Main`（无 LCL 对应控件，转换器**明确拒绝**）——**`EditorOptFrm` 已于 F3-6 解锁** |
 
 本轮（F3-4/F3-5）落地的四件事：
 
 1. **`TCompOptionsList` 退役、`TCompOptionsFrame` 移植**（§15 的方案，`Source/CompOptionsFrame.pas` 的 `vle` 改为 `TValueListEditor`，两个窗体随之解锁）；
 2. **转换器三处修复**：根 `end` 位置（平铺输出会让读取器丢弃全部子控件）、属性值整体读取（否则十六进制块错位）、**任何读不懂的行都必须报错**（此前是静默跳过）；
 3. **两个新探针 + 共享单元**（`Tests/FpcCoreTests/forms/`），其中一个的**提问器带自测**，因为“只会说不”的提问器和正确结果长得一样；
-4. **`Source/Fpc/UI/Compat/VclPropertySkips.pas`**：17 条实测被拒的属性用 LCL 自己的 `RegisterPropertyToSkip` 按类登记，而不是在转换器里删掉——详见 SVG 方案 §16.3，其中 `OnInfoTip`（功能缺失）与 `TSynGutter.Font`（视觉差异）是两条**明确记录而非默认吞掉**的损失。
+4. **`Source/Fpc/UI/Compat/VclPropertySkips.pas`**：17 条（F3-6 新增 6 条，共 **19**）实测被拒的属性用 LCL 自己的 `RegisterPropertyToSkip` 按类登记，而不是在转换器里删掉——详见 SVG 方案 §16.3，其中 `OnInfoTip`（功能缺失）与 `TSynGutter.Font`（视觉差异）是两条**明确记录而非默认吞掉**的损失。
 
-> **下一步的最便宜证据已经做完**：§13.2 说“把这 9 个窗体加载出来”，本节给出 13 个中的 13 个。剩余的排期不再是“能不能加载”，而是“处理器的 Pascal 侧是否可编译”——那是 F2/F3 的 SynEdit 与 frame 移植工作量，不再是转换问题。
+> **下一步的最便宜证据已经做完**：§13.2 说“把这 9 个窗体加载出来”，§16 给出 13 个，F3-6 给出 **14 个中的 14 个**（`EditorOptFrm` 随 vendored `TSynCppSyn` 退役而解锁，详见 SVG 方案 §17）。剩余的排期不再是“能不能加载”，而是“处理器的 Pascal 侧是否可编译”——那是 F2/F3 的 SynEdit 与 frame 移植工作量，不再是转换问题。
+>
+> **F3-6 顺带修正了本方案自身的一条断言**：§12/§13 曾称“LCL SynEdit 自带 `TSynCPPSyn` / `TSynRCSyn` / `TSynPASyn`”。逐个核实后 **`TSynRCSyn` 在 LCL 4.4 中不存在**（`components/synedit` 下既无源码也无已编译单元），因此 `DataFrm` 仍被它挡着。**只有经实测登记的类才能进退役集合**——见 SVG 方案 §17.2。
+>
+> **F3-6 的真正产出不是那一个窗体，而是审计工具自己**：三个缺陷曾让 `PropRttiProbe` 在它从未检查过的输入上输出健康数字（其中一处把“未闭合的集合”报成 **accepted**）。新增 `tools/f3_probe_inject.py` 把它们逐个还原并要求探针必须发现，4/4 被拒、4 个文件按 MD5 还原。详见 SVG 方案 §17.6 / §17.7。
