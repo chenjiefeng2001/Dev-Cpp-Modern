@@ -179,7 +179,7 @@ type
     property Color: TColor read fBackgroundColor write fBackgroundColor;
     { Filter string for the output format for SaveAs file dialogs. }
     property DefaultFilter: string read fDefaultFilter write fDefaultFilter;
-    property Encoding: TSynEncoding read FEncoding write SetEncoding default seUTF8;
+    property Encoding: TSynEncoding read FEncoding write SetEncoding default SynUnicode.seUTF8;
     property ExportAsText: Boolean read fExportAsText write SetExportAsText;
     { The font to be used for the output format. The font color is used for text
       that has no token attribute assigned or for token attributes that have
@@ -218,7 +218,7 @@ begin
   fBuffer := TMemoryStream.Create;
   fClipboardFormat := CF_TEXT;
   FCharSize := 1;
-  FEncoding := seUTF8;
+  FEncoding := SynUnicode.seUTF8;
   fFont := TFont.Create;
   fBackgroundColor := clWindow;
   AssignFont(nil);
@@ -567,7 +567,7 @@ begin
     raise ESynEncoding.CreateFmt(SEncodingError, [EncodingStrs[Value],
       GetFormatName]);
 
-  FEncoding := Value;
+  FEncoding := TSynEncoding(Value);
   if Value in [seUTF8, seAnsi] then
     FCharSize := 1
   else if Value in [seUTF16LE, seUTF16BE] then

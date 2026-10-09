@@ -123,7 +123,6 @@ function IsWideCharMappableToAnsi(const WC: WideChar): Boolean;
 implementation
 
 uses
-  SynEditTextBuffer,
   Math,
   SysConst,
   RTLConsts;
