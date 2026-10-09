@@ -62,6 +62,14 @@ FU = [
     r"C:\lazarus\lcl\units\x86_64-win64",
     r"C:\lazarus\components\lazutils\lib\x86_64-win64",
     r"C:\lazarus\components\synedit\units\x86_64-win64\win32",
+    # The LCL synedit's SOURCE directory, not just its compiled units. The
+    # win32 ppu dir alone is not enough: synedit.pp references LazSynIMMBase
+    # (lazsynimmbase.pas line 27), and FPC must compile that unit from
+    # source when a probe links synedit. Without it every unit that uses
+    # SynEdit fails with "Can't find unit LazSynIMMBase used by SynEdit" --
+    # which reads as a missing port and is a missing search path.
+    # Ordered after the win32 ppu dir so the compiled units still win.
+    r"C:\lazarus\components\synedit",
     # The Source ROOT itself must be on the path, not just its subdirectories:
     # a rglob("*/") yields children only, and with the root missing every
     # unit declared directly under Source/ (main.pas, Editor.pas, all the

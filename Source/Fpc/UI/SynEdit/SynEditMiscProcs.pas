@@ -134,11 +134,40 @@ function DeleteTypePrefixAndSynSuffix(S: string): string;
 // In Windows Vista or later use the Consolas font
 function DefaultFontName: string;
 
+
+// --- Max / Min / MulDiv ---------------------------------------------------
+// Declared by the LCL's SynEditMiscProcs but not by the vendored unit this
+// file ports. The unit name is now owned by this file, so the surface must
+// be carried here; the LCL signatures were read off syneditmiscprocs.pp
+// rather than invented.
+function Max(x, y: integer): integer;
+function Min(x, y: integer): integer;
+
+function MulDiv(Factor1, Factor2, Divisor: integer): integer;
+
 implementation
 
 uses
   SysUtils,
   SynHighlighterMulti;
+
+// --- Max / Min / MulDiv (the bodies) -------------------------------------
+// Same three helpers, declared in the interface above. MulDiv delegates to
+// the RTL's; Max/Min are the LCL's integer semantics.
+function Max(x, y: integer): integer;
+begin
+  if x > y then Result := x else Result := y;
+end;
+
+function Min(x, y: integer): integer;
+begin
+  if x < y then Result := x else Result := y;
+end;
+
+function MulDiv(Factor1, Factor2, Divisor: integer): integer;
+begin
+  Result := (Int64(Factor1) * Factor2) div Divisor;
+end;
 
 function MinMax(x, mi, ma: Integer): Integer;
 begin

@@ -94,6 +94,18 @@ uses
   SynEditStrConst,
   SysUtils;
 
+// FPC's SysUtils declares a TStandardEncoding with IDENTICALLY SPELLED members
+// (seUTF8, ...) at DIFFERENT ordinals, so a bare `seUTF8` here binds to SysUtils
+// -- the same accident documented in SynEditExport. The shadow makes every bare
+// use bind to SynUnicode's enum; see that unit for the standalone proof.
+{$IFDEF FPC}
+const
+  seUTF8 = SynUnicode.seUTF8;
+  seUTF16LE = SynUnicode.seUTF16LE;
+  seUTF16BE = SynUnicode.seUTF16BE;
+  seAnsi = SynUnicode.seAnsi;
+{$ENDIF}
+
 { TSynExporterRTF }
 
 constructor TSynExporterRTF.Create(AOwner: TComponent);

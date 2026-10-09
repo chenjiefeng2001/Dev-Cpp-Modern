@@ -51,6 +51,7 @@ uses
   Windows,
   Graphics,
   Clipbrd,
+  LCLType,
   SynEditHighlighter,
   SynEditTypes,
   SynUnicode,
@@ -293,6 +294,44 @@ begin
   fLastFG := clWindowText;
 end;
 
+
+// --- Delphi TClipboard.SetAsHandle, expressed on the LCL -------------------
+// Delphi's SetAsHandle(Format, HGLOBAL) TRANSFERS ownership of the global
+// block to the clipboard (the vendored code's own comment says "Don't free
+// Mem! It belongs to the clipboard now"). The LCL's TClipboard has no
+// SetAsHandle; its equivalent is
+//     AddFormat(FormatID: TClipboardFormat; var Buffer; Size: Integer)
+// which COPIES the bytes into its own stream and leaves the caller's block
+// owned by the caller.
+//
+// That difference is a leak-or-double-free decision, so the ownership is
+// expressed instead of assumed: this wrapper copies the data AND frees the
+// caller's block, which is exactly Delphi's contract seen from the other
+// side. Checking it silently (dropping the free, or copying without freeing)
+// would either leak one GMEM_DDESHARE block per clipboard operation or make
+// the clipboard point at freed memory.
+{$IFDEF FPC}
+procedure SetClipboardHandle(AFormat: TClipboardFormat; AHandle: HGLOBAL);
+var
+  Size: DWORD;
+  Ptr: PByte;
+begin
+  Size := GlobalSize(AHandle);
+  if Size = 0 then
+    Exit;
+  Ptr := GlobalLock(AHandle);
+  try
+    if Ptr <> nil then
+      Clipboard.AddFormat(AFormat, Ptr^, Size);
+  finally
+    GlobalUnlock(AHandle);
+  end;
+  // the LCL copied the bytes; the block is still ours, and Delphi's
+  // contract says the clipboard owns it. Freeing here IS the contract.
+  GlobalFree(AHandle);
+end;
+{$ENDIF}
+
 procedure SetClipboardText(Text: string);
 var
   Mem: HGLOBAL;
@@ -315,7 +354,11 @@ begin
         if P <> nil then
         begin
           Move(PWideChar(Text)^, P^, (SLen + 1) * sizeof(WideChar));
+          {$IFDEF FPC}
+          SetClipboardHandle(CF_UNICODETEXT, Mem);
+          {$ELSE}
           Clipboard.SetAsHandle(CF_UNICODETEXT, Mem);
+          {$ENDIF}
         end;
       finally
       GlobalUnlock(Mem);
@@ -347,7 +390,11 @@ begin
           StrSwapByteOrder(PWideChar(S));
         end;
       seUTF8:
+        {$IFDEF FPC}
+        S := UTF8Decode(RawByteString(AnsiString(PAnsiChar(fBuffer.Memory))));
+        {$ELSE}
         S := UTF8ToUnicodeString(PAnsiChar(fBuffer.Memory));
+        {$ENDIF}
       seAnsi:
         S := string(PAnsiChar(fBuffer.Memory));
     end;
@@ -376,7 +423,11 @@ begin
       finally
         GlobalUnlock(hData);
       end;
+      {$IFDEF FPC}
+      SetClipboardHandle(AFormat, hData);
+      {$ELSE}
       Clipboard.SetAsHandle(AFormat, hData);
+      {$ENDIF}
     end
     else
       Abort;
