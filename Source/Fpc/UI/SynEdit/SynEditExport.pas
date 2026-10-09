@@ -57,6 +57,22 @@ uses
   Classes,
   SysUtils;
 
+// FPC's SysUtils declares a TStandardEncoding with IDENTICALLY SPELLED members
+// (seUTF8, seUTF16LE, seUTF16BE, seAnsi) at DIFFERENT ordinals. A bare member
+// name in this unit binds to whichever the parser reaches first, which is how
+// the same source compiled to 5 inside a 4-value enum. Verified with a
+// standalone program: an interface-level const shadow makes every bare use bind
+// to SynUnicode's enum, and the case labels type-check against the selector.
+// The vendored algorithm needs no edit -- the ambiguity is a name-binding
+// accident, not a logic difference.
+{$IFDEF FPC}
+const
+  seUTF8 = SynUnicode.seUTF8;
+  seUTF16LE = SynUnicode.seUTF16LE;
+  seUTF16BE = SynUnicode.seUTF16BE;
+  seAnsi = SynUnicode.seAnsi;
+{$ENDIF}
+
 type
   ESynEncoding = class(ESynError);
 
@@ -567,7 +583,7 @@ begin
     raise ESynEncoding.CreateFmt(SEncodingError, [EncodingStrs[Value],
       GetFormatName]);
 
-  FEncoding := TSynEncoding(Value);
+  FEncoding := Value;
   if Value in [seUTF8, seAnsi] then
     FCharSize := 1
   else if Value in [seUTF16LE, seUTF16BE] then
@@ -665,7 +681,7 @@ end;
 
 function TSynCustomExporter.StringSize(const AText: string): Integer;
 begin
-  case Encoding of
+  case TSynEncoding(Encoding) of
     seUTF8:
       Result := Length(UTF8Encode(AText));
     seUTF16LE, seUTF16BE:
@@ -683,7 +699,7 @@ var
   UTF8Str: UTF8String;
   AnsiStr: AnsiString;
 begin
-  case Encoding of
+  case TSynEncoding(Encoding) of
     seUTF8:
       begin
         UTF8Str := UTF8Encode(AText);
