@@ -3,8 +3,16 @@ unit Aboutfrm;
 interface
 
 uses
+  {$IFDEF FPC}
+  Windows, Messages, SysUtils, Variants, Classes, Graphics,
+  {$ELSE}
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
+  {$ENDIF}
+  {$IFDEF FPC}
+  Controls, Forms, Dialogs, StdCtrls, Buttons, ExtCtrls,
+  {$ELSE}
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.Buttons, Vcl.ExtCtrls,
+  {$ENDIF}
   Vcl.Imaging.pngimage;
 
 type

@@ -4,7 +4,11 @@ interface
 
 uses
   {$IFDEF FPC}
+  {$IFDEF FPC}
+  Classes, SysUtils, Windows, Lsp.Process;
+  {$ELSE}
   Classes, SysUtils, Winapi.Windows, Lsp.Process;
+  {$ENDIF}
   {$ELSE}
   System.Classes, System.SysUtils, Winapi.Windows, LSP.Process;
   {$ENDIF}

@@ -22,9 +22,21 @@ unit LSP.Client.Hover;
 interface
 
 uses
+  {$IFDEF FPC}
+  SysUtils, Classes, Generics.Collections, SyncObjs,
+  {$ELSE}
   System.SysUtils, System.Classes, System.Generics.Collections, System.SyncObjs,
+  {$ENDIF}
+  {$IFDEF FPC}
+  Controls, Forms, Graphics, Windows,
+  {$ELSE}
   Vcl.Controls, Vcl.Forms, Vcl.Graphics, Winapi.Windows,
+  {$ENDIF}
+  {$IFDEF FPC}
+  Lsp.Transport, Lsp.DocumentSync,
+  {$ELSE}
   LSP.Transport, Lsp.DocumentSync,
+  {$ENDIF}
   Lsp.Editor.Types, Lsp.Editor.Interfaces;
 
 // Hover 数据模型 (textDocument/hover)

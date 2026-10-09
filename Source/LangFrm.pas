@@ -24,7 +24,7 @@ interface
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
   StdCtrls, Buttons, ExtCtrls, Menus, FileCtrl, SynEdit, ToolWin, ComCtrls, Themes,
-  svgColor, Vcl.VirtualImage;
+  Vcl.VirtualImage;
 
 type
   TLangForm = class(TForm)

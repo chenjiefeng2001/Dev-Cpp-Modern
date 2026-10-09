@@ -128,6 +128,13 @@ FU_ORDER = [                      # same -Fu order as the probe build scripts
     r"C:\lazarus\lcl\units\x86_64-win64\win32",
     r"C:\lazarus\lcl\units\x86_64-win64",
     r"C:\lazarus\components\lazutils\lib\x86_64-win64",
+    # FPC-side units, so a port/shim entry can be verified by COMPILING it
+    # rather than by looking at it -- the strongest check available here and
+    # the only one that exercises the uses clause and the class declarations.
+    str(ROOT / "Source" / "Fpc" / "UI" / "Controls"),
+    str(ROOT / "Source" / "Fpc" / "UI" / "Compat"),
+    str(ROOT / "Source" / "Fpc" / "UI" / "Data"),
+    str(ROOT / "Source"),
 ]
 
 FPC = r"C:\lazarus\fpc\3.2.2\bin\x86_64-win64\fpc.exe"
@@ -212,11 +219,17 @@ def _declared_symbols(pas):
         return []
     body = re.split(r"(?mi)^\s*implementation\s*$", text)[0]
     out = []
-    for m in re.finditer(r"(?m)^\s*(\w+)\s*=\s*(\w+)\s*;", body):
+    for m in re.finditer(r"(?m)^\s*(\w+)\s*=\s*([\w.]+)\s*;", body):
         name, target = m.group(1), m.group(2)
         # `T = class(...)` and `T = record` are declarations, not aliases.
-        if target.lower() in ("class", "record", "object", "interface",
-                              "type", "procedure", "function"):
+        # The target may be QUALIFIED: `TOpenPictureDialog = ExtDlgs.TOpenPictureDialog`
+        # is how a shim re-exports an LCL class that shares its namespace. The
+        # first version's pattern (\w+) silently accepted no target containing
+        # a dot, so the whole ExtDlgs shim read as "publishes no type alias"
+        # while it published four of them.
+        if target.split(".")[-1].lower() in ("class", "record", "object",
+                                             "interface", "type", "procedure",
+                                             "function"):
             continue
         out.append((name, target))
     return out
@@ -301,6 +314,8 @@ def check_shim_invariants(shims):
     failures = []
     for dotted in sorted(shims):
         shim = shim_for(dotted)
+        meta = shims[dotted]
+        kind = (meta or {}).get("kind", "compatibility shim")
 
         if shim is None:
             failures.append("%s: declared shim, but no unit declares that name"
@@ -316,52 +331,69 @@ def check_shim_invariants(shims):
                             "unit in the Delphi tree breaks the delphi profile"
                             % (dotted, rel))
 
-        aliases = _declared_symbols(shim)
-        if not aliases:
-            failures.append("%s: shim publishes no type alias -- it must "
-                            "re-export the ORIGINAL name, not declare a new "
-                            "class" % dotted)
+        if kind == "native port":
+            # A port is real code under the original unit name, so the alias
+            # requirement does not apply -- insisting on it would forbid the
+            # mechanism itself. The check that does apply is stronger than any
+            # syntax reading: the unit must COMPILE. A port that compiles has a
+            # satisfying uses clause and real declarations by construction;
+            # guessing the class name from the unit tail failed on the shared
+            # types unit (devMonitorTypes declares no class at all, only types)
+            # and on the form unit (TfrmShortcutsEditor, not TdevShortcuts...),
+            # which is two name conventions invented to describe the wrong thing.
+            ok, out = probe_compiles([dotted])
+            if not ok:
+                fails = [l for l in out.splitlines() if "Fatal" in l or "Error:" in l]
+                failures.append("%s: port does not compile -- %s"
+                                % (dotted, (fails[0].strip() if fails else out.strip()[:100])))
+        else:
+            aliases = _declared_symbols(shim)
+            if not aliases:
+                failures.append("%s: shim publishes no type alias -- it must "
+                                "re-export the ORIGINAL name, not declare a new "
+                                "class" % dotted)
 
-        units = _repo_units()
-        used = shim.read_text(encoding="utf-8", errors="replace")
+            units = _repo_units()
+            used = shim.read_text(encoding="utf-8", errors="replace")
+            uses_names = []
+            mu = re.search(r"(?ms)^\s*uses\b(.*?);", used)
+            if mu:
+                for part in mu.group(1).split(","):
+                    nm = part.strip().split(" in ")[0].strip()
+                    if re.fullmatch(r"\w+", nm):
+                        uses_names.append(nm)
 
-        # The alias target is a SYMBOL, not a unit: `TVirtualImage =
-        # TLclVirtualImage` binds a class that lives in the unit named by the
-        # uses clause. So the check is "some unit the shim actually uses declares
-        # that symbol". The first version compared the target against the unit
-        # index and reported the canonical shim as broken -- it was verifying the
-        # wrong kind of name, which is the sort of failure that argues for
-        # compiling the fixture rather than trusting the invariant.
-        uses_names = []
-        # DOTALL matters: the canonical shim writes
-        #     uses
-        #       LclVirtualImage;
-        # and a non-dotall `.*?` cannot reach the semicolon across that newline,
-        # so the clause came back EMPTY and the invariant reported the reference
-        # shim as broken. The regex was narrower than the code it inspects, which
-        # is the failure mode a test fixture exists to prevent.
-        mu = re.search(r"(?ms)^\s*uses\b(.*?);", used)
-        if mu:
-            for part in mu.group(1).split(","):
-                nm = part.strip().split(" in ")[0].strip()
-                if re.fullmatch(r"\w+", nm):
-                    uses_names.append(nm)
+            # A shim may point at an LCL/RTL unit as well as a repo unit -- the
+            # Vcl.ExtDlgs shim re-exports the LCL's own ExtDlgs classes, and
+            # under the repo-only reading its uses clause "names no unit that
+            # exists in this tree", which is false. `available` is what the
+            # compiler itself resolves (compiled_units()).
+            available = compiled_units()
+            real_uses = [n for n in uses_names
+                         if n.lower() in units or n.lower() in available]
+            if not real_uses:
+                failures.append("%s: shim's uses clause (%s) names no unit that "
+                                "exists in this tree" % (dotted, ", ".join(uses_names)))
 
-        real_uses = [n for n in uses_names if n.lower() in units]
-        if not real_uses:
-            failures.append("%s: shim's uses clause (%s) names no unit that "
-                            "exists in this tree" % (dotted, ", ".join(uses_names)))
+            for name, target in aliases:
+                target_name = target.rsplit(".", 1)[-1]
+                # Only a REPO unit can be grepped for the target symbol. A
+                # target in an LCL/RTL unit (Compiled_units() resolves it) is
+                # verified by the compiler at probe time instead -- the tool's
+                # other checks already compile a program that uses every group
+                # A tail.
+                if any(n.lower() in units
+                       and _declares_symbol(units[n.lower()], target_name)
+                       for n in real_uses):
+                    continue
+                if not any(n.lower() in units for n in real_uses):
+                    continue  # all targets are LCL/RTL units: compile-verified
+                failures.append("%s: alias %s = %s, but none of the units it uses "
+                                "(%s) declares that symbol -- the re-export points "
+                                "at nothing"
+                                % (dotted, name, target, ", ".join(real_uses) or "-"))
 
-        for name, target in aliases:
-            if any(_declares_symbol(units[n.lower()], target)
-                   for n in real_uses):
-                continue
-            failures.append("%s: alias %s = %s, but none of the units it uses "
-                            "(%s) declares that symbol -- the re-export points "
-                            "at nothing"
-                            % (dotted, name, target, ", ".join(real_uses) or "-"))
-
-        # Invariant 4.
+        # Invariant 4, applied to both kinds.
         refd = False
         for pas in (ROOT / "Source").rglob("*.pas"):
             rel_p = pas.relative_to(ROOT).as_posix()
@@ -604,6 +636,89 @@ def measure():
     }
 
 
+def rewrite_satisfied(dotted: str) -> bool:
+    """Is this dotted name off the FPC path because of the source rewrite?
+
+    tools/fpc_uses_rewrite.py rewrites a uses-clause entry into
+
+        {$IFDEF FPC}
+        <tail spelling>
+        {$ELSE}
+        <original dotted spelling>
+        {$ENDIF}
+
+    so the dotted name stays in the file for Delphi and leaves the FPC path.
+    This returns True only when EVERY uses-clause occurrence of `dotted` in the
+    self-authored tree sits inside such a Delphi-only branch. An occurrence on
+    the FPC path means the flat result ("the name vanished from the closure")
+    is NOT explained by the rewrite, and the ratchet must fail rather than
+    quietly accept it. That mirror of shims is the point: last round this
+    tool failed 21 names with "unexplained", and the explanation existed but
+    was invisible, so the honest fix is a named mechanism, not a shrug.
+
+    WHY A USES-CLAUSE CHECK AND NOT A GREP
+    =====================================
+    `System.SysUtils` appears in comments and prose across the tree all the
+    time; counting those would report the mechanism as active when only the
+    documentation mentions it. The clause check is the compiler-visible one,
+    and it runs the same conditional-marker stack the rewriter itself uses.
+    """
+    decl = re.compile(r"\b%s\b" % re.escape(dotted), re.IGNORECASE)
+    source_root = ROOT / "Source"
+    if not source_root.is_dir():
+        return False
+    occurrences = 0
+    for pas in sorted(source_root.rglob("*.pas")):
+        parts = pas.relative_to(ROOT).parts
+        if "VCL" in parts or "Archive" in parts:
+            continue
+        try:
+            text = pas.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        nl = "\r\n" if "\r\n" in text else "\n"
+        lines = text.split(nl)
+        in_uses = False
+        cond = []
+        for line in lines:
+            s = line.strip()
+            if re.match(r"^uses\b", s, re.IGNORECASE):
+                in_uses = True
+                cond = []
+                continue
+            if not in_uses:
+                continue
+            if s.startswith("{"):
+                if re.match(r"^\{\$IFDEF(\s+FPC)?\}$", s, re.IGNORECASE):
+                    fpc_block = bool(re.search(r"fpc\}$", s, re.IGNORECASE))
+                    cond.append("fpc" if fpc_block else "other")
+                elif s.startswith("{$ELSE"):
+                    if cond:
+                        cond.append("other" if cond[-1] == "fpc" else "fpc")
+                elif s.startswith("{$ENDIF"):
+                    if cond:
+                        cond.pop()
+                continue
+            if decl.search(line):
+                occurrences += 1
+                protected = False
+                for idx, kind in enumerate(cond):
+                    if kind == "fpc" and len(cond) > idx + 1 and cond[idx + 1] == "other":
+                        protected = True
+                if not protected:
+                    return False
+            # The clause does NOT end at a `;` that sits inside an open
+            # conditional -- the FPC branch's own line ends with `;` and the
+            # Delphi branch after {$ELSE} is still the same uses clause.
+            # Stopping there made the Delphi-side lines invisible to this
+            # check and every rewritten name read as "occurrences == 0",
+            # i.e. unexplained. The condition depth must be empty for a `;`
+            # to mean the clause is over.
+            if s.endswith(";") and not cond:
+                in_uses = False
+    return occurrences > 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ratchet", action="store_true")
@@ -779,19 +894,32 @@ def main():
             b, n = base.get(key), payload.get(key)
             if b is not None and n < b:
                 gone = set(base.get(label.split()[0], []))
-                accounted = [u for u in gone if shim_for(u)]
-                unaccounted = [u for u in gone if not shim_for(u)]
+                # Two legitimate mechanisms, and a name must be satisfied by one
+                # of them for its drop to count. The second one is new: the
+                # source rewrite keeps the Delphi spelling inside an
+                # {$ELSE} branch, which removes the dotted name from the FPC
+                # path (and therefore from the closure this tool measures).
+                by_shim = [u for u in gone if shim_for(u)]
+                by_rewrite = [u for u in gone
+                              if not shim_for(u) and rewrite_satisfied(u)]
+                unaccounted = [u for u in gone
+                               if not shim_for(u) and not rewrite_satisfied(u)]
                 print()
                 print("  %s DROPPED %d -> %d" % (label, b, n))
+                if by_shim:
+                    print("    accounted for by compatibility shim(s): %s"
+                          % ", ".join(sorted(by_shim)))
+                if by_rewrite:
+                    print("    accounted for by the FPC uses-rewrite (Delphi "
+                          "spelling stays in an {$ELSE} branch): %s"
+                          % ", ".join(sorted(by_rewrite)))
                 if unaccounted:
-                    print("    %d unit(s) left the measured set with NO shim: %s"
+                    print("    %d unit(s) left the measured set with NO shim "
+                          "and no rewrite: %s"
                           % (len(unaccounted), ", ".join(sorted(unaccounted))))
                     print("    That is an unexplained improvement. Do not accept")
                     print("    it by re-baselining -- find out why they vanished.")
                     grew.append(label + " (unexplained drop)")
-                elif accounted:
-                    print("    accounted for by compatibility shim(s): %s"
-                          % ", ".join(sorted(accounted)))
         # The shim contract is evaluated BEFORE any early return, and reported
         # alongside the counts rather than after them.
         #
@@ -816,10 +944,17 @@ def main():
                     print("   FAIL  %s" % b)
             return 1
         print()
-        print("SHIM CONTRACT: %d shim(s) satisfy all four invariants"
+        # A port entry satisfies a different subset than an alias shim: the
+        # compile check stands in for "re-exports by alias", because a port
+        # declares the classes itself. Both subsets end with invariant 4.
+        n_port = sum(1 for m in shims.values()
+                     if m.get("kind") == "native port")
+        print("SHIM CONTRACT: %d entr(y/ies) satisfy the contract"
               % len(shims))
-        print("  (resolves to a real unit, lives in Source/Fpc/, re-exports by"
-              " alias, Delphi tree still references the name)")
+        print("  (resolves to a real unit, lives in Source/Fpc/, %d alias "
+              "shim(s) re-export by alias, %d native port(s) compile, "
+              "Delphi tree still references the name)"
+              % (len(shims) - n_port, n_port))
 
         print()
         print("RESULT: main.pas did not get harder")

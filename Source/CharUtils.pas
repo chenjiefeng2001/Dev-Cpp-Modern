@@ -3,7 +3,11 @@ unit CharUtils;
 interface
 
 uses
+  {$IFDEF FPC}
+  SysUtils;
+  {$ELSE}
   System.SysUtils;
+  {$ENDIF}
 
 
 const

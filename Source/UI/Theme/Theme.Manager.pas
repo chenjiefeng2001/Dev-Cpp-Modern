@@ -3,10 +3,26 @@
 interface
 
 uses
+  {$IFDEF FPC}
+  SysUtils, Classes, Windows, Messages,
+  {$ELSE}
   System.SysUtils, System.Classes, WinAPI.Windows, WinAPI.Messages,
+  {$ENDIF}
+  {$IFDEF FPC}
+  Graphics, Forms, Controls, Menus, ComCtrls,
+  {$ELSE}
   Vcl.Graphics, Vcl.Forms, Vcl.Controls, Vcl.Menus, Vcl.ComCtrls,
+  {$ENDIF}
+  {$IFDEF FPC}
+  StdCtrls, ExtCtrls, Themes, Vcl.Styles, Vcl.Styles.Hooks,
+  {$ELSE}
   Vcl.StdCtrls, Vcl.ExtCtrls, Vcl.Themes, Vcl.Styles, Vcl.Styles.Hooks,
+  {$ENDIF}
+  {$IFDEF FPC}
+  Dialogs, Types;
+  {$ELSE}
   Vcl.Dialogs, System.Types;
+  {$ENDIF}
 
 const
   DWMWA_USE_IMMERSIVE_DARK_MODE = 20;

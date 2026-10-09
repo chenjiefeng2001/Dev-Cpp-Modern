@@ -22,8 +22,16 @@ unit Lsp.Bootstrap;
 interface
 
 uses
+  {$IFDEF FPC}
+  SysUtils, Classes, SyncObjs,
+  {$ELSE}
   System.SysUtils, System.Classes, System.SyncObjs,
+  {$ENDIF}
+  {$IFDEF FPC}
+  Lsp.Transport, Lsp.DocumentSync,
+  {$ELSE}
   LSP.Transport, Lsp.DocumentSync,
+  {$ENDIF}
   LSP.Client.Completion, LSP.Client.SignatureHelp, LSP.Client.Hover,
   LSP.Client.Definition;
 

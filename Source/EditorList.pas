@@ -74,7 +74,11 @@ type
 implementation
 
 uses
+  {$IFDEF FPC}
+  System.UITypes, MainUi, MultiLangSupport, DataFrm;
+  {$ELSE}
   System.UItypes, MainUi, MultiLangSupport, DataFrm;
+  {$ENDIF}
 
 function TEditorList.GetPageCount: integer;
 begin

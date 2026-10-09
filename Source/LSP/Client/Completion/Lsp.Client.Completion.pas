@@ -22,10 +22,22 @@ unit LSP.Client.Completion;
 interface
 
 uses
+  {$IFDEF FPC}
+  SysUtils, Classes, Generics.Collections, SyncObjs,
+  {$ELSE}
   System.SysUtils, System.Classes, System.Generics.Collections, System.SyncObjs,
+  {$ENDIF}
+  {$IFDEF FPC}
+  Forms,
+  {$ELSE}
   Vcl.Forms,
+  {$ENDIF}
   SynEditTypes, SynEdit, SynCompletionProposal,
+  {$IFDEF FPC}
+  Lsp.Transport, Lsp.DocumentSync;
+  {$ELSE}
   LSP.Transport, Lsp.DocumentSync;
+  {$ENDIF}
 
 // LSP 文本编辑范围 (0-based, UTF-16 code units, 与 LSP 规范一致)
 type

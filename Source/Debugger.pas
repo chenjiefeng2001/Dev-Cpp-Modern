@@ -84,7 +84,11 @@ type
 implementation
 
 uses
+  {$IFDEF FPC}
+  System.UITypes, devcfg, utils, cpufrm, MainUi;
+  {$ELSE}
   System.UItypes, devcfg, utils, cpufrm, MainUi;
+  {$ENDIF}
 
 constructor TDebugger.Create;
 begin

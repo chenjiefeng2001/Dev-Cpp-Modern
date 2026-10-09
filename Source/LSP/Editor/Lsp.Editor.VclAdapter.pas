@@ -43,7 +43,11 @@
 interface
 
 uses
+  {$IFDEF FPC}
+  SysUtils, Classes, Windows, Graphics, SynEdit, SynEditTypes,
+  {$ELSE}
   System.SysUtils, System.Classes, Winapi.Windows, Vcl.Graphics, SynEdit, SynEditTypes,
+  {$ENDIF}
   Lsp.Editor.Types, Lsp.Editor.Interfaces;
 
 type

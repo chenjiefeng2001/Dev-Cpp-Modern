@@ -21,7 +21,11 @@ var ConfigPackman : TConfig;
 implementation
 
 uses
+  {$IFDEF FPC}
+  Forms, System.IOUtils;
+  {$ELSE}
   Vcl.Forms, System.IOUtils;
+  {$ENDIF}
 
 { TConfig }
 

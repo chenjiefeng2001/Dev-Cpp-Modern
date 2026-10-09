@@ -22,9 +22,21 @@ unit LSP.Client.SignatureHelp;
 interface
 
 uses
+  {$IFDEF FPC}
+  SysUtils, Classes, Generics.Collections, SyncObjs,
+  {$ELSE}
   System.SysUtils, System.Classes, System.Generics.Collections, System.SyncObjs,
+  {$ENDIF}
+  {$IFDEF FPC}
+  Controls, Forms, Graphics,
+  {$ELSE}
   Vcl.Controls, Vcl.Forms, Vcl.Graphics,
+  {$ENDIF}
+  {$IFDEF FPC}
+  Lsp.Transport, Lsp.DocumentSync,
+  {$ELSE}
   LSP.Transport, Lsp.DocumentSync,
+  {$ENDIF}
   Lsp.Editor.Types, Lsp.Editor.Interfaces;
 
 // LSP 签名帮助数据模型 (textDocument/signatureHelp)

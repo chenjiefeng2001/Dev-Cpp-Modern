@@ -22,7 +22,20 @@ unit Instances;
 interface
 
 uses
+{$IFDEF FPC}
+  Windows, Messages, SysUtils, Forms, StrUtils, Classes;
+{$ELSE}
   Windows, Messages, Psapi, SysUtils, Forms, StrUtils, Classes;
+{$ENDIF}
+
+{$IFDEF FPC}
+// Delphi resolves GetModuleFileNameEx from its Psapi unit; FPC's RTL ships no
+// such unit for win32/win64, so the one symbol this unit uses is declared
+// externally here. W form because the filename is read and reported as Unicode.
+function GetModuleFileNameEx(hProcess: THandle; hModule: HMODULE;
+                             lpFilename: PWideChar; nSize: DWORD): DWORD;
+  stdcall; external 'psapi' name 'GetModuleFileNameExW';
+{$ENDIF}
 
 function GetSentStructData(Message: TMessage): String;
 procedure SendToPreviousInstance(Instance: THandle; const Data: String);

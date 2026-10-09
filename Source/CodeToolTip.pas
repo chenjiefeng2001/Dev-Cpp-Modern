@@ -120,7 +120,11 @@ type
 implementation
 
 uses
+  {$IFDEF FPC}
+  Types, devcfg;
+  {$ELSE}
   System.Types, devcfg;
+  {$ENDIF}
 
 // contains the up/down buttons
 // I tried to draw them using DrawFrameControl first,

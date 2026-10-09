@@ -26,6 +26,9 @@ const
 {$IFDEF WIN32}
   pd = '\';
 {$ENDIF}
+{$IFDEF WIN64}
+  pd = '\';
+{$ENDIF}
 {$IFDEF LINUX}
   pd = '/';
 {$ENDIF}

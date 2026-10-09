@@ -217,7 +217,11 @@ type
 implementation
 
 uses
+  {$IFDEF FPC}
+  Types, ExtDlgs, shlobj, MultiLangSupport, devcfg, version, utils, math, CommCtrl, DateUtils, CodeInsList, DataFrm, IniFiles, editor,
+  {$ELSE}
   System.Types, Vcl.ExtDlgs, shlobj, MultiLangSupport, devcfg, version, utils, math, CommCtrl, DateUtils, CodeInsList, DataFrm, IniFiles, editor,
+  {$ENDIF}
   MainUi;
 
 {$R *.dfm}

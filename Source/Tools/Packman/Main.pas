@@ -124,7 +124,11 @@ implementation
 
 uses
   InstallWizards, PackmanUtils, RemoveForms, VerifyForms, AboutForms,
+  {$IFDEF FPC}
+  PackmanExitCodesU, Themes; //, Config;
+  {$ELSE}
   PackmanExitCodesU, Vcl.Themes; //, Config;
+  {$ENDIF}
 
 {$R *.dfm}
 

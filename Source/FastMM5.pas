@@ -84,7 +84,11 @@ unit FastMM5;
 interface
 
 uses
+  {$IFDEF FPC}
+  Windows;
+  {$ELSE}
   Winapi.Windows;
+  {$ENDIF}
 
 {$RangeChecks Off}
 {$BoolEval Off}

@@ -33,7 +33,11 @@ uses
   StrUtils, SynEditTypes, devFileMonitor, devMonitorTypes, EditorList,
   devShortcuts, debugreader, ExceptionFrm, CommCtrl, devcfg, SynEditTextBuffer,
   CppPreprocessor, CBUtils, StatementList, AStyleFormatterOptionsFrm, ClangFormatterOptionsFrm, System.Actions,
+  {$IFDEF FPC}
+  Themes, SVGColor, Vcl.Imaging.pngimage, Vcl.WinXCtrls, Vcl.WinXPanels, ExtDlgs,
+  {$ELSE}
   vcl.Themes, SVGColor, Vcl.Imaging.pngimage, Vcl.WinXCtrls, Vcl.WinXPanels, Vcl.ExtDlgs,
+  {$ENDIF}
   Vcl.Styles.Hooks,
   Vcl.Styles.Utils.Menus, //Style Popup and Shell Menus (class #32768)
   Vcl.Styles.Utils.Forms, //Style dialogs box (class #32770)
@@ -1012,7 +1016,11 @@ var
 implementation
 
 uses
+  {$IFDEF FPC}
+  System.Threading, Math, ShellAPI, IniFiles, Clipbrd, MultiLangSupport, version,
+  {$ELSE}
   System.Threading, System.Math, ShellAPI, IniFiles, Clipbrd, MultiLangSupport, version,
+  {$ENDIF}
   DataFrm, NewProjectFrm, AboutFrm, PrintFrm,
   CompOptionsFrm, EditorOptFrm, IncrementalFrm, EnviroFrm,
   SynEdit, ImageTheme, SynEditKeyCmds, Instances,
@@ -2192,7 +2200,7 @@ end;
 procedure TMainForm.actOpenExecute(Sender: TObject);
 begin
   with TOpenTextFileDialog.Create(Self) do try
-    FixStyle;
+{$IFNDEF FPC}    FixStyle;{$ENDIF}
     Filter := BuildFilter([FLT_PROJECTS, FLT_CS, FLT_CPPS, FLT_RES, FLT_HEADS]);
     Title := Lang[ID_NV_OPENFILE];
     Options := Options + [ofAllowMultiSelect];

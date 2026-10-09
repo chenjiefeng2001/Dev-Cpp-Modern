@@ -66,6 +66,13 @@ type
     property INIFileName: String read GetIniFileName write SetIniFileName;
   end;
 
+{$IFDEF FPC}
+type
+  // FPC's TypInfo does not declare TSymbolName, which Delphi's does;
+  // it is a PShortString-compatible name in both versions.
+  TSymbolName = ShortString;
+{$ENDIF}
+
 function GetPropName(Instance: TPersistent; Index: Integer): TSymbolName;
 function GetPropCount(Instance: TPersistent): Integer;
 

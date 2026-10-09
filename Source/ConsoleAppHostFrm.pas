@@ -3,10 +3,24 @@ unit ConsoleAppHostFrm;
 interface
 
 uses
+  {$IFDEF FPC}
+  Windows, Messages, SysUtils, Variants, Classes, Graphics,
+  {$ELSE}
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
+  {$ENDIF}
+  {$IFDEF FPC}
+  Controls, Forms, Dialogs, ComCtrls, ExtCtrls;
+  {$ELSE}
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.ComCtrls, Vcl.ExtCtrls;
+  {$ENDIF}
 
 type
+{$IFDEF FPC}
+  // Delphi ships this as System.TProc<T1,T2> in System; FPC has no
+  // equivalent. FPC's generics need the `generic` keyword -- without it the
+  // `reference to` reads as an unknown identifier.
+  generic TProc<TA, TB> = reference to procedure(A: TA; B: TB);
+{$ENDIF}
   TConsoleAppHost = class(TForm)
   private
   protected
@@ -38,9 +52,17 @@ type
 implementation
 
 uses
+  {$IFDEF FPC}
+  Generics.Collections, DateUtils,
+  {$ELSE}
   System.Generics.Collections, System.DateUtils,
+  {$ENDIF}
 
+  {$IFDEF FPC}
+  ShellAPI;
+  {$ELSE}
   Winapi.ShellAPI;
+  {$ENDIF}
 
 {$R *.dfm}
 

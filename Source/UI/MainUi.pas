@@ -3,8 +3,16 @@ unit MainUi;
 interface
 
 uses
+  {$IFDEF FPC}
+  SysUtils, Classes, Windows, Forms, ComCtrls,
+  {$ELSE}
   System.SysUtils, System.Classes, Winapi.Windows, Vcl.Forms, Vcl.ComCtrls,
+  {$ENDIF}
+  {$IFDEF FPC}
+  ExtCtrls, MultiLangSupport;
+  {$ELSE}
   Vcl.ExtCtrls, MultiLangSupport;
+  {$ENDIF}
 
 // ---------------------------------------------------------------------------
 // Anti-corruption layer for the main window (Phase-F / F1).
@@ -669,8 +677,16 @@ implementation
 // interface (see the interface note about circular unit references), and the
 // VCL widget units used by the project/output slices are needed here only.
 uses
+  {$IFDEF FPC}
+  System.Actions, StdCtrls, Editor, EditorList, devFileMonitor,
+  {$ELSE}
   System.Actions, Vcl.StdCtrls, Editor, EditorList, devFileMonitor,
+  {$ENDIF}
+  {$IFDEF FPC}
+  Debugger, DebugReader, Project, FileCtrl, ClassBrowser, CppParser,
+  {$ELSE}
   Debugger, DebugReader, Project, System.FileCtrl, ClassBrowser, CppParser,
+  {$ENDIF}
   CBUtils, CPUFrm, main;
 
 procedure RefreshAppTitle;

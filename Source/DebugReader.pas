@@ -151,7 +151,11 @@ type
 implementation
 
 uses
+  {$IFDEF FPC}
+  System.UITypes, devcfg, CPUFrm, multilangsupport, debugger, utils, Controls, Math, MainUi;
+  {$ELSE}
   System.UItypes, devcfg, CPUFrm, multilangsupport, debugger, utils, Controls, Math, MainUi;
+  {$ENDIF}
 
 // macro for all the things that need to be done when we are finished parsing the current block
 

@@ -23,7 +23,11 @@ interface
 
 uses
   Dialogs, Windows, Classes, Graphics, SynEdit, editor, CFGData, IniFiles, ProjectTypes, Math, ShellAPI, ShlObj,
+  {$IFDEF FPC}
+  ComCtrls, System.UITypes, Themes, SynEditTextBuffer, SysUtils;
+  {$ELSE}
   ComCtrls, System.UITypes, Vcl.Themes, SynEditTextBuffer, System.SysUtils;
+  {$ENDIF}
 
 const
   BoolValYesNo: array[boolean] of String = ('No', 'Yes');
@@ -792,7 +796,11 @@ implementation
 
 uses
   MultiLangSupport, DataFrm, StrUtils, Forms, MainUi, compiler, Controls, version, utils, SynEditMiscClasses,
+  {$IFDEF FPC}
+  FileAssocs, TypInfo, DateUtils, Types, System.IOUtils, ExtDlgs;
+  {$ELSE}
   FileAssocs, TypInfo, DateUtils, Types, System.IOUtils, Vcl.ExtDlgs;
+  {$ENDIF}
 
 procedure CreateOptions;
 var

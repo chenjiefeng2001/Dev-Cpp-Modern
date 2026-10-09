@@ -22,8 +22,16 @@ unit LSP.Client;
 interface
 
 uses
+  {$IFDEF FPC}
+  SysUtils, Classes, SyncObjs, Types,
+  {$ELSE}
   System.SysUtils, System.Classes, System.SyncObjs, System.Types,
+  {$ENDIF}
+  {$IFDEF FPC}
+  System.IOUtils, Forms, ExtCtrls, Graphics,
+  {$ELSE}
   System.IOUtils, Vcl.Forms, Vcl.ExtCtrls, Vcl.Graphics,
+  {$ENDIF}
   SynEditHighlighter, SynEdit;
 
 {LSP Diagnostics 渲染器

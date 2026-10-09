@@ -218,7 +218,11 @@ function Lang: TdevMultiLangSupport;
 implementation
 
 uses
+  {$IFDEF FPC}
+  WideStrUtils, System.UITypes, LangFrm, Forms, Utils, Version, Controls, devCFG;
+  {$ELSE}
   System.WideStrUtils, System.UITypes, LangFrm, Forms, Utils, Version, Controls, devCFG;
+  {$ENDIF}
 
 var
   fLangSingleton: TdevMultiLangSupport = nil;

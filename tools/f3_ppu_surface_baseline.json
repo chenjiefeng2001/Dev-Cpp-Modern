@@ -12,16 +12,16 @@
     "System.WideStrUtils": "5. INDETERMINATE",
     "Vcl.ComCtrls": "1. SHIM CANDIDATE",
     "Vcl.Controls": "3. NOT SAFELY SHIM-ABLE",
-    "Vcl.Dialogs": "1. SHIM CANDIDATE",
+    "Vcl.Dialogs": "4. QUESTIONABLE",
     "Vcl.ExtCtrls": "1. SHIM CANDIDATE",
-    "Vcl.ExtDlgs": "5. INDETERMINATE",
+    "Vcl.ExtDlgs": "2. ALREADY RESOLVABLE",
     "Vcl.ImgList": "4. QUESTIONABLE",
     "Vcl.Printers": "3. NOT SAFELY SHIM-ABLE",
     "Vcl.StdCtrls": "1. SHIM CANDIDATE",
     "Vcl.Themes": "4. QUESTIONABLE",
-    "Winapi.CommCtrl": "3. NOT SAFELY SHIM-ABLE",
+    "Winapi.CommCtrl": "4. QUESTIONABLE",
     "Winapi.Messages": "3. NOT SAFELY SHIM-ABLE",
-    "Winapi.ShellAPI": "3. NOT SAFELY SHIM-ABLE"
+    "Winapi.ShellAPI": "4. QUESTIONABLE"
   },
   "source_authorises_compiler_refutes": [
     "Winapi.Messages"
@@ -41,15 +41,15 @@
     "Vcl.Controls": "3. NOT SAFELY SHIM-ABLE",
     "Vcl.Dialogs": "3. NOT SAFELY SHIM-ABLE",
     "Vcl.ExtCtrls": "3. NOT SAFELY SHIM-ABLE",
-    "Vcl.ExtDlgs": "3. NOT SAFELY SHIM-ABLE",
-    "Vcl.ImgList": "3. NOT SAFELY SHIM-ABLE",
+    "Vcl.ExtDlgs": "2. ALREADY RESOLVABLE",
+    "Vcl.ImgList": "4. QUESTIONABLE",
     "Vcl.Printers": "3. NOT SAFELY SHIM-ABLE",
     "Vcl.StdCtrls": "3. NOT SAFELY SHIM-ABLE",
     "Vcl.Themes": "3. NOT SAFELY SHIM-ABLE",
-    "Winapi.CommCtrl": "3. NOT SAFELY SHIM-ABLE",
+    "Winapi.CommCtrl": "4. QUESTIONABLE",
     "Winapi.Messages": "4. QUESTIONABLE",
-    "Winapi.ShellAPI": "3. NOT SAFELY SHIM-ABLE"
+    "Winapi.ShellAPI": "4. QUESTIONABLE"
   },
-  "symbols_source_reader_missed": 43,
+  "symbols_source_reader_missed": 33,
   "unexplained_contradictions": 0
 }

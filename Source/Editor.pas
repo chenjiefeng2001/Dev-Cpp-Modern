@@ -25,7 +25,11 @@ uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs, CodeCompletion, CppParser, SynExportTeX,
   SynEditExport, SynExportRTF, Menus, ImgList, ComCtrls, StdCtrls, ExtCtrls, SynEdit, SynEditKeyCmds, version,
   SynEditCodeFolding, SynExportHTML, SynEditTextBuffer, Math, StrUtils, SynEditTypes, SynEditHighlighter, DateUtils,
+  {$IFDEF FPC}
+  CodeToolTip, CBUtils, System.UITypes, Contnrs, SynEditPrint, ExtDlgs,
+  {$ELSE}
   CodeToolTip, CBUtils, System.UITypes, System.Contnrs, SynEditPrint, Vcl.ExtDlgs,
+  {$ENDIF}
   // F2: the editor-adapter contract. VclAdapter is the ONLY place in this
   // unit that may name TCustomSynEdit; everything else talks to the
   // interface, which is what makes the LSP layer portable later.
@@ -261,9 +265,17 @@ type
 implementation
 
 uses
+  {$IFDEF FPC}
+  project, MainUi, MultiLangSupport, devcfg, utils, Themes,
+  {$ELSE}
   project, MainUi, MultiLangSupport, devcfg, utils, Vcl.Themes,
+  {$ENDIF}
   DataFrm, GotoLineFrm, Macros, debugreader, IncrementalFrm,
+  {$IFDEF FPC}
+  CodeCompletionForm, SynEditMiscClasses, CharUtils, Printers, SynEditPrintTypes,
+  {$ELSE}
   CodeCompletionForm, SynEditMiscClasses, CharUtils, Vcl.Printers, SynEditPrintTypes,
+  {$ENDIF}
   LSP.Client.Completion, LSP.Client.SignatureHelp, LSP.Client.Hover,
   LSP.Client.Definition, Lsp.DocumentSync;
 
@@ -2377,7 +2389,7 @@ var
 begin
   Result := True;
   with TSaveTextFileDialog.Create(nil) do try
-    FixStyle;
+{$IFNDEF FPC}    FixStyle;{$ENDIF}
 
     Title := Lang[ID_NV_SAVEAS];
     Filter := BuildFilter([FLT_CS, FLT_CPPS, FLT_HEADS, FLT_RES]);

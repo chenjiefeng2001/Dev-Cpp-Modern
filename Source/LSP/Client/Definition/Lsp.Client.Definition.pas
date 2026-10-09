@@ -22,8 +22,16 @@ unit LSP.Client.Definition;
 interface
 
 uses
+  {$IFDEF FPC}
+  SysUtils, Classes, Generics.Collections, SyncObjs,
+  {$ELSE}
   System.SysUtils, System.Classes, System.Generics.Collections, System.SyncObjs,
+  {$ENDIF}
+  {$IFDEF FPC}
+  Lsp.Transport, Lsp.DocumentSync,
+  {$ELSE}
   LSP.Transport, Lsp.DocumentSync,
+  {$ENDIF}
   Lsp.Editor.Types, Lsp.Editor.Interfaces;
 
 // 跳转目标 (Location / LocationLink 归一化)

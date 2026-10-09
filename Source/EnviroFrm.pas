@@ -24,8 +24,16 @@ interface
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, StdCtrls, Spin, ExtCtrls, ExtDlgs, Buttons,
+  {$IFDEF FPC}
+  CheckLst, Grids, ValEdit, ComCtrls, Themes, Vcl.BaseImageCollection,
+  {$ELSE}
   CheckLst, Grids, ValEdit, ComCtrls, vcl.Themes, Vcl.BaseImageCollection,
+  {$ENDIF}
+  {$IFDEF FPC}
+  Vcl.ImageCollection, Vcl.VirtualImage, System.ImageList, ImgList;
+  {$ELSE}
   Vcl.ImageCollection, Vcl.VirtualImage, System.ImageList, Vcl.ImgList;
+  {$ENDIF}
 
 type
   TEnviroForm = class(TForm)

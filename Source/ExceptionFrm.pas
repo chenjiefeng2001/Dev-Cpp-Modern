@@ -25,7 +25,7 @@ interface
 
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Dialogs, StrUtils, StdCtrls, Buttons, ScktComp, ExtCtrls, ShellAPI, ComCtrls;
+  Dialogs, StrUtils, StdCtrls, Buttons, ExtCtrls, ShellAPI, ComCtrls;
 
 type
   PUnitEntry = ^TUnitEntry;
@@ -123,7 +123,11 @@ implementation
 {$R *.dfm}
 
 uses
+  {$IFDEF FPC}
+  utils, devcfg, version, DateUtils, System.UITypes;
+  {$ELSE}
   utils, devcfg, version, DateUtils, System.UItypes;
+  {$ENDIF}
 
 const
   UserReportMsg = 'Please include a description of what you were doing before the error occurred...';

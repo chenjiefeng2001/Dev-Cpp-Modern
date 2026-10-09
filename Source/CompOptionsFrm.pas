@@ -119,7 +119,11 @@ type
 implementation
 
 uses
+  {$IFDEF FPC}
+  System.UITypes, ShellAPI, FileCtrl, version, devcfg, utils, MultiLangSupport, DataFrm;
+  {$ELSE}
   System.UItypes, ShellAPI, FileCtrl, version, devcfg, utils, MultiLangSupport, DataFrm;
+  {$ENDIF}
 
 {$R *.dfm}
 

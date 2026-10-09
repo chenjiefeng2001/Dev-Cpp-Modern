@@ -23,7 +23,11 @@ interface
 
 uses
   Windows, Classes, Sysutils, Dateutils, Forms, ShellAPI, Dialogs, SynEdit, SynEditHighlighter,
+  {$IFDEF FPC}
+  Menus, Registry, Controls, ComCtrls, Messages, ExtDlgs;
+  {$ELSE}
   Menus, Registry, Controls, ComCtrls, Messages, System.AnsiStrings, Vcl.ExtDlgs;
+  {$ENDIF}
 
 type
   { File ID types }
@@ -164,7 +168,11 @@ type
 implementation
 
 uses
+  {$IFDEF FPC}
+  devcfg, version, Graphics, StrUtils, MultiLangSupport, editor, ShlObj, ActiveX, System.IOUtils, CharUtils, Vcl.Styles.Utils.SysControls, CommCtrl, Themes, MainUi;
+  {$ELSE}
   devcfg, version, Graphics, StrUtils, MultiLangSupport, editor, ShlObj, ActiveX, System.IOUtils, CharUtils, Vcl.Styles.Utils.SysControls, Winapi.CommCtrl, Vcl.Themes, MainUi;
+  {$ENDIF}
 
 function FastStringReplace(const S, OldPattern, NewPattern: String; Flags: TReplaceFlags): String;
 var
@@ -269,7 +277,7 @@ var
 begin
   SubTextLocation := Length(text) - Length(subtext) + 1;
   if (SubTextLocation > 0) and (subtext <> '') then
-    Result := System.AnsiStrings.StrComp(Pointer(subtext), Pointer(@text[SubTextLocation])) = 0
+    Result := StrComp(Pointer(subtext), Pointer(@text[SubTextLocation])) = 0
   else
     Result := False;
 end;
@@ -280,7 +288,7 @@ var
 begin
   SubTextLocation := Length(text) - Length(subtext) + 1;
   if (SubTextLocation > 0) and (subtext <> '') then
-    Result := System.AnsiStrings.StrIComp(Pointer(subtext), Pointer(@text[SubTextLocation])) = 0
+    Result := StrIComp(Pointer(subtext), Pointer(@text[SubTextLocation])) = 0
   else
     Result := False;
 end;

@@ -74,7 +74,11 @@ type
 implementation
 
 uses
+  {$IFDEF FPC}
+  System.UITypes, editor, project, StrUtils, MultiLangSupport, devcfg, MainUi;
+  {$ELSE}
   System.UItypes, editor, project, StrUtils, MultiLangSupport, devcfg, MainUi;
+  {$ENDIF}
 
 {$R *.dfm}
 

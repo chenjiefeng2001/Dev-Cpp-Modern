@@ -22,9 +22,21 @@ unit Lsp.DocumentSync;
 interface
 
 uses
+  {$IFDEF FPC}
+  SysUtils, Classes, Generics.Collections,
+  {$ELSE}
   System.SysUtils, System.Classes, System.Generics.Collections,
+  {$ENDIF}
+  {$IFDEF FPC}
+  ExtCtrls,
+  {$ELSE}
   Vcl.ExtCtrls,
+  {$ENDIF}
+  {$IFDEF FPC}
+  Lsp.Transport;
+  {$ELSE}
   LSP.Transport;
+  {$ENDIF}
 
 // 文档同步策略: 第一阶段全量文本 (TextDocumentSyncKind.Full=1),
 // 稳定可靠; 增量同步作为后续优化

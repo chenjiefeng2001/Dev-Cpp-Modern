@@ -7,7 +7,7 @@
   "component_only": [],
   "component_only_count": 0,
   "main_closure_own_units": 82,
-  "note": "HISTORICAL MEASUREMENT, taken before any compatibility shim existed (doc/F3-SVG section 20). Frozen on purpose: the classification below is what was measured, not what is currently true. See 'shims' for how these are being satisfied. Do NOT re-derive these numbers from the live tree -- the shim makes Vcl.VirtualImage resolvable, which would silently move it out of 'renamed' and make the baseline agree with the present by rewriting the past.",
+  "note": "HISTORICAL MEASUREMENT, taken before any compatibility shim existed (doc/F3-SVG section 20). Frozen on purpose: the classification below is what was measured, not what is currently true. See 'shims' for how these are being satisfied. Do NOT re-derive these numbers from the live tree -- the shim makes Vcl.VirtualImage resolvable, which would silently move it out of 'renamed' and make the baseline agree with the present by rewriting the past. Baseline note for the 2026-10-09 re-baseline: own_units is carried at the historical 82 + declared scope below. The growth is attributed to five FPC-side ports (devFileMonitor, devMonitorThread, devMonitorTypes, devShortcuts, devShortcutsEditorForm) and two compatibility files (Vcl.VirtualImage, Vcl.ExtDlgs), each of which is a real unit in Source/Fpc that must now compile. The 21 prefix_only names that left the measured set are not lost -- they are satisfied by the source rewrite recorded under 'rewrites' (see tools/fpc_uses_rewrite.py; the ratchet verifies each one is off the FPC path rather than accepting the drop on trust).",
   "prefix_only": [
     "System.Classes",
     "System.Contnrs",
@@ -52,19 +52,186 @@
     "Vcl.VirtualImage"
   ],
   "renamed_count": 1,
+  "rewrites": {
+    "System.Classes": {
+      "mechanism": "tools/fpc_uses_rewrite.py",
+      "satisfies_group": "prefix_only",
+      "why": "the dotted spelling survives only in an {$ELSE} branch, so FPC compiles the tail spelling (an FPC/LCL unit that exists); no shim, no new code."
+    },
+    "System.Contnrs": {
+      "mechanism": "tools/fpc_uses_rewrite.py",
+      "satisfies_group": "prefix_only",
+      "why": "the dotted spelling survives only in an {$ELSE} branch, so FPC compiles the tail spelling (an FPC/LCL unit that exists); no shim, no new code."
+    },
+    "System.DateUtils": {
+      "mechanism": "tools/fpc_uses_rewrite.py",
+      "satisfies_group": "prefix_only",
+      "why": "the dotted spelling survives only in an {$ELSE} branch, so FPC compiles the tail spelling (an FPC/LCL unit that exists); no shim, no new code."
+    },
+    "System.FileCtrl": {
+      "mechanism": "tools/fpc_uses_rewrite.py",
+      "satisfies_group": "prefix_only",
+      "why": "the dotted spelling survives only in an {$ELSE} branch, so FPC compiles the tail spelling (an FPC/LCL unit that exists); no shim, no new code."
+    },
+    "System.Math": {
+      "mechanism": "tools/fpc_uses_rewrite.py",
+      "satisfies_group": "prefix_only",
+      "why": "the dotted spelling survives only in an {$ELSE} branch, so FPC compiles the tail spelling (an FPC/LCL unit that exists); no shim, no new code."
+    },
+    "System.SyncObjs": {
+      "mechanism": "tools/fpc_uses_rewrite.py",
+      "satisfies_group": "prefix_only",
+      "why": "the dotted spelling survives only in an {$ELSE} branch, so FPC compiles the tail spelling (an FPC/LCL unit that exists); no shim, no new code."
+    },
+    "System.SysUtils": {
+      "mechanism": "tools/fpc_uses_rewrite.py",
+      "satisfies_group": "prefix_only",
+      "why": "the dotted spelling survives only in an {$ELSE} branch, so FPC compiles the tail spelling (an FPC/LCL unit that exists); no shim, no new code."
+    },
+    "System.Types": {
+      "mechanism": "tools/fpc_uses_rewrite.py",
+      "satisfies_group": "prefix_only",
+      "why": "the dotted spelling survives only in an {$ELSE} branch, so FPC compiles the tail spelling (an FPC/LCL unit that exists); no shim, no new code."
+    },
+    "System.Variants": {
+      "mechanism": "tools/fpc_uses_rewrite.py",
+      "satisfies_group": "prefix_only",
+      "why": "the dotted spelling survives only in an {$ELSE} branch, so FPC compiles the tail spelling (an FPC/LCL unit that exists); no shim, no new code."
+    },
+    "System.WideStrUtils": {
+      "mechanism": "tools/fpc_uses_rewrite.py",
+      "satisfies_group": "prefix_only",
+      "why": "the dotted spelling survives only in an {$ELSE} branch, so FPC compiles the tail spelling (an FPC/LCL unit that exists); no shim, no new code."
+    },
+    "Vcl.ComCtrls": {
+      "mechanism": "tools/fpc_uses_rewrite.py",
+      "satisfies_group": "prefix_only",
+      "why": "the dotted spelling survives only in an {$ELSE} branch, so FPC compiles the tail spelling (an FPC/LCL unit that exists); no shim, no new code."
+    },
+    "Vcl.Controls": {
+      "mechanism": "tools/fpc_uses_rewrite.py",
+      "satisfies_group": "prefix_only",
+      "why": "the dotted spelling survives only in an {$ELSE} branch, so FPC compiles the tail spelling (an FPC/LCL unit that exists); no shim, no new code."
+    },
+    "Vcl.Dialogs": {
+      "mechanism": "tools/fpc_uses_rewrite.py",
+      "satisfies_group": "prefix_only",
+      "why": "the dotted spelling survives only in an {$ELSE} branch, so FPC compiles the tail spelling (an FPC/LCL unit that exists); no shim, no new code."
+    },
+    "Vcl.ExtCtrls": {
+      "mechanism": "tools/fpc_uses_rewrite.py",
+      "satisfies_group": "prefix_only",
+      "why": "the dotted spelling survives only in an {$ELSE} branch, so FPC compiles the tail spelling (an FPC/LCL unit that exists); no shim, no new code."
+    },
+    "Vcl.ImgList": {
+      "mechanism": "tools/fpc_uses_rewrite.py",
+      "satisfies_group": "prefix_only",
+      "why": "the dotted spelling survives only in an {$ELSE} branch, so FPC compiles the tail spelling (an FPC/LCL unit that exists); no shim, no new code."
+    },
+    "Vcl.Printers": {
+      "mechanism": "tools/fpc_uses_rewrite.py",
+      "satisfies_group": "prefix_only",
+      "why": "the dotted spelling survives only in an {$ELSE} branch, so FPC compiles the tail spelling (an FPC/LCL unit that exists); no shim, no new code."
+    },
+    "Vcl.StdCtrls": {
+      "mechanism": "tools/fpc_uses_rewrite.py",
+      "satisfies_group": "prefix_only",
+      "why": "the dotted spelling survives only in an {$ELSE} branch, so FPC compiles the tail spelling (an FPC/LCL unit that exists); no shim, no new code."
+    },
+    "Vcl.Themes": {
+      "mechanism": "tools/fpc_uses_rewrite.py",
+      "satisfies_group": "prefix_only",
+      "why": "the dotted spelling survives only in an {$ELSE} branch, so FPC compiles the tail spelling (an FPC/LCL unit that exists); no shim, no new code."
+    },
+    "Winapi.CommCtrl": {
+      "mechanism": "tools/fpc_uses_rewrite.py",
+      "satisfies_group": "prefix_only",
+      "why": "the dotted spelling survives only in an {$ELSE} branch, so FPC compiles the tail spelling (an FPC/LCL unit that exists); no shim, no new code."
+    },
+    "Winapi.Messages": {
+      "mechanism": "tools/fpc_uses_rewrite.py",
+      "satisfies_group": "prefix_only",
+      "why": "the dotted spelling survives only in an {$ELSE} branch, so FPC compiles the tail spelling (an FPC/LCL unit that exists); no shim, no new code."
+    },
+    "Winapi.ShellAPI": {
+      "mechanism": "tools/fpc_uses_rewrite.py",
+      "satisfies_group": "prefix_only",
+      "why": "the dotted spelling survives only in an {$ELSE} branch, so FPC compiles the tail spelling (an FPC/LCL unit that exists); no shim, no new code."
+    }
+  },
   "shims": {
-    "Vcl.VirtualImage": {
-      "unit": "Source/Fpc/UI/Compat/Vcl.VirtualImage.pas",
-      "kind": "type alias",
-      "binds": "TVirtualImage = TLclVirtualImage",
-      "new_classes": 0,
-      "delphi_tree_edited": false,
+    "Vcl.ExtDlgs": {
+      "kind": "compatibility shim",
       "satisfies_group": "renamed",
-      "why": "Sprint F3-6's TSynRCSyn mechanism: the Delphi tree keeps the unit name and the FPC search path supplies the implementation. It must be a TYPE ALIAS, not a subclass -- a subclass makes DFM streaming a type error, measured by compiling both shapes.",
       "scope_added": {
-        "own_units": 1,
-        "own_loc": 68
-      }
+        "own_loc": 93,
+        "own_units": 1
+      },
+      "unit": "Source/Fpc/UI/Compat/Vcl.ExtDlgs.pas",
+      "why": "TOpenTextFileDialog/TSaveTextFileDialog are new code (Delphi builds them over IFileDialogCustomize, which LCL's TOpenDialog does not expose), and the rest of the unit is type aliases onto the LCL's own ExtDlgs."
+    },
+    "Vcl.VirtualImage": {
+      "binds": "TVirtualImage = TLclVirtualImage",
+      "delphi_tree_edited": false,
+      "kind": "type alias",
+      "new_classes": 0,
+      "satisfies_group": "renamed",
+      "scope_added": {
+        "own_loc": 68,
+        "own_units": 1
+      },
+      "unit": "Source/Fpc/UI/Compat/Vcl.VirtualImage.pas",
+      "why": "Sprint F3-6's TSynRCSyn mechanism: the Delphi tree keeps the unit name and the FPC search path supplies the implementation. It must be a TYPE ALIAS, not a subclass -- a subclass makes DFM streaming a type error, measured by compiling both shapes."
+    },
+    "devFileMonitor": {
+      "kind": "native port",
+      "satisfies_group": "port",
+      "scope_added": {
+        "own_loc": 151,
+        "own_units": 1
+      },
+      "unit": "Source/Fpc/UI/Controls/devFileMonitor.pas",
+      "why": "main.lfm streams `object FileMonitor: TdevFileMonitor` and MainUi.pas uses the unit; the vendored Delphi control is TWinControl-based with {$IFDEF WIN32} guards FPC 64-bit never enters, so the identical class is ported to the FPC tree with the unit name preserved."
+    },
+    "devMonitorThread": {
+      "kind": "native port",
+      "satisfies_group": "port",
+      "scope_added": {
+        "own_loc": 213,
+        "own_units": 1
+      },
+      "unit": "Source/Fpc/UI/Controls/devMonitorThread.pas",
+      "why": "dependency of devFileMonitor; the port swaps FindFirstChangeNotification for the W form (FPC win64 has no implicit ANSI API) and casts the TEvent handle into THandle."
+    },
+    "devMonitorTypes": {
+      "kind": "native port",
+      "satisfies_group": "port",
+      "scope_added": {
+        "own_loc": 45,
+        "own_units": 1
+      },
+      "unit": "Source/Fpc/UI/Controls/devMonitorTypes.pas",
+      "why": "shared types for the file monitor; only the unit guards needed the WINDOWS swap."
+    },
+    "devShortcuts": {
+      "kind": "native port",
+      "satisfies_group": "port",
+      "scope_added": {
+        "own_loc": 289,
+        "own_units": 1
+      },
+      "unit": "Source/Fpc/UI/Controls/devShortcuts.pas",
+      "why": "main.lfm streams `object Shortcuts: TdevShortcuts`; needs LCLProc for ShortCutToText/TextToShortCut, which live in Delphi's Menus."
+    },
+    "devShortcutsEditorForm": {
+      "kind": "native port",
+      "satisfies_group": "port",
+      "scope_added": {
+        "own_loc": 361,
+        "own_units": 1
+      },
+      "unit": "Source/Fpc/UI/Controls/devShortcutsEditorForm.pas",
+      "why": "the modal editor form of devShortcuts (its .dfm shipped as devShortcutsEditorForm.dfm; ported to .lfm with the Delphi-only PixelsPerInch/TextHeight/OldCreateOrder dropped, and the Vcl.Themes style call replaced by clWindow)."
     }
   }
 }

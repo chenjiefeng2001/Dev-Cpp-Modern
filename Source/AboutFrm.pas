@@ -23,7 +23,7 @@ interface
 
 uses
   Windows, SysUtils, Classes, version, Graphics, Controls, Forms, Dialogs,
-  StdCtrls, Buttons, ExtCtrls, Vcl.Imaging.pngimage,DataFrm;
+  StdCtrls, Buttons, ExtCtrls, DataFrm;
 
 type
   TAboutForm = class(TForm)

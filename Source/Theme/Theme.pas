@@ -22,7 +22,11 @@ unit Theme;
 interface
 
 uses
+  {$IFDEF FPC}
+  SysUtils, Classes, Themes, Vcl.Styles, Graphics;
+  {$ELSE}
   System.SysUtils, System.Classes, Vcl.Themes, Vcl.Styles, Vcl.Graphics;
+  {$ENDIF}
 
 // 主题管理器
 type

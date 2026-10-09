@@ -25,7 +25,11 @@ uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, Menus, StdCtrls, Buttons, ComCtrls, ImgList, libTar, BZip2, IniFiles,
   ExtDlgs, ToolWin, ExtCtrls, StrUtils, System.ImageList,
+  {$IFDEF FPC}
+  System.Generics.Defaults, Generics.Collections, Types,
+  {$ELSE}
   System.Generics.Defaults, System.Generics.Collections, System.Types,
+  {$ENDIF}
   System.UITypes;
 
 const SETUP_SECTION  = 'Setup';
@@ -166,7 +170,11 @@ var
 implementation
 
 uses
+  {$IFDEF FPC}
+  menufrm, filefrm, buildfrm, actionfrm, Aboutfrm, Config, Themes;
+  {$ELSE}
   menufrm, filefrm, buildfrm, actionfrm, Aboutfrm, Config, Vcl.Themes;
+  {$ENDIF}
 
 {$R *.dfm}
 
