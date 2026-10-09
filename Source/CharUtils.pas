@@ -43,7 +43,7 @@ const
   DefSpaceChars: TSysCharSet = [#32, #9];
   DefDigitChars: TSysCharSet = ['0'..'9'];
 //  DefOperatorChars: TSysCharSet = ['+', '-', '*', '/', '!', '=', '<', '>', '&', '|', '^'];
-  DefOperatorChars: TSysCharSet = ['+', '-', '/', '*', '[', ']', '=', '%', '!', '&', '|', '>', '<', '^', '!']; //is they must be different?
+  DefOperatorChars: TSysCharSet = ['+', '-', '/', '*', '[', ']', '=', '%', '!', '&', '|', '>', '<', '^'];
 
   DefIdentChars: TSysCharSet = ['A'..'Z', '0'..'9', 'a'..'z', '_', '*', '&', '~'];
   DefMacroIdentChars: TSysCharSet = ['A'..'Z', 'a'..'z', '_'];
@@ -73,8 +73,10 @@ begin
 end;
 
 class operator TSetOfChar.In(const AChar: Char; const ASet: TSetOfChar): Boolean;
+var
+  SetChar: Char;
 begin
-  for var SetChar in ASet.FSet do
+  for SetChar in ASet.FSet do
     if SetChar = AChar then
       Exit(True);
 
@@ -82,9 +84,11 @@ begin
 end;
 
 constructor TSetOfChar.New(const AAnsiSet: TSysCharSet);
+var
+  AChar: AnsiChar;
 begin
   FSet := [];
-  for var AChar in AAnsiSet do
+  for AChar in AAnsiSet do
     Add(AChar);
 end;
 

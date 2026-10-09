@@ -26,7 +26,7 @@ uses
   SynEditExport, SynExportRTF, Menus, ImgList, ComCtrls, StdCtrls, ExtCtrls, SynEdit, SynEditKeyCmds, version,
   SynEditCodeFolding, SynExportHTML, SynEditTextBuffer, Math, StrUtils, SynEditTypes, SynEditHighlighter, DateUtils,
   {$IFDEF FPC}
-  CodeToolTip, CBUtils, System.UITypes, Contnrs, SynEditPrint, ExtDlgs,
+  CodeToolTip, CBUtils, System.UITypes, Contnrs, SynEditPrint, Vcl.ExtDlgs,
   {$ELSE}
   CodeToolTip, CBUtils, System.UITypes, System.Contnrs, SynEditPrint, Vcl.ExtDlgs,
   {$ENDIF}

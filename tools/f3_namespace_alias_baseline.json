@@ -6,8 +6,8 @@
   "already_ok_count": 2,
   "component_only": [],
   "component_only_count": 0,
-  "main_closure_own_units": 82,
-  "note": "HISTORICAL MEASUREMENT, taken before any compatibility shim existed (doc/F3-SVG section 20). Frozen on purpose: the classification below is what was measured, not what is currently true. See 'shims' for how these are being satisfied. Do NOT re-derive these numbers from the live tree -- the shim makes Vcl.VirtualImage resolvable, which would silently move it out of 'renamed' and make the baseline agree with the present by rewriting the past. Baseline note for the 2026-10-09 re-baseline: own_units is carried at the historical 82 + declared scope below. The growth is attributed to five FPC-side ports (devFileMonitor, devMonitorThread, devMonitorTypes, devShortcuts, devShortcutsEditorForm) and two compatibility files (Vcl.VirtualImage, Vcl.ExtDlgs), each of which is a real unit in Source/Fpc that must now compile. The 21 prefix_only names that left the measured set are not lost -- they are satisfied by the source rewrite recorded under 'rewrites' (see tools/fpc_uses_rewrite.py; the ratchet verifies each one is off the FPC path rather than accepting the drop on trust).",
+  "main_closure_own_units": 81,
+  "note": "HISTORICAL MEASUREMENT, taken before any compatibility shim existed (doc/F3-SVG section 20). Frozen on purpose: the classification below is what was measured, not what is currently true. See 'shims' for how these are being satisfied. Do NOT re-derive these numbers from the live tree -- the shim makes Vcl.VirtualImage resolvable, which would silently move it out of 'renamed' and make the baseline agree with the present by rewriting the past. Baseline note for the 2026-10-09 re-baseline: own_units is carried at the historical 82 + declared scope below. The growth is attributed to five FPC-side ports (devFileMonitor, devMonitorThread, devMonitorTypes, devShortcuts, devShortcutsEditorForm) and two compatibility files (Vcl.VirtualImage, Vcl.ExtDlgs), each of which is a real unit in Source/Fpc that must now compile. The 21 prefix_only names that left the measured set are not lost -- they are satisfied by the source rewrite recorded under 'rewrites' (see tools/fpc_uses_rewrite.py; the ratchet verifies each one is off the FPC path rather than accepting the drop on trust). Baseline note for the ClassBrowsing port (2026-10-09, continued): own_units stays at the historical 72 + the declared scope below. The growth 72 -> 96 is the eight-ported ClassBrowsing package (CBUtils, IntList, StatementList, CppTokenizer, CppPreprocessor, CppParser, CodeCompletion, CodeCompletionForm), each a real unit under Source/Fpc that must now compile -- they were ABSENT units in main.pas's closure before the port (the audit measured 41 own-closure units blocked by CodeCompletion; that is now 0).",
   "prefix_only": [
     "System.Classes",
     "System.Contnrs",
@@ -160,6 +160,86 @@
     }
   },
   "shims": {
+    "CBUtils": {
+      "kind": "native port",
+      "satisfies_group": "port",
+      "scope_added": {
+        "own_loc": 477,
+        "own_units": 1
+      },
+      "unit": "Source/Fpc/UI/ClassBrowsing/CBUtils.pas",
+      "why": "PStatement/TFileIncludes and the include-scanners; System.AnsiStrings' two symbols became plain SysUtils calls."
+    },
+    "CodeCompletion": {
+      "kind": "native port",
+      "satisfies_group": "port",
+      "scope_added": {
+        "own_loc": 437,
+        "own_units": 1
+      },
+      "unit": "Source/Fpc/UI/ClassBrowsing/CodeCompletion.pas",
+      "why": "TCodeCompletion: the OnKeyPress event assignment needs @ (this FPC build parses a bare name as a call), Pointer(Item) -> TObject, and OnKeyPress/Position moved out of `published` (FPC refuses a var arg through a published procedural property, and a TPoint without a storage specifier)."
+    },
+    "CodeCompletionForm": {
+      "kind": "native port",
+      "satisfies_group": "port",
+      "scope_added": {
+        "own_loc": 395,
+        "own_units": 1
+      },
+      "unit": "Source/Fpc/UI/ClassBrowsing/CodeCompletionForm.pas",
+      "why": "the completion popup form; its .dfm ships as .lfm with PixelsPerInch/TextHeight/OldCreateOrder dropped, and TCreateParams comes from LCLType."
+    },
+    "CppParser": {
+      "kind": "native port",
+      "satisfies_group": "port",
+      "scope_added": {
+        "own_loc": 2975,
+        "own_units": 1
+      },
+      "unit": "Source/Fpc/UI/ClassBrowsing/CppParser.pas",
+      "why": "the 6,094-line parser core. Compiles unchanged under FPC except: chained-qualifier access, Pointer(Item) -> TObject(Item) for AddObject, and the same `Name` parameter rename."
+    },
+    "CppPreprocessor": {
+      "kind": "native port",
+      "satisfies_group": "port",
+      "scope_added": {
+        "own_loc": 1021,
+        "own_units": 1
+      },
+      "unit": "Source/Fpc/UI/ClassBrowsing/CppPreprocessor.pas",
+      "why": "the C preprocessor; ExtractStrings needs PAnsiChar(AnsiString(...)) in delphiunicode, and the parameter name `Name` collides with an RTL identifier in this FPC build."
+    },
+    "CppTokenizer": {
+      "kind": "native port",
+      "satisfies_group": "port",
+      "scope_added": {
+        "own_loc": 816,
+        "own_units": 1
+      },
+      "unit": "Source/Fpc/UI/ClassBrowsing/CppTokenizer.pas",
+      "why": "the C++ tokenizer; System.Character -> Character, and pCurrent^.IsDigit (a Delphi PChar helper) -> IsDigit(pCurrent^)."
+    },
+    "IntList": {
+      "kind": "native port",
+      "satisfies_group": "port",
+      "scope_added": {
+        "own_loc": 450,
+        "own_units": 1
+      },
+      "unit": "Source/Fpc/UI/ClassBrowsing/IntList.pas",
+      "why": "the int64 list of the parser; the raise-frame asm became ExceptAddr, the sort swap cast-as-lvalue became typed assignment."
+    },
+    "StatementList": {
+      "kind": "native port",
+      "satisfies_group": "port",
+      "scope_added": {
+        "own_loc": 244,
+        "own_units": 1
+      },
+      "unit": "Source/Fpc/UI/ClassBrowsing/StatementList.pas",
+      "why": "the PStatement linked list; two chained-qualifier assignments rewritten (FPC rejects `a.b.c := x`)."
+    },
     "Vcl.ExtDlgs": {
       "kind": "compatibility shim",
       "satisfies_group": "renamed",

@@ -23,7 +23,7 @@ interface
 
 uses
   {$IFDEF FPC}
-  SysUtils, Classes, Generics.Collections, SyncObjs,
+  SysUtils, Classes, Generics.Collections, SyncObjs, Windows,
   {$ELSE}
   System.SysUtils, System.Classes, System.Generics.Collections, System.SyncObjs,
   {$ENDIF}
@@ -623,7 +623,11 @@ begin
   end;
 
   // 单调递增请求 ID (线程安全)
+{$IFDEF FPC}
+  ReqId := InterlockedIncrement(FNextRequestId);
+{$ELSE}
   ReqId := TInterlocked.Increment(FNextRequestId);
+{$ENDIF}
 
   FActiveRequestId := ReqId;
   FActiveContext.RequestId := ReqId;

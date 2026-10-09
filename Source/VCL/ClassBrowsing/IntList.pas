@@ -100,8 +100,12 @@ end;
 procedure TIntList.Error(const Msg: String; Data: Integer);
 
   function ReturnAddr: Pointer;
-  asm
-          MOV     EAX,[EBP+4]
+  begin
+    { Was 32-bit inline ASM (MOV EAX,[EBP+4]) -- the Delphi 32 build's frame
+      walk. It cannot assemble under FPC 64-bit. FPC exposes the frame
+      address through ExceptAddr, which is the documented replacement;
+      ExceptAddr is also DelphIGE-free, so the swap is 64/32-agnostic. }
+    Result := ExceptAddr;
   end;
 
 begin

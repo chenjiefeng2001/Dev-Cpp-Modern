@@ -24,7 +24,7 @@ interface
 uses
   Windows, Classes, Sysutils, Dateutils, Forms, ShellAPI, Dialogs, SynEdit, SynEditHighlighter,
   {$IFDEF FPC}
-  Menus, Registry, Controls, ComCtrls, Messages, ExtDlgs;
+  Menus, Registry, Controls, ComCtrls, Messages, Vcl.ExtDlgs;
   {$ELSE}
   Menus, Registry, Controls, ComCtrls, Messages, System.AnsiStrings, Vcl.ExtDlgs;
   {$ENDIF}

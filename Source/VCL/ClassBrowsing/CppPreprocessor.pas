@@ -609,8 +609,8 @@ var
       ArgNames := TStringList.Create;
       ArgValues := TStringList.Create;
       try
-        ExtractStrings([',', '(', ')'], [], PChar(FunctionDefine^.Args), ArgNames);
-        ExtractStrings([',', '(', ')'], [], PChar(ArgValueString), ArgValues); // extract from Line string
+        ExtractStrings([',', '(', ')'], [], PAnsiChar(AnsiString(FunctionDefine^.Args)), ArgNames);
+        ExtractStrings([',', '(', ')'], [], PAnsiChar(AnsiString(ArgValueString)), ArgValues); // extract from Line string
 
         // If the argument count matches up, replace names by values
         if ArgNames.Count = ArgValues.Count then begin

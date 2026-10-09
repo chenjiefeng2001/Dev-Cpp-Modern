@@ -134,6 +134,7 @@ FU_ORDER = [                      # same -Fu order as the probe build scripts
     str(ROOT / "Source" / "Fpc" / "UI" / "Controls"),
     str(ROOT / "Source" / "Fpc" / "UI" / "Compat"),
     str(ROOT / "Source" / "Fpc" / "UI" / "Data"),
+    str(ROOT / "Source" / "Fpc" / "UI" / "ClassBrowsing"),
     str(ROOT / "Source"),
 ]
 

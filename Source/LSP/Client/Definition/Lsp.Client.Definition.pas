@@ -23,7 +23,7 @@ interface
 
 uses
   {$IFDEF FPC}
-  SysUtils, Classes, Generics.Collections, SyncObjs,
+  SysUtils, Classes, Generics.Collections, SyncObjs, Windows,
   {$ELSE}
   System.SysUtils, System.Classes, System.Generics.Collections, System.SyncObjs,
   {$ENDIF}
@@ -569,7 +569,11 @@ begin
   except
   end;
 
+{$IFDEF FPC}
+  ReqId := InterlockedIncrement(FNextRequestId);
+{$ELSE}
   ReqId := TInterlocked.Increment(FNextRequestId);
+{$ENDIF}
   FActiveRequestId := ReqId;
   FActiveContext.RequestId := ReqId;
   FActiveContext.FileName := FCurrentFile;

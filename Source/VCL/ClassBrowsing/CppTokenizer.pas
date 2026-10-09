@@ -94,7 +94,7 @@ procedure Register;
 implementation
 
 uses
-  System.Character, DateUtils;
+  Character, DateUtils;
 
 procedure Register;
 begin
@@ -387,7 +387,7 @@ var
 begin
   Offset := pCurrent;
 
-  if pCurrent^.IsDigit then
+  if IsDigit(pCurrent^) then   { was pCurrent^.IsDigit (Delphi PChar helper) }
     while pCurrent^ in DigitChars + HexChars do
       Advance;
 

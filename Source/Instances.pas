@@ -47,6 +47,16 @@ const
 implementation
 
 uses
+{$IFDEF FPC}
+  // Instances calls MainUi.MainWindowClassName. The interface section
+  // cannot name MainUi there: MainUi's interface already uses Editor and
+  // friends, and on some paths that reaches back here. Delphi accepts an
+  // implementation-side reference by resolving it from another unit's
+  // uses; FPC requires the dependency to be spelled out, where it belongs.
+  // This cannot cycle: only Instances' implementation depends on MainUi's
+  // interface.
+  MainUi,
+{$ENDIF}
   Dialogs;
 
 var

@@ -77,7 +77,10 @@ STRIP = {
     "Vcl.Controls": "Controls",
     "Vcl.Dialogs": "Dialogs",
     "Vcl.ExtCtrls": "ExtCtrls",
-    "Vcl.ExtDlgs": "ExtDlgs",
+    # Vcl.ExtDlgs is deliberately NOT rewritten: Source/Fpc/UI/Compat/Vcl.ExtDlgs.pas
+    # declares the dotted name and adds the two classes the LCL does not have
+    # (TOpenTextFileDialog/TSaveTextFileDialog with EncodingIndex). Rewriting the
+    # spelling to the bare `ExtDlgs` resolves the LCL unit instead and loses them.
     "Vcl.ImgList": "ImgList",
     "Vcl.Printers": "Printers",
     "Vcl.Themes": "Themes",

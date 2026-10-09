@@ -797,7 +797,7 @@ implementation
 uses
   MultiLangSupport, DataFrm, StrUtils, Forms, MainUi, compiler, Controls, version, utils, SynEditMiscClasses,
   {$IFDEF FPC}
-  FileAssocs, TypInfo, DateUtils, Types, System.IOUtils, ExtDlgs;
+  FileAssocs, TypInfo, DateUtils, Types, System.IOUtils, Vcl.ExtDlgs;
   {$ELSE}
   FileAssocs, TypInfo, DateUtils, Types, System.IOUtils, Vcl.ExtDlgs;
   {$ENDIF}
@@ -1382,7 +1382,7 @@ begin
   sl.Add('lakemont: Intel Lakemont MCU, based on Intel Pentium CPU.=lakemont');
   sl.Add('pentium-mmx: Intel Pentium MMX CPU, based on Pentium core with MMX instruction set support.=pentium-mmx');
   sl.Add('pentiumpro: Intel Pentium Pro CPU.=pentiumpro');
-  sl.Add('i686: When used with -march, the Pentium Pro instruction set is used, so the code runs on all i686 family chips. When used with -mtune, it has the same meaning as ‘generic’.=i686');
+  sl.Add('i686: When used with -march, the Pentium Pro instruction set is used, so the code runs on all i686 family chips. When used with -mtune, it has the same meaning as ï¿½genericï¿½.=i686');
   sl.Add('pentium2: Intel Pentium II CPU, based on Pentium Pro core with MMX instruction set support.=pentium2');
   sl.Add('pentium3: Intel Pentium III CPU, based on Pentium Pro core with MMX and SSE instruction set support.=pentium3');
   sl.Add('pentium3m: Intel Pentium III CPU, based on Pentium Pro core with MMX and SSE instruction set support.=pentium3m');
@@ -1404,7 +1404,7 @@ begin
   sl.Add('goldmont: Intel Goldmont CPU with 64-bit extensions, MOVBE, MMX, SSE, SSE2, SSE3, SSSE3, SSE4.1, SSE4.2, POPCNT, AES, PCLMUL, RDRND, XSAVE, XSAVEOPT and FSGSBASE instruction set support.=goldmont');
   sl.Add('goldmont-plus: Intel Goldmont Plus CPU with 64-bit extensions, MOVBE, MMX, SSE, SSE2, SSE3, SSSE3, SSE4.1, SSE4.2, POPCNT, AES, PCLMUL, RDRND, XSAVE, XSAVEOPT, FSGSBASE, PTWRITE, RDPID, SGX and UMIP instruction set support.=goldmont-plus');
   sl.Add('tremont: Intel Tremont CPU with 64-bit extensions, MOVBE, MMX, SSE, SSE2, SSE3, SSSE3, SSE4.1, SSE4.2, POPCNT, AES, PCLMUL, RDRND, XSAVE, XSAVEOPT, FSGSBASE, PTWRITE, RDPID, SGX, UMIP, GFNI-SSE, CLWB and ENCLV instruction set support.=tremont');
-  sl.Add('knl: Intel Knight’s Landing CPU with 64-bit extensions, MOVBE, MMX, SSE, SSE2, SSE3, SSSE3, SSE4.1, SSE4.2, POPCNT, AVX, AVX2, AES, PCLMUL, FSGSBASE, RDRND, FMA, BMI, BMI2, F16C, RDSEED, ADCX, PREFETCHW, AVX512F, AVX512PF, ' + 'AVX512ER and AVX512CD instruction set support.=knl');
+  sl.Add('knl: Intel Knightï¿½s Landing CPU with 64-bit extensions, MOVBE, MMX, SSE, SSE2, SSE3, SSSE3, SSE4.1, SSE4.2, POPCNT, AVX, AVX2, AES, PCLMUL, FSGSBASE, RDRND, FMA, BMI, BMI2, F16C, RDSEED, ADCX, PREFETCHW, AVX512F, AVX512PF, ' + 'AVX512ER and AVX512CD instruction set support.=knl');
   sl.Add('knm: Intel Knights Mill CPU with 64-bit extensions, MOVBE, MMX, SSE, SSE2, SSE3, SSSE3, SSE4.1, SSE4.2, POPCNT, AVX, AVX2, AES, PCLMUL, FSGSBASE, RDRND, FMA, BMI, BMI2, F16C, RDSEED, ADCX, PREFETCHW, AVX512F, AVX512PF, AVX512ER, ' + 'AVX512CD, AVX5124VNNIW, AVX5124FMAPS and AVX512VPOPCNTDQ instruction set support.=knm');
   sl.Add('avx512: Intel Skylake Server CPU with 64-bit extensions, MOVBE, MMX, SSE, SSE2, SSE3, SSSE3, SSE4.1, SSE4.2, POPCNT, PKU, AVX, AVX2, AES, PCLMUL, FSGSBASE, RDRND, FMA, BMI, BMI2, F16C, RDSEED, ADCX, PREFETCHW, CLFLUSHOPT, XSAVEC, XSAVES, ' + 'AVX512F, CLWB, AVX512VL, AVX512BW, AVX512DQ and AVX512CD instruction set support.=skylake-avx512');
   sl.Add('cannonlake: Intel Cannonlake Server CPU with 64-bit extensions, MOVBE, MMX, SSE, SSE2, SSE3, SSSE3, SSE4.1, SSE4.2, POPCNT, PKU, AVX, AVX2, AES, PCLMUL, FSGSBASE, RDRND, FMA, BMI, BMI2, F16C, RDSEED, ADCX, PREFETCHW, CLFLUSHOPT, XSAVEC, XSAVES, ' + 'AVX512F, AVX512VL, AVX512BW, AVX512DQ, AVX512CD, AVX512VBMI, AVX512IFMA, SHA and UMIP instruction set support.=cannonlake');

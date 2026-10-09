@@ -1,0 +1,108 @@
+{
+  "ok": [
+    "core.events",
+    "core.services",
+    "devfilemonitor",
+    "devmonitorthread",
+    "devmonitortypes",
+    "devshortcuts",
+    "devshortcutseditorform",
+    "lsp.documentsync",
+    "lsp.editor.interfaces",
+    "lsp.editor.types",
+    "lsp.jsonrpc",
+    "lsp.process",
+    "lsp.process.factory",
+    "lsp.process.fpc",
+    "lsp.transport",
+    "synhighlighterrc",
+    "vcl.extdlgs",
+    "vcl.virtualimage",
+    "version"
+  ],
+  "blocked": {
+    "CodeCompletion": [
+      "aboutfrm",
+      "addtodofrm",
+      "astyleformatteroptionsfrm",
+      "clangformatteroptionsfrm",
+      "codeinslist",
+      "codetooltip",
+      "compiler",
+      "compoptionsframe",
+      "compoptionsfrm",
+      "core.servicesimpl",
+      "cpufrm",
+      "datafrm",
+      "debugger",
+      "debugreader",
+      "devcfg",
+      "devexec",
+      "devrun",
+      "editor",
+      "editorlist",
+      "exceptionfrm",
+      "fileassocs",
+      "filepropertiesfrm",
+      "findfrm",
+      "gotolinefrm",
+      "imagetheme",
+      "importcbfrm",
+      "importmsvcfrm",
+      "incrementalfrm",
+      "instances",
+      "langfrm",
+      "macros",
+      "main",
+      "mainui",
+      "multilangsupport",
+      "newprojectfrm",
+      "newtemplatefrm",
+      "paramsfrm",
+      "printfrm",
+      "processlistfrm",
+      "project",
+      "projectoptionsfrm",
+      "projecttypes",
+      "removeunitfrm",
+      "templates",
+      "tests",
+      "tipofthedayfrm",
+      "tooleditfrm",
+      "toolfrm",
+      "utils",
+      "viewtodofrm",
+      "windowlistfrm"
+    ],
+    "ClassBrowser": [
+      "editoroptfrm"
+    ],
+    "Vcl.BaseImageCollection": [
+      "envirofrm"
+    ],
+    "CppParser": [
+      "functionsearchfrm",
+      "newfunctionfrm"
+    ],
+    "System.ImageList": [
+      "iconfrm"
+    ],
+    "SynCompletionProposal": [
+      "lsp.bootstrap",
+      "lsp.client.completion"
+    ],
+    "CBUtils": [
+      "newclassfrm",
+      "newvarfrm",
+      "profileanalysisfrm"
+    ]
+  },
+  "missing": {
+    "BufferCoord": [
+      "lsp.editor.vcladapter"
+    ],
+    "TBufferCoord": [
+      "lsp.editor.vcladapter"
+    ]
+  }
+}

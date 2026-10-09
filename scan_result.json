@@ -1,0 +1,74 @@
+{
+  "cbutils": {
+    "ok": false,
+    "missing": [],
+    "errors": [
+      "wrap.pas(3,18) Fatal: Can't find unit cbutils used by wrap",
+      "Fatal: Compilation aborted",
+      "Error: C:\\lazarus\\fpc\\3.2.2\\bin\\x86_64-win64\\ppcx64.exe returned an error exitcode"
+    ]
+  },
+  "intlist": {
+    "ok": false,
+    "missing": [],
+    "errors": [
+      "wrap.pas(3,18) Fatal: Can't find unit intlist used by wrap",
+      "Fatal: Compilation aborted",
+      "Error: C:\\lazarus\\fpc\\3.2.2\\bin\\x86_64-win64\\ppcx64.exe returned an error exitcode"
+    ]
+  },
+  "statementlist": {
+    "ok": false,
+    "missing": [],
+    "errors": [
+      "wrap.pas(3,18) Fatal: Can't find unit statementlist used by wrap",
+      "Fatal: Compilation aborted",
+      "Error: C:\\lazarus\\fpc\\3.2.2\\bin\\x86_64-win64\\ppcx64.exe returned an error exitcode"
+    ]
+  },
+  "cpptokenizer": {
+    "ok": false,
+    "missing": [],
+    "errors": [
+      "wrap.pas(3,18) Fatal: Can't find unit cpptokenizer used by wrap",
+      "Fatal: Compilation aborted",
+      "Error: C:\\lazarus\\fpc\\3.2.2\\bin\\x86_64-win64\\ppcx64.exe returned an error exitcode"
+    ]
+  },
+  "cpppreprocessor": {
+    "ok": false,
+    "missing": [],
+    "errors": [
+      "wrap.pas(3,18) Fatal: Can't find unit cpppreprocessor used by wrap",
+      "Fatal: Compilation aborted",
+      "Error: C:\\lazarus\\fpc\\3.2.2\\bin\\x86_64-win64\\ppcx64.exe returned an error exitcode"
+    ]
+  },
+  "cppparser": {
+    "ok": false,
+    "missing": [],
+    "errors": [
+      "wrap.pas(3,18) Fatal: Can't find unit cppparser used by wrap",
+      "Fatal: Compilation aborted",
+      "Error: C:\\lazarus\\fpc\\3.2.2\\bin\\x86_64-win64\\ppcx64.exe returned an error exitcode"
+    ]
+  },
+  "codecompletion": {
+    "ok": false,
+    "missing": [],
+    "errors": [
+      "wrap.pas(3,18) Fatal: Can't find unit codecompletion used by wrap",
+      "Fatal: Compilation aborted",
+      "Error: C:\\lazarus\\fpc\\3.2.2\\bin\\x86_64-win64\\ppcx64.exe returned an error exitcode"
+    ]
+  },
+  "codecompletionform": {
+    "ok": false,
+    "missing": [],
+    "errors": [
+      "wrap.pas(3,18) Fatal: Can't find unit codecompletionform used by wrap",
+      "Fatal: Compilation aborted",
+      "Error: C:\\lazarus\\fpc\\3.2.2\\bin\\x86_64-win64\\ppcx64.exe returned an error exitcode"
+    ]
+  }
+}
