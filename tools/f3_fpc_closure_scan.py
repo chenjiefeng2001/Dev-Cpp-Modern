@@ -49,6 +49,15 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 FPC = r"C:\lazarus\fpc\3.2.2\bin\x86_64-win64\fpc.exe"
 
 FU = [
+    # The vendored-SynEdit port comes FIRST, before the LCL's own synedit
+    # units -- deliberately. Once `uses SynEditTypes` resolves to our port,
+    # every vendored-family unit must resolve to it too, or the app would be
+    # handed two different TBufferCoord types (one per unit identity) and the
+    # compile would fail on a type mismatch that looks like a bug in the port.
+    # One universe, chosen once. Measured: promoting SynEditTypes alone while
+    # the LCL's synedittypes.pp stayed earlier in the order resolved it to the
+    # LCL's, which has no ESynError.
+    str(ROOT / "Source" / "Fpc" / "UI" / "SynEdit"),
     r"C:\lazarus\lcl\units\x86_64-win64\win32",
     r"C:\lazarus\lcl\units\x86_64-win64",
     r"C:\lazarus\components\lazutils\lib\x86_64-win64",
