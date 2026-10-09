@@ -28,6 +28,28 @@ So the tool reports, per unit the app names: does the LCL ship it, is it
 compile-compatible, and what is the closure size if the vendored family must
 be ported. The number is the input to the schedule, not an estimate.
 
+A THIRD KIND OF BLOCKER -- and the reason this tool exists at all
+================================================================
+There is a shape that looks like the first (LCL does not ship it) but measures
+like the second (it drags a vendored dependency that cannot be satisfied).
+`SynEditCodeFolding` was attempted on 2026-10-09 and deleted, not shipped:
+
+  * It compiles under FPC except for three uses of `TSynEditStringList`'s
+    `Ranges[...]` and `TabWidth`.
+  * The LCL's `synedittextbuffer.pp` HAS `TSynEditStringList`, but NOT
+    `Ranges` and NOT `TabWidth` -- both are vendored additions in the
+    1,223-line `SynEditTextBuffer.pas`.
+  * So the "1102-line file copy" is really a 1,102 + 1,223 (plus whatever
+    SynEditTextBuffer itself drags) port, and the F3-SVG doc's number for the
+    unit would have understated it by the transitive part.
+
+The lesson recorded here because it cost a session to find: a unit whose
+symbols are absent from the LCL's same-named unit is a CLOSURE blocker, not a
+file blocker. This tool now prints, for every blocked unit, whether its
+missing symbols are explained by another vendored unit, so the count of
+"copy this file" versus "port this family" is visible before anyone starts.
+
+
 Run:  python tools/f3_synedit_family.py
       python tools/f3_synedit_family.py --json out.json
 """
@@ -74,6 +96,39 @@ def lcl_units():
     if not LCL.is_dir():
         return set()
     return {p.stem.lower() for p in LCL.glob("*.pas")} | {p.stem.lower() for p in LCL.glob("*.pp")}
+
+
+def vendored_symbols():
+    """symbols declared by the vendored tree, by unit -> set(names)."""
+    out = {}
+    for p in vendored_units().values():
+        t = strip_comments(p.read_text(encoding="utf-8", errors="replace"))
+        names = set(re.findall(r"(?m)^\s*(?:T[A-Z]\w*|P[A-Z]\w*|function\s+\w+|procedure\s+\w+|\w+\s*[:=])", t))
+        out[p.stem.lower()] = names
+    return out
+
+
+def missing_symbols_in_lcl(unit_stem, vend_syms):
+    """Which symbols a port needs that the LCL's same-named unit does not have.
+
+    The SynEditCodeFolding case: the LCL's synedittextbuffer.pp has
+    TSynEditStringList but not `Ranges` / `TabWidth`, so those two resolve to
+    a vendored unit and the port is a family port, not a file port.
+    """
+    lcl_p = LCL / (unit_stem + ".pas")
+    if not lcl_p.exists():
+        lcl_p = LCL / (unit_stem + ".pp")
+    if not lcl_p.exists():
+        return None  # no same-named LCL unit at all
+    lcl_text = strip_comments(lcl_p.read_text(encoding="utf-8", errors="replace"))
+    have = set(re.findall(r"(?m)^\s*(?:T[A-Z]\w*|P[A-Z]\w*|\w+)\s*[:=]", lcl_text))
+    here = set()
+    vp = vendored_units().get(unit_stem)
+    if vp:
+        vt = strip_comments(vp.read_text(encoding="utf-8", errors="replace"))
+        for m in re.finditer(r"(?m)^\s*(T[A-Z]\w*)\s*[:=]", vt):
+            here.add(m.group(1))
+    return sorted(h for h in here if h not in have)
 
 
 def closure(needed, vend):
@@ -149,6 +204,17 @@ def main():
     print("BLOCKED: the app names them, the LCL does not ship them")
     for n in blocked:
         print("   %-28s %5d lines" % (n, vend_lines(n)))
+        # a same-named LCL unit would mean "copy this file"; a missing symbol
+        # means "port this family", and the two have very different prices.
+        gap = missing_symbols_in_lcl(n, vendored_symbols())
+        if gap:
+            print("      symbol gap vs the LCL's %s.pas: %s" % (n, ", ".join(gap)))
+            print("      -> the missing symbols live in another vendored unit:")
+            for sym in gap:
+                for vn, vs in vendored_symbols().items():
+                    if sym in vs:
+                        print("         %s in %s.pas" % (sym, vn))
+                        break
 
     if vend:
         clo = closure(set(blocked), vend)
