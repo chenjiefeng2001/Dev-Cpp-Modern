@@ -42,6 +42,7 @@ on:
       - "tools/f3_probe_inject.py"
       - "tools/f3_retirement_check.py"
       - "tools/f3_compile_cost.py"
+      - "tools/f3_synedit_family.py"
       - "tools/f3_batch_plan.py"
       - "tools/f3_external_matrix.py"
       - "tools/f3_probe_inject.py"
@@ -85,6 +86,7 @@ on:
       - "tools/f3_probe_inject.py"
       - "tools/f3_retirement_check.py"
       - "tools/f3_compile_cost.py"
+      - "tools/f3_synedit_family.py"
       - "tools/f3_batch_plan.py"
       - "tools/f3_external_matrix.py"
       - "tools/f3_probe_inject.py"
@@ -307,6 +309,16 @@ jobs:
       # with an injection test rather than a number in a wiki.
       - name: "Compile-surface closure floor (must not grow)"
         run: python3 tools/f3_compile_cost.py --ratchet
+
+      # The vendored SynEdit family: what the app closure needs of it, and why
+      # the LCL cannot stand in. Reporting, not a gate that can fail -- the
+      # measurement IS the deliverable (the port is a multi-session decision),
+      # and a gate whose failure nobody can act on teaches the reader to
+      # ignore the badge. It also re-runs the LCL-subclassability probe on
+      # every build, so if a future FPC/LCL ever accepts the override the
+      # number moves and the schedule with it.
+      - name: "Vendored SynEdit family scope (report)"
+        run: python3 tools/f3_synedit_family.py
 
       # The CompOptions frame-port (F3-4). A negative assertion, and it
       # asserts on the UNIT name for TCompOptionsList: the vendored control
