@@ -23,7 +23,7 @@ interface
 
 uses
   SysUtils, Classes, Menus, Controls, SynEditHighlighter, SynHighlighterCpp,
-  CodeInsList, SynHighlighterRC, ImgList, System.ImageList,
+  CodeInsList, SynHighlighterRC, ImgList,
   Vcl.BaseImageCollection, Vcl.ImageCollection, Vcl.VirtualImageList,
   SVGIconImageListBase, SVGIconImageList, SynEditCodeFolding;
 

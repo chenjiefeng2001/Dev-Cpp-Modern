@@ -25,14 +25,14 @@ uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, StdCtrls, Spin, ExtCtrls, ExtDlgs, Buttons,
   {$IFDEF FPC}
-  CheckLst, Grids, ValEdit, ComCtrls, Themes, Vcl.BaseImageCollection,
+  CheckLst, Grids, ValEdit, ComCtrls, Themes,
   {$ELSE}
-  CheckLst, Grids, ValEdit, ComCtrls, vcl.Themes, Vcl.BaseImageCollection,
+  CheckLst, Grids, ValEdit, ComCtrls, vcl.Themes,
   {$ENDIF}
   {$IFDEF FPC}
-  Vcl.ImageCollection, Vcl.VirtualImage, System.ImageList, ImgList;
+  Vcl.VirtualImage, ImgList;
   {$ELSE}
-  Vcl.ImageCollection, Vcl.VirtualImage, System.ImageList, Vcl.ImgList;
+  Vcl.VirtualImage, Vcl.ImgList;
   {$ENDIF}
 
 type

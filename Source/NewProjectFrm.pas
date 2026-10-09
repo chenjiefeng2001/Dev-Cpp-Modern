@@ -24,7 +24,7 @@ interface
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
   StdCtrls, ExtCtrls, ImgList, Buttons, ComCtrls, Templates, Inifiles,
-  System.ImageList, SVGIconImageListBase, SVGIconImageList;
+  SVGIconImageListBase, SVGIconImageList;
 
 type
   TNewProjectForm = class(TForm)

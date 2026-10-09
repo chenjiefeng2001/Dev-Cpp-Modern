@@ -8,7 +8,7 @@
   ],
   "forms": 13,
   "forms_reaching_main": 13,
-  "max_own_loc": 57526,
+  "max_own_loc": 57538,
   "max_own_units": 96,
   "note": "closure floor of the CLEARED forms; see doc/F3-SVG section 18"
 }

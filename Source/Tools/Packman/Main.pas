@@ -6,7 +6,7 @@ uses
 {$IFDEF WIN32}
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, Menus, StdCtrls, ComCtrls, ExtCtrls, ToolWin, Buttons,
-  ShellAPI, ImgList, IniFiles, System.ImageList, Vcl.BaseImageCollection,
+  ShellAPI, ImgList, IniFiles, Vcl.BaseImageCollection,
   Vcl.ImageCollection, Vcl.VirtualImageList, SVGIconImageList,
   SVGIconImageListBase, SVGIconVirtualImageList, SVGIconImageCollection, SVGColor,
   Vcl.Styles.Hooks,

@@ -24,7 +24,7 @@ interface
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Forms, 
   ImgList, ComCtrls, Buttons, StdCtrls, Controls, Dialogs, ExtDlgs,
-  System.ImageList,DataFrm;
+  DataFrm;
 
 type
   TIconForm = class(TForm)

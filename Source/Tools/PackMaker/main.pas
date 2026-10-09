@@ -24,7 +24,7 @@ interface
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, Menus, StdCtrls, Buttons, ComCtrls, ImgList, libTar, BZip2, IniFiles,
-  ExtDlgs, ToolWin, ExtCtrls, StrUtils, System.ImageList,
+  ExtDlgs, ToolWin, ExtCtrls, StrUtils,
   {$IFDEF FPC}
   System.Generics.Defaults, Generics.Collections, Types,
   {$ELSE}

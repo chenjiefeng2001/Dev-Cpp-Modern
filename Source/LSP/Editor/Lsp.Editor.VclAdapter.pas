@@ -44,7 +44,7 @@ interface
 
 uses
   {$IFDEF FPC}
-  SysUtils, Classes, Windows, Graphics, SynEdit, SynEditTypes,
+  SysUtils, Classes, Windows, Graphics, Types, SynEdit, SynEditTypes,
   {$ELSE}
   System.SysUtils, System.Classes, Winapi.Windows, Vcl.Graphics, SynEdit, SynEditTypes,
   {$ENDIF}
@@ -95,13 +95,13 @@ type
 
 implementation
 
-function MakeCoord(const X, Y: Integer): TLspPixelPoint;
+function MakeCoord(const X, Y: Integer): TLspPixelPoint; overload;
 begin
   Result.X := X;
   Result.Y := Y;
 end;
 
-function MakeCoord(const P: TPoint): TLspPixelPoint;
+function MakeCoord(const P: TPoint): TLspPixelPoint; overload;
 begin
   Result.X := P.X;
   Result.Y := P.Y;
@@ -234,8 +234,8 @@ begin
   // the contract exposes one method. BufferCoord is (Char, Line) -- the
   // argument order is the reverse of the record's field order and getting it
   // wrong compiles fine and misplaces every popup.
-  P := FEditor.ClientToScreen(FEditor.RowColumnToPixels(
-    FEditor.BufferToDisplayPos(BufferCoord(ACoord.Char, ACoord.Line))));
+  P := FEditor.ClientToScreen(
+    FEditor.RowColumnToPixels(Point(ACoord.Char, ACoord.Line)));
   Result := MakeCoord(P);
 end;
 
@@ -246,14 +246,21 @@ begin
   Result := MakeCoord(0, 0);
   if not Assigned(FEditor) then
     Exit;
-  P := FEditor.ClientToScreen(FEditor.RowColumnToPixels(FEditor.DisplayXY));
+  // FEditor.DisplayXY is the vendored SynEdit's DISPLAY coordinate; the LCL has
+  // no such property, only CaretXY (the buffer coordinate, 1-based). They agree
+  // whenever the caret is on a line that is neither wrapped nor folded away --
+  // true for every popup path this adapter serves (a caret inside code) -- but
+  // they are NOT the same field, and saying so is the point: if a folded or
+  // wrapped line ever needs this exact chain, it has to come back as a
+  // measured question, not as an assumption.
+  P := FEditor.ClientToScreen(FEditor.RowColumnToPixels(FEditor.CaretXY));
   Result := MakeCoord(P);
 end;
 
 function TVclSynEditAdapter.ScreenPixelsToBuffer(
   const APoint: TLspPixelPoint): TLspBufferCoord;
 var
-  BC: TBufferCoord;
+  P: TPoint;
 begin
   Result.Line := 0;
   Result.Char := 0;
@@ -262,10 +269,15 @@ begin
   // The inverse chain, Hover:1015-1022. The caller's own bounds test
   // (Pt < 0, vs ClientWidth / ClientHeight) deliberately stays in the caller:
   // "is the mouse still where it was?" is a policy question, not a conversion.
-  BC := FEditor.DisplayToBufferPos(
-    FEditor.PixelsToRowColumn(APoint.X, APoint.Y));
-  Result.Line := BC.Line;
-  Result.Char := BC.Char;
+  //
+  // The LCL spells this without TBufferCoord: PixelsToLogicalPos(TPoint) is
+  // the same mapping (client pixels -> text position, 1-based, X=Char,
+  // Y=Line). Measured against the vendored DisplayToBufferPos's meaning, not
+  // guessed: its own comment says "takes a position on screen and transforms
+  // it into position of text".
+  P := FEditor.PixelsToLogicalPos(Point(APoint.X, APoint.Y));
+  Result.Char := P.X;
+  Result.Line := P.Y;
 end;
 
 function TVclSynEditAdapter.GetLineHeight: Integer;
