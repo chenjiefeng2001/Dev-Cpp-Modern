@@ -112,11 +112,11 @@ type
     procedure InsertItem(Index: integer; const S: string);
     procedure PutRange(Index: integer; ARange: TSynEditRange);
   protected
-    function Get(Index: Integer): string; override;
+    function Get(Index: Integer): AnsiString; override;
     function GetCapacity: integer; override;
     function GetCount: integer; override;
     function GetObject(Index: integer): TObject; override;
-    procedure Put(Index: integer; const S: string); override;
+    procedure Put(Index: integer; const S: AnsiString); override;
     procedure PutObject(Index: integer; AObject: TObject); override;
     procedure SetCapacity(NewCapacity: integer); override;
     procedure SetTabWidth(Value: integer);
@@ -125,13 +125,21 @@ type
   public
     constructor Create(AExpandAtWideGlyphsFunc: TExpandAtWideGlyphsFunc);
     destructor Destroy; override;
-    function Add(const S: string): integer; override;
+    // FPC's TStrings is ANSI-based: its Get/Put/Add/Insert are declared with
+    // AnsiString, and an override must match the ancestor exactly or it is
+    // not an override at all (the FPC error reads "There is no method in an
+    // ancestor class to be overridden", which is a signature mismatch, not a
+    // missing ancestor). The storage on this class stays UnicodeString; the
+    // conversion happens at the boundary in each of these four methods, so
+    // nothing inside the class changes. Measured: with the UnicodeString
+    // signatures the unit does not compile at all.
+    function Add(const S: AnsiString): integer; override;
     procedure AddStrings(Strings: TStrings); override;
     procedure Clear; override;
     procedure Delete(Index: integer); override;
     procedure DeleteLines(Index, NumLines: integer);
     procedure Exchange(Index1, Index2: integer); override;
-    procedure Insert(Index: integer; const S: string); override;
+    procedure Insert(Index: integer; const S: AnsiString); override;
     procedure InsertLines(Index, NumLines: integer);
     procedure InsertStrings(Index: integer; NewStrings: TStrings);
     procedure InsertText(Index: integer; NewText: string);
@@ -142,7 +150,16 @@ type
     function LineCharLength(Index : Integer) : Integer;
     function LineCharIndex(Index : Integer) : Integer;
     procedure SetTextAndFileFormat(const Value: string);
-    procedure SetEncoding(const Value: TEncoding); override;
+    // Deliberately NOT an override. FPC's TStrings does declare
+    // LoadFromStream/SaveToStream (with TEncoding) as virtual, but it has no
+    // SetEncoding virtual at all, so `override` here is an error in FPC even
+    // though it is correct Delphi. Probed: a class whose SetEncoding carries
+    // `override` fails with "There is no method in an ancestor class to be
+    // overridden", and the same class without `override` compiles. Nothing
+    // outside this unit calls it (measured across the ported family and
+    // Source/), so keeping it as a plain method preserves the two internal
+    // call sites at LoadFromStream/SaveToStream.
+    procedure SetEncoding(const Value: TEncoding);
 
     property FileFormat: TSynEditFileFormat read fFileFormat write fFileFormat;
     property ExpandedStrings[Index: integer]: string read GetExpandedString;
@@ -286,11 +303,17 @@ begin
   SetCapacity(0);
 end;
 
-function TSynEditStringList.Add(const S: string): integer;
+// The ANSI->Unicode boundary. The class stores UnicodeString throughout
+// (fList^[i].fString); the ancestor's virtuals are ANSI, so these four
+// methods convert on entry and on exit and do nothing else. UTF8Encode /
+// UTF8Decode are used rather than the implicit codepage conversion because
+// the implicit one depends on the machine's default codepage (this box is
+// 936) while the class stores bytes that came from a UTF-8 stream.
+function TSynEditStringList.Add(const S: AnsiString): integer;
 begin
   BeginUpdate;
   Result := fCount;
-  InsertItem(Result, S);
+  InsertItem(Result, UTF8Decode(S));
   if Assigned(OnInserted) then
     OnInserted(Self, Result, 1);
   EndUpdate;
@@ -331,7 +354,6 @@ procedure TSynEditStringList.SetEncoding(const Value: TEncoding);
 begin
   inherited;
 end;
-
 procedure TSynEditStringList.Clear;
 begin
   if fCount <> 0 then begin
@@ -436,10 +458,10 @@ begin
     end;
 end;
 
-function TSynEditStringList.Get(Index: integer): string;
+function TSynEditStringList.Get(Index: integer): AnsiString;
 begin
   if Cardinal(Index)<Cardinal(fCount) then
-    Result := fList^[Index].fString
+    Result := UTF8Encode(fList^[Index].fString)
   else
     Result := '';
 end;
@@ -626,12 +648,12 @@ begin
   SetCapacity(fCapacity + Delta);
 end;
 
-procedure TSynEditStringList.Insert(Index: integer; const S: string);
+procedure TSynEditStringList.Insert(Index: integer; const S: AnsiString);
 begin
   if (Index < 0) or (Index > fCount) then
     ListIndexOutOfBounds(Index);
   BeginUpdate;
-  InsertItem(Index, S);
+  InsertItem(Index, UTF8Decode(S));
   if Assigned(fOnInserted) then
     fOnInserted( Self, Index, 1 );
   EndUpdate;
@@ -738,7 +760,15 @@ begin
   try
     Size := Stream.Size - Stream.Position;
     SetLength(Buffer, Size);
-    Stream.Read(Buffer, 0, Size);
+    // Delphi's TStream overload is Read(var Buffer: TBytes; Offset, Count:
+    // Integer). FPC's TStream only has Read(var Buffer; Count: LongInt). The
+    // three-argument form therefore does not exist here, and the error
+    // ("Wrong number of parameters specified for call to Read") names the
+    // RTL declaration that does exist. Offset is always 0 at this call site,
+    // so the difference is expressible: read from the head of the buffer.
+    // Guarded because Buffer[0] does not exist when Size is 0.
+    if Size > 0 then
+      Stream.Read(Buffer[0], Size);
     Size := TEncoding.GetBufferEncoding(Buffer, Encoding, DefaultEncoding);
     WriteBOM := Size > 0; // Keep WriteBom in case the stream is saved
     // If the encoding is ANSI and DetectUtf8 is True try to Detect UTF8
@@ -789,7 +819,7 @@ begin
   Stream.WriteBuffer(Buffer, Length(Buffer));
 end;
 
-procedure TSynEditStringList.Put(Index: integer; const S: string);
+procedure TSynEditStringList.Put(Index: integer; const S: AnsiString);
 begin
   if (Index = 0) and (fCount = 0) or (fCount = Index) then
     Add(S)
@@ -802,7 +832,7 @@ begin
       Include(fFlags, sfExpandedLengthUnknown);
       Exclude(fFlags, sfHasTabs);
       Exclude(fFlags, sfHasNoTabs);
-      fString := S;
+      fString := UTF8Decode(S);
     end;
     if Assigned(fOnPutted) then
       fOnPutted( Self, Index, 1 );
