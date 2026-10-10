@@ -2324,3 +2324,87 @@ vendored Delphi 家族（`Source/VCL/SynEdit/Source`）共 38 个 Syn* 文件、
 的依赖图对 `Editor.pas` 这类 uses 子句返回空表——因为里面带 `{$IFDEF FPC}` 与行内注释，
 解析器放弃。**解析失败不等于没有依赖**（AGENTS.md §3 的方向）。修正后的解析按 FPC 支路取，
 得到上表。该缺陷未修，标记为待办：下次用闭包图做决策前先修它，否则会低估工作量。
+---
+
+## 26. 判定实验：SynEditTextBuffer 墙已清，§25.4 的「可解锁」被证伪，真实锁在 SynEdit（2026-10-10）
+
+按 §25 的建议做了第一个 216 行的判定实验。两件事：unit 移植成功，**§25.4 的排序假设被自己的
+实验推翻**。
+
+### 26.1 实测结果
+
+| 项 | 前 | 后 |
+|---|---:|---:|
+| 闭包编译通过 | 37 / 108 | **39 / 109** |
+| vendored port 族编译通过 | 11 / 12 | **13 / 13** |
+| QA gate（delphi / fpc） | OK / OK | OK / OK |
+
+`SynEditPrintTypes.pas`（216 行）原样移植 + `{$H+}`，一次通过。
+
+### 26.2 §25.4 的排序假设被证伪
+
+§25.4 说 SynEditPrintTypes「可解锁 23 个单元」。实际解锁 **1 个：它自己**。
+闭包从 108 变 109 是因为多了一个单元在集合里，不是解锁了别人。
+
+原因：那 23 个单元**同时也**在 `SynEdit` 墙后面。排序算的是「可达」（uses 图的传递闭包），
+不是「解锁」。可达数为 23 不等于解锁 23 —— 一个被多道墙挡住的单元，移除其中一道不会前进。
+**§25.4 那一列的列名是错的，数值没错。** 下一轮若要复用该表，列名必须改成「可达」。
+
+### 26.3 SynEditTextBuffer 墙（§24.4）已清，且比登记的多两个签名
+
+先前扫描器说 3 个 override 失败。直接编译该单元报出 **5 个**：
+
+| 原签名 | 现签名 | 原因 |
+|---|---|---|
+| `Get(Index): string` | `AnsiString` | 祖先 ANSI 化 |
+| `Put(Index; const S: string)` | `AnsiString` | 同上 |
+| `Add(const S: string)` | `AnsiString` | 同上 |
+| `Insert(Index; const S: string)` | `AnsiString` | 扫描器漏报 |
+| `SetEncoding(const TEncoding); override` | 去掉 `override` | FPC 无此虚方法 |
+
+扫描器漏报后两个，因为它的两条正则只取**每次编译的第一条错误**。教训与 §25.5 同源：
+**测量工具截断证据，比没有测量更糟** —— 它让工作量看起来少了两个签名。
+
+`SetEncoding` 那个方向与其余四个相反，值得单独记：FPC 的 `TStrings`
+**有** `LoadFromStream`/`SaveToStream` 虚方法（参数正是 `TEncoding`），**没有** `SetEncoding`。
+所以 `override` 在这里是错的，在 Delphi 里是对的。已两个方向都探测过才动。
+
+四个字符串签名的解法：**类内存储不变**（仍是 UnicodeString），`UTF8Encode`/`UTF8Decode`
+只出现在这四个方法的边界上，别处没有。用显式 UTF-8 而不用隐式代码页转换，因为隐式的那条
+依赖机器默认代码页（本机 936），而这里存的是 UTF-8 流里的字节。
+
+### 26.4 真锁：`SynEdit` 名字冲突，已用 -va 追到根
+
+闭包仍停在 39/109。剩余 70 个单元的锁链现在有了完整轨迹（`-va`）：
+
+```
+own unit -> uses SynEdit
+  -> 解析到 LCL 的 synedit.ppu（我们的 port 没有 SynEdit.pas）
+  -> 它 uses SynEditMiscClasses
+  -> 我们的 port 同名先命中，于是从源码编译我们的版本
+  -> 我们的 ppu 校验和与 LCL 构建时不同
+  -> 触发 (LAZSYNIMMBASE) Recompiling LazSynIMMBase, checksum changed for ...SynEditMiscClasses.ppu
+  -> lazsynimmbase.pas 向 SynEditMiscClasses 要 TSynEditBase / TSynEditFriend
+  -> 我们的 vendored port 没有新架构这两个类
+  -> Identifier not found
+```
+
+完全不是「缺两个类型」（§25.1 的表述），也完全不是「LCL 无法子类化」（§24.4 的表述）——
+是**我们的 port 占了 `SynEditMiscClasses` 这个名字，改变了校验和，把 LCL 的一条链从
+ppu 拽下来重新编译**。这是 §24 那两个结论都没描述到的第三种机制，且它解释了为什么
+补两个类（~1531 行第一环）**不能**解决问题：那会让校验和继续变，级联继续往下走，
+最终仍会撞上 §25.2 那三处 objfpc-only 构造（set→LongInt）。
+
+### 26.5 下一步（由 26.4 决定，不是由偏好决定）
+
+锁在**名字**，所以解锁也在名字上：让 `uses SynEdit` 解析到**我们的** `SynEdit.pas`，
+而不是 LCL 的。已测 vendored `SynEdit.pas` 的 interface uses：29 个名字里，
+**只差 4 个 vendored 单元**（`SynEditCodeFolding` 1102、`SynEditKbdHandler` 397、
+`SynEditKeyCmds` 994、`SynTextDrawer` 1017，共 **3,510 行**），其余 25 个
+（Windows/Classes/Controls/Forms/SysUtils… 与 7 个已移植同名单元）都在位。
+
+而 `SynEdit.pas` 依赖的 `SynEditTextBuffer` 本轮已修通 —— 依赖顺序自动成立。
+
+于是下一轮是：**移植这 4 个单元（3,510 行，约为 §25.4 所列 24,040 行的 1/7），
+再移植 `SynEdit.pas`（10,937 行）**。后者是整个 vendored 路线的终点，
+但它的入口比先前估计的小得多，且入口已经打通。
