@@ -2408,3 +2408,109 @@ ppu 拽下来重新编译**。这是 §24 那两个结论都没描述到的第�
 于是下一轮是：**移植这 4 个单元（3,510 行，约为 §25.4 所列 24,040 行的 1/7），
 再移植 `SynEdit.pas`（10,937 行）**。后者是整个 vendored 路线的终点，
 但它的入口比先前估计的小得多，且入口已经打通。
+
+---
+
+## 27. SynEdit.pas 的入口已打通：4 个单元 / 3,510 行全编译，且两处被推翻的旧解释（2026-10-11）
+
+按 §26.5 的方案推进。§26.5 的测量成立：这 4 个单元**互不依赖**，且只依赖已移植单元
+加 LCL/FPC 单元，所以顺序不重要，各自独立测量。
+
+### 27.1 结果
+
+| 项 | 前 | 后 |
+|---|---:|---:|
+| 闭包编译通过 | 39 / 109 | **41 / 111**（多出的 2 个是新端口自己） |
+| vendored port 族 | 13 / 13 | **17 / 17** |
+| QA gate | OK / OK | OK / OK |
+
+闭包**没有**多解锁单元：那 70 个仍被同一堵墙挡着，而本轮把它追到了精确的一行（§27.3）。
+
+### 27.2 四个单元的适配点（按命中顺序）
+
+**SynEditKbdHandler（397 行）**
+
+- `TKeyPressEvent(Items[idx])(Sender, Key)` 这类「调用类型转换结果」是 Delphi 独有，
+  FPC 报 `Can't take the address of constant expressions`。改走该类型的局部变量即可；
+  **不加 `Assigned` 守卫**——原版没有，端口不改变何时调用处理器。
+- 真正的坑在 vendored 源码自身：`ExecuteKeyPress` 是 `var Key: WideChar`，
+  而处理器链表用 LCL 的 `TKeyPressEvent`（objfpc ppu → `var Key: char`=AnsiChar）。
+  Delphi 里 Char 就是 WideChar 所以无事，FPC 里致命。解法是**本地声明同形 WideChar
+  类型**（`TSynEditKeyPressEvent`）给整条 key-press 链用——这正是
+  `CodeCompletionForm.pas` 对**同一个问题**的既有做法，所以是沿用先例而非新发明。
+
+**SynEditKeyCmds（994 行）**
+
+- `ShortCutToText` 在 **LCLProc**，不在 Menus（也不在 Delphi 所在的 Classes），两处都搜过。
+- `GetDisplayName` override：与 TStrings 同一堵 ANSI vtable 墙，改成 AnsiString，
+  值按 WideString 构造、只在出口转一次。
+- RTL 的 `TypInfo` ppu 是 objfpc：`IdentToInt` 要 `out Int: Longint`、
+  `IntToIdent` 要 `var Ident: AnsiString`。两处都走 RTL 自己类型的局部量。
+- `RegisterIntegerConsts` 用 **AnsiString 形状**的回调注册，不用端口的 UnicodeString
+  函数——把 Unicode 函数地址填进去，等于用另一种托管类型的布局去调它，
+  这种 bug 能活着通过编译。
+- `TSynEditorCommand` 在本单元接口里**别名出来**（§27.3 详述）。
+
+**SynTextDrawer（1017 行）**
+
+- `System.UITypes` 这个案例值得单记：文件**从未引用**它的任何东西，只有 `TColor`；
+  而接口已经从 LCL 的 `Graphics` 拿到 `TColor`。把它映射成 `System.UITypes`
+  会引入**同名第二个 `TColor`**，结果是接口侧解析到 `Graphics.TColor`、
+  实现侧解析到 `UITypes.TColor`，`SetForeColor`/`SetBackColor` 随即
+  匹配不上自己的声明。所以是**删除**，不是重映射。
+- `GetCharacterPlacement` 在 RTL 里**不可用**：FPC 把 `nCount` 和 `nMaxExtent`
+  两个参数都声明成 BOOL，第三个参数的真实含义因此无法表达。端口内自声明
+  正确原型并直接绑 `GetCharacterPlacementW`。这是至今最清晰的一例
+  **要去纠正 RTL，而不是去适应它**。
+- `Byte(TFontStyles)` 是 objfpc 独有（LCL 自己的 `grids.pas` 在 delphiunicode 下
+  也栽在同一个转换上），改写成四个样式位，与该文件 ASSERT 依赖的元素序一致。
+- `StrEnd` 是 RTL 唯一的 ANSI 例程，而 `lfFaceName` 是 WideChar 数组，
+  两者无法相遇；等价扫描就地写出。
+
+**SynEditCodeFolding（1102 行）**
+
+- `Generics.*` 与 `Winapi.Windows` / `System.Math` 命名空间映射。
+- **匿名方法在这个 FPC 构建里完全不存在**：objfpc、delphi、delphiunicode 三种模式
+  全部拒绝（已用去掉泛型的探针隔离测量）。两个比较器改为命名函数 + `constref` 参数
+  ——这正是 `TComparisonFunc<T>`/`TOnComparison<T>` 声明的形状，用 `const` 不匹配
+  （也测过）。
+- FPC 的 `TList<T>` 与 Delphi 的差异在这里逐一兑现：**没有 `List` 属性**，
+  默认 `Items[]` **按值返回 record**，因此其字段既不能赋值也不能取地址。
+  文件里每一处行变更都改成读-改-写回，四处 `PFoldRange` 指针改为拷出行、
+  改完存回；`BinarySearch` 的 out 参是 `SizeInt`，走局部量。
+- `TStream.ReadData/WriteData` 是 Delphi 的，换成 `ReadBuffer/WriteBuffer`。
+
+### 27.3 被推翻的第一个旧解释：「这 56 个单元缺 TSynEditorCommand」
+
+上一轮闭包阻塞点从 `TSynEditBase/Friend` 变成 `TSynEditorCommand`。追下去：
+LCL 的 `syneditkeycmds.pp` **自己声明** `TSynEditorCommand`（它根本不 use SynEditTypes），
+所以用它的单元都看得见；而 vendored 源码从 `SynEditTypes` 取，我的端口也一样，
+**符号就断在这里**。用探针单元（use 我的 SynEditKeyCmds 再引用该类型）先在别名前失败、
+别名后通过，双向测量后才动。这与 §25.5 是同一条教训：工具/移植把「看不见」报成
+「没有」，而实际只是没转发。
+
+### 27.4 墙仍在一行上：lazsynimmbase → TSynEditBase
+
+`-va` 追到的链（本轮再次确认）：
+
+```
+own unit -> uses SynEdit（LCL 的 synedit.pp）
+  -> 我们的 port 占着 SynEditMiscClasses / SyncEditTypes / SynEditMiscProcs 这些名字
+  -> 校验和随之改变
+  -> FPC 把 LCL 的 lazsynimmbase / lazsynedittext / synedittextbase 从 ppu 拽下来重编
+  -> lazsynimmbase.pas 向 SynEditMiscClasses 要 TSynEditBase / TSynEditFriend
+  -> 我们的 vendored port 没有新架构这两个类 -> Identifier not found
+```
+
+并且：**给这两个类补上约 1,531 行并不能解锁**——校验和继续变，级联继续往下走，
+最终仍会撞上 §25.2 那三处 objfpc-only 构造（`syneditmarks.pp:1160` 的 set→LongInt）。
+已在两个方向测过，这条是死路。
+
+### 27.5 下一步
+
+剩下的唯一钥匙仍是 **vendored `SynEdit.pas`（10,937 行）**：让它接管 `uses SynEdit`
+这个名。入口已按 §26.5 打通（4 个单元就位），本轮的四个端口是它的依赖前提。
+`SynEdit.pas` 自己的 interface uses 里，其余 25 个名字（`Windows`/`Classes`/`Controls`/
+`Forms`/`SysUtils`…… 与 7 个已移植同名单元）都在位；需要新映射的是
+`ActiveX`、`Imm`、`Themes`、`UITypes`、`Dialogs`、`ExtCtrls`、`StdActns`、
+`Contnrs`、`Diagnostics` 这几个 VCL 名字。
