@@ -2246,3 +2246,81 @@ vendored 家族被 Dev-C++ 重度打过补丁，因此**两侧均不可互相替
 下一步**取决于一个决定，而不是一次实现**：剩余的 `SynEditTextBuffer` 与它背后的
 `SynEdit.pas`（10,937 行）是 vendored 路线图的终点；LCL 路线在 24.4 已死。
 这一票应单独发，不应被一次"顺手"启动。
+---
+
+## 25. 推进前测量：LCL 侧不可能，vendored 侧剩 24,040 行，且攻击顺序可算（2026-10-10）
+
+§24 记下「LCL 链不可从 delphiunicode 子类化」。本轮把这句话从**一个方向**测成**三个方向**，
+并算出剩余工作的规模与攻击顺序，使下一轮不必重新论证。
+
+### 25.1 现状：37 / 108，71 个被阻单元的成因已全部归因
+
+`tools/f3_fpc_closure_scan.py`（37 ok / 71 blocked）+ 逐单元复测：
+
+| 成因 | 单元数 | 证据 |
+|---|---:|---|
+| 缺 `TSynEditBase` / `TSynEditFriend` | 55 | `Identifier not found`，两符号各命中 55 个单元 |
+| `SynHighlighterCpp` 解析到 **LCL 的源** | 6 | `synhighlightercpp.pp(106,10) Duplicate identifier "fLine"`（约frm/数据frm/图标frm/主题frm/参数frm/窗口frm） |
+| `TStrings` vtable 墙 | 2 | `SynEditTextBuffer.pas(115)` Get / `(119)` Put / `(128)` Add |
+| 自研单元 PChar/PWideChar 混用 | 1 | `CFGData.pas(272,37) Got "PWideChar", expected "PChar"` |
+| 自研单元类型声明 | 1 | `ConsoleAppHostFrm.pas(22,11) Syntax error, "=" expected but "identifier TPROC" found` |
+| 单元在 `Source/VCL`（按设计不入 FU） | 6 | `Can't find unit synhighlighterrc / projecttreeframe / watchcallstackframe …` |
+
+55 那一栏的成因链是：这些单元**传递地** `uses SynEdit` → LCL 的 `synedit.pp`（我的 port 没有
+`SynEdit.pas`）→ `lazsynimmbase` → `TSynEditBase`，而它住在 `SynEditMiscClasses`，
+该名字已被我的 vendored port 占据且**不含**新架构两个类。
+
+### 25.2 LCL 侧不可能：三个独立证据
+
+§24 已有 `CLASSES$_$TSTRINGS_$__$$_GET$LONGINT$$ANSISTRING`（ppu 别名）与
+`syneditexport` 的 `GetFooter/GetHeader`。本轮补两条**发生在 LCL 自己源码里**的：
+
+| 位置 | 错误 | 含义 |
+|---|---|---|
+| `C:\lazarus\lcl\grids.pas(2140)` | `Illegal type conversion: "TFontStyles" to "LongInt"` | `Integer(AFont.Style)` 把 set 转整型；objfpc 合法，**Delphi 模式非法** |
+| `C:\lazarus\components\synedit\syneditmarks.pp(1160)` | 同一错误的 set 变体 | LCL 的 synedit 家族同样过不去 |
+| `C:\lazarus\components\synedit\synhighlightercpp.pp(106)` | `Duplicate identifier "fLine"` | 同族第三个失败点 |
+
+即：LCL 与其 synedit 都只按 objfpc 写，而我们自己的 108 个单元（main/Editor/各 frm/LSP 链）
+是 Delphi 模式源码，**必须** `-Mdelphiunicode`。两者不可能放进同一个编译单元。
+
+推论（现在是被三个证据支持的结论，不是偏好）：**服务我们 108 个单元的只能是 vendored Delphi
+家族，LCL 版本不能替代。**
+
+### 25.3 「只从源码编译 synedit，其余用 LCL ppu」也不可行
+
+试过：FU = [synedit 源码, synedit ppu, LCL ppu, Source]。`uses SynEdit` 在
+`syneditmarks.pp(1160)` 失败（§25.2）。同时试过把 LCL **源码**放到最前让它整体从源码编译，
+失败点从 `lcl_defines.inc` 起一路补路径（lcl/include、interfaces/win32、widgetset、forms），
+最终仍落在 `grids.pas(2140)`。两条都不是路径问题，是模式问题。
+
+### 25.4 剩余规模与攻击顺序
+
+vendored Delphi 家族（`Source/VCL/SynEdit/Source`）共 38 个 Syn* 文件、34,987 行；已移植 12 个。
+按「能解锁多少个被阻单元 / 行数」排：
+
+| 待移植单元 | 可解锁 | 行数 | 行/单元 |
+|---|---:|---:|---:|
+| SynEditPrintTypes | 23 | 216 | 9.4 |
+| SynExportHTML | 23 | 353 | 15.3 |
+| SynEditPrintMargins | 23 | 430 | 18.7 |
+| SynEditKbdHandler | 35 | 397 | 11.3 |
+| SynEditPrinterInfo | 23 | 261 | 11.3 |
+| SynEditKeyCmds | 35 | 994 | 28.4 |
+| SynTextDrawer | 35 | 1017 | 29.1 |
+| SynEditCodeFolding | 37 | 1102 | 29.8 |
+| SynEdit | 35 | 10937 | 312.5 |
+| SynHighlighterRC | 5 | 537 | 107.4 |
+| SynHighlighterCpp | 6 | 1835 | 305.8 |
+| SynEditSearch | 2 | 303 | 151.5 |
+| SynCompletionProposal | 3 | 3599 | 1199.7 |
+
+小计 **24,040 行 / 15 个文件**。「可解锁」是上界（用真实的、能处理 `{$IFDEF}` 的 uses 解析算出的
+传递可达），不是保证值——每个文件有自己的墙。
+
+### 25.5 一条工具缺陷，单独记
+
+算攻击顺序时第一次得到「所有待移植单元的解锁数 = 0 或 1」。原因是 `tools/f3_compile_cost.py`
+的依赖图对 `Editor.pas` 这类 uses 子句返回空表——因为里面带 `{$IFDEF FPC}` 与行内注释，
+解析器放弃。**解析失败不等于没有依赖**（AGENTS.md §3 的方向）。修正后的解析按 FPC 支路取，
+得到上表。该缺陷未修，标记为待办：下次用闭包图做决策前先修它，否则会低估工作量。
