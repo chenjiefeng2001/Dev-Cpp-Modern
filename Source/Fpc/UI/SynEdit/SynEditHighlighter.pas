@@ -257,6 +257,13 @@ type
     TSynCustomHighlighterClass);
   function GetPlaceableHighlighters: TSynHighlighterList;
 
+type
+  // Carried from the LCL's synedithighlighter.pp: the vendor port of this unit
+  // does not declare it, and the file now owns the unit name. Verbatim.
+  TSynDividerDrawConfigSetting = Record
+    Color: TColor;
+  end;
+
 implementation
 
 uses

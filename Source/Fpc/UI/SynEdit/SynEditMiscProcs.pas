@@ -145,6 +145,8 @@ function Min(x, y: integer): integer;
 
 function MulDiv(Factor1, Factor2, Divisor: integer): integer;
 
+function ToIdx(APos: Integer): Integer;
+function ToPos(AIdx: Integer): Integer;
 implementation
 
 uses
@@ -883,4 +885,16 @@ begin
       Result := 'Courier New';
 end;
 
+
+
+
+function ToIdx(APos: Integer): Integer;
+begin
+  Result := APos - 1;
+end;
+
+function ToPos(AIdx: Integer): Integer;
+begin
+  Result := AIdx + 1;
+end;
 end.

@@ -1,0 +1,11 @@
+{
+  "clangformatteroptionsfrm": {
+    "ok": false,
+    "missing": [],
+    "errors": [
+      "Editor.pas(25,77) Fatal: Can't find unit CodeCompletion used by Editor",
+      "Fatal: Compilation aborted",
+      "Error: C:\\lazarus\\fpc\\3.2.2\\bin\\x86_64-win64\\ppcx64.exe returned an error exitcode"
+    ]
+  }
+}
