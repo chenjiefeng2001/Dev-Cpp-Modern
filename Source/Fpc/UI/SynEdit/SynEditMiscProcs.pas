@@ -100,7 +100,8 @@ function StrScanForCharInCategory(const Line: string; Start: Integer;
 function StrRScanForCharInCategory(const Line: string; Start: Integer;
   IsOfCategory: TCategoryMethod): Integer;
 
-function GetEOL(Line: PWideChar): PWideChar;
+function GetEOL(Line: PWideChar): PWideChar; overload;
+function GetEOL(Line: PAnsiChar): PAnsiChar; overload;
 
 // Remove all '/' characters from string by changing them into '\.'.
 // Change all '\' characters into '\\' to allow for unique decoding.
@@ -897,4 +898,19 @@ function ToPos(AIdx: Integer): Integer;
 begin
   Result := AIdx + 1;
 end;
+
+function GetEOL(Line: PAnsiChar): PAnsiChar;
+begin
+  // The same scan, byte-wise. This overload exists because the LCL's own
+  // synedit chain (syneditpointclasses.pas et al.) is compiled with
+  // MODE OBJFPC pulled in by its synedit.inc, where PChar is PAnsiChar,
+  // while this unit is compiled delphiunicode and spells it PWideChar. Both
+  // spellings are needed for the callers this unit must coexist with.
+  Result := Line;
+  if Assigned(Result) then
+    while (Result^ <> #0) and (Result^ <> #10) and (Result^ <> #13) do
+      Inc(Result);
+end;
+
+
 end.
