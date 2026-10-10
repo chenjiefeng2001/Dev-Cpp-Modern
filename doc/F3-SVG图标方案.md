@@ -2077,3 +2077,172 @@ if CurLine[col] = '{' then          // Source/Editor.pas:2986
 
 - §19.8 的建议（**先攻 `main.pas`、暂不反转 `MainUi`**）**不变**：这一节没有让任何单元
   靠近可编译，只是把一个**错误的成本估计**换成了正确的。
+
+---
+
+## 24. vendored SynEdit 移植：LCL 链**不可从 delphiunicode 子类化**（2026-10-09）
+
+§22 之后的工作按 §19.8 的排期继续攻 `main.pas`。本轮把 vendored SynEdit 家族的移植推到了
+`SynEditExport` / `SynExportRTF` 编译通过，并在此终止于一个**已被测量的架构墙**。
+
+### 24.1 已经编译通过的 vendored 单元（11 / 12）
+
+Source/Fpc/UI/SynEdit/ 下的移植，逐个经 wrapper 编译验证：
+
+| 单元 | 行数 | 适配点 |
+|---|---:|---|
+| SynEditStrConst | 561 | 无（namespace gate + `{\$H+}`） |
+| SynEditKeyConst | 119 | 补 `smkcCtrl`/`srNone`（FPC 全树不存在，vendored 也不存在） |
+| SynUnicode | 466 | `CharNextW` / `GetLocaleInfoW` external（FPC Windows 单元只有 ANSI 版） |
+| SynEditTypes | 922 | `CompilerVersion` gate 改 `{\$IFNDEF FPC}`；追加 LCL 新架构 19 类型（见 24.3） |
+| SynEditMiscClasses | 1421 | 见下 |
+| SynEditHighlighterOptions | 95 | 无 |
+| SynEditHighlighter | 1323 | 补 `TSynDividerDrawConfigSetting` |
+| SynEditMiscProcs | 6769 | 见下 |
+| SynEditExport | 709 | 见下 |
+| SynExportRTF | 272 | 见下 |
+| SynHighlighterMulti | 1087 | TRegEx → `TRegexEngine.rcMatchSubString`；见下 |
+
+唯一下面的 `SynEditTextBuffer`（115 行处 override `TStrings.Get`）是**墙本身**，见 24.4。
+
+### 24.2 逐个适配点，附证据
+
+**`smkcCtrl` / `srNone`（SynEditKeyConst）**：不存在于任何 FPC 单元（全树搜索），也不存在于
+vendored SynEdit 单元。`smkc*` 是**字符串**——由调用点反推：`Result := SmkcCtrl;`
+`Result := Result + SmkcShift;` 且 `Result` 是 string。第一批猜成 VCL 快捷键掩码
+（`{$80}{$40}{$10}`），被 `got Byte expected UnicodeString` 打回；类型是那样恢复的，
+所以常量现在带证据而不是带猜测。
+
+**`CharNextW` / `GetLocaleInfoW`（SynUnicode）**：FPC Windows 单元的 `CharNext` 是 ANSI
+`CharNextA`，vendored 代码传 PWideChar。W 变体在 FPC 的 Windows 单元里没有暴露，
+在此声明 external。
+
+**`CompilerVersion`（SynEditTypes）**：Delphi 符号；FPC 下表达式对着不存在的名字求值，
+FPC 在**被守卫的构造内部**报类型错。用 `{\$IFNDEF FPC}` 嵌套；它守卫的 VCL helper
+在 LCL 上根本不存在。
+
+**`Consts` 删除、`LCLType`/`LCLProc` 追加、WIC 缩放器改 raise、`Ctl3D` 守卫归约、
+`RecreateWnd(Self)`、`RegOpenKeyExW`、`ShortCutToText`（SynEditMiscClasses）**：
+见 24.5 的逐条说明。其中 **WIC** 一条值得重复：FPC 3.2.2 完全没有 wincodec 单元
+（`units/x86_64-win64` 下无 wincodec.ppu，源码只在未安装的 winunits-jedi 里），
+所以 vendored 的 `ResizeBitmap`（WIC DPI 缩放器）只能显式 raise——而不是静默 no-op。
+调用方若走到，会知道；而静默不缩放仍返回一个**看起来正确**的位图。
+
+**`TRegEx` → `TRegexEngine`（SynHighlighterMulti）**：FPC 没有 Delphi 的 `TRegEx`
+（其 regexpr 单元由 uregexpr.pp 构建，无 TRegEx），但
+`rcMatchSubString(s, StartPos, out Len)` 是**同语义同约约定**的操作，
+所以映射是一对一而非合成。`rcMatchSubString` 是 protected，用一个
+`TExposedEngine` 子类暴露。`CheckExpression` 另走 `Parse` 的 out 参数。
+
+**`SetAsHandle`（SynEditExport）**：不是改名。Delphi 的 `SetAsHandle` **转移**全局块
+所有权；LCL 的 `AddFormat` 拷贝且不接管。适配器 `SetClipboardHandle` 拷走后
+`GlobalFree`——从另一侧看 DelphI 的契约。两件事哪件做错就是 leak vs double-free，
+所以所有权在代码里显式表达。
+
+**`Max`/`Min`/`MulDiv`、`ToIdx`/`ToPos`（SynEditMiscProcs）**：LCL 版有、vendored 版无，
+而此文件现在拥有该单元名，故补上。函数体是 LCL 的（`Result := APos - 1`），
+从 `syneditmiscprocs.pp` 读出，非按名字杜撰。
+
+**`seUTF8` 遮蔽（SynEditExport）**：FPC 的 `SysUtils` 有拼写完全相同的 `TStandardEncoding`
+成员（`seUTF8`/`seUTF16LE`/`seUTF16BE`/`seAnsi`）但**序数不同**。裸成员名绑定到解析器
+先到达者——编译器自己说了：`range check error (5 must be between 0 and 3)`，
+`TSynEncoding` 只 4 个值，5 只能来自 SysUtils。修法是 interface 级 const 遮蔽，
+先用独立程序验证；vendored 算法因此**零改动**，（歧义是名字绑定事故，不是逻辑差异）。
+遮蔽必须放在 interface 的 `uses` 之后——放前面会 `Identifier not found SynUnicode`。
+
+**`GetEOL(Line: PChar)` 重载（SynEditMiscProcs）**：见 24.6。
+
+### 24.3 叠加的新架构类型：一笔记录在案的债
+
+`SynEditTypes` 现在声明**并集**——自己原有的 6 个（`TBufferCoord`/`TDisplayCoord`/...）
++ 从 LCL `synedittypes.pp` **逐字**拷贝的 19 个 + `TSynIdentChars`；
+`SynEditHighlighter` 补 `TSynDividerDrawConfigSetting`。
+
+代价测过：vendored 家族重度使用自己的老类型（`TBufferCoord` 41 处、
+`TDisplayCoord` 32 处、`TSynEditFileFormat` 5 处），LCL 链也需要自己那 19 个；
+**无一侧可丢**，故取并集，并把债写进文件而非藏起来。
+
+`TSynIdentChars` 在 LCL 是 `set of char`（objfpc 下 byte 集）；`-Mdelphiunicode` 下
+`Char` 是 WideChar，"set of it" 直接被拒，故元素类型写成 `AnsiChar`
+（checker 消费的同一批字节）——记录在类型本身。
+
+### 24.4 墙：LCL 链不可从 delphiunicode 子类化
+
+`SynEditTextBuffer.pas(115)` override `TStrings.Get(Index)` 失败：
+
+```
+ppu 的别名记录逐字：CLASSES$_$TSTRINGS_$__$$_GET$LONGINT$$ANSISTRING
+```
+
+即 FPC 的 `TStrings.Get` 返回 **ANSISTRING**，而端口在 `-Mdelphiunicode` + `{\$H+}` 下
+是 UnicodeString。签名不同，无从 override。
+
+**这不是拼写问题**：LCL 的 `syneditexport.pas` 同样
+
+```
+function GetFooter: string; virtual; abstract;
+function GetHeader: string; virtual; abstract;
+```
+
+ppu 是 objfpc 构建，`string` = AnsiString；端口 delphiunicode，`string` = UnicodeString。
+**LCL 链所有 string-型 virtual 都如此**，所以任何 vendored 单元只要派生自其中任何一个，
+都会以同一方式失败。
+
+因此**「Unicode 构建扩展 LCL 的 SynEdit」这条路已死**。
+
+### 24.5 本轮试图的第三条路，及它为何被否决
+
+测量过：让 LCL 链赢 13 个同名单元、只移植 LCL 真缺的 4 个
+（`SynUnicode`/`SynEditKeyConst`/`SynEditHighlighterOptions`/`SynExportRTF`）。
+
+先测了「自研代码是否真用 exporter 的 `Encoding`」——**不用**：
+`Editor.pas` 的 Encoding 引用全是 `fText.Lines.Encoding`（`TStrings.Encoding`，
+LCL 属性）。据此把 `Encoding`/`SupportedEncodings` 从端口去掉，是对的；
+但紧接着 `GetFooter`/`GetHeader` 以同一方式失败（见 24.4），故该改动**整体回退**
+而非留作半改。
+
+**FU 顺序是这门学问的全部**：端口目录必须在 LCL 同名单元**之前**，否则
+vendored 家族会拿到两套 `TBufferCoord`（每套一个单元身份），且每个派生类
+都会失败。第一轮曾把它误记为"FU 顺序 bug"——真因是 24.4 的墙，
+FU 顺序只是让正确的那一支编译。
+
+另有一条搜索路径事实值得记：**FPC 找到 ppu 仍会拒绝使用**，报
+`PPU Source: lazsynimmbase.pas not found`。FPC 要求源码可定位，
+故 `C:\\lazarus\\components\\synedit`（源码目录，不是 ppu 目录）必须入 FU。
+它读起来像缺一个移植，其实是缺一条搜索路径。
+
+### 24.6 GetEOL 重载：两次错都留档
+
+`syneditpointclasses.pas`（LCL 自己的源，端口必须与之共存）调
+`GetEOL(Start)`，`Start` 声明为 `PChar`，报
+`Incompatible type for arg no. 1: Got PChar, expected PWideChar`。
+
+根因从 LCL 源读出：`syneditpointclasses.pas` 包 `synedit.inc`，其中带
+`{\$MODE OBJFPC}`。于是该单元按 objfpc 编译（`PChar`=PAnsiChar），而端口按
+delphiunicode 编译，把同一指针拼作 `PWideChar`——**调用方与被调方是两个类型**。
+
+第一次修错也存档：加了 `PChar` 重载。但**在我自己的单元里 `PChar` 就是 `PWideChar`**，
+直接 `Function is already declared`。真正解析的是 `PAnsiChar`——objfpc 调用方实际传的
+类型；delphiunicode 下它与 `PWideChar` 是不同标识（已确认）才构成重载。
+
+### 24.7 账目，精确到数字
+
+| 项 | 数 |
+|---|---:|
+| 已编译通过的 vendored SynEdit 单元 | 11 / 12 |
+| 剩余未编译 | 1（`SynEditTextBuffer`，即墙本身） |
+| 移植 vendored `SynEdit.pas` 本体 | **10,937 行** |
+| vendored 与 LCL 同名单元的差异 | `SynEditMiscClasses` +3353/-1249；`SynEditHighlighter` +1599/-886；`SynEditMiscProcs` +212/-762 |
+
+vendored 家族被 Dev-C++ 重度打过补丁，因此**两侧均不可互相替代**。
+
+### 24.8 当前状态
+
+- 端口目录保持**在 LCL 同名单元之前**（唯一能编译的排法）。
+- `f3_fpc_closure_scan.py`：blocker 与 missing identifier 列表均为**空**。
+- `tool gateway` 双 profile 绿。
+- 未提交：无（本轮是纯测量，试错与回退都发生在工作树内）。
+
+下一步**取决于一个决定，而不是一次实现**：剩余的 `SynEditTextBuffer` 与它背后的
+`SynEdit.pas`（10,937 行）是 vendored 路线图的终点；LCL 路线在 24.4 已死。
+这一票应单独发，不应被一次"顺手"启动。
