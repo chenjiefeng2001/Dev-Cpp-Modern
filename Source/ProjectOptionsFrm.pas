@@ -193,7 +193,15 @@ type
 implementation
 
 uses
-  System.UITypes, FileCtrl, devcfg, IconFrm, utils, MultiLangSupport, version, Math;
+  System.UITypes, FileCtrl, devcfg, IconFrm, utils, MultiLangSupport, version, Math,
+  // MainUi is used at line 592 for CopyProjectViewTo and was simply absent from
+  // both uses clauses:
+  //     ProjectOptionsFrm.pas(592,3) Error: Identifier not found "MainUi"
+  // It goes in the IMPLEMENTATION list on purpose. MainUi's own interface needs
+  // nothing from here, and main.pas already uses this form, so putting MainUi in
+  // the interface would close a cycle through main. Every other call site in
+  // this unit is inside a method body, so implementation scope is enough.
+  MainUi;
 
 {$R *.dfm}
 

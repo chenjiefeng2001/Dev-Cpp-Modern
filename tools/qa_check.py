@@ -481,7 +481,14 @@ def check_mainform_decoupling():
         n = len(_MAINFORM_REF.findall(code))
         if n:
             refs_now[rel] = n
-        if _USES_MAIN.search(text):
+        # `code`, not `text`, and for the same reason the comment above gives:
+        # only real code counts. Scanning the raw text made a PROSE mention of
+        # the god form inside a uses-clause comment register as a live
+        # dependency -- ProjectOptionsFrm failed with "new `uses main`" for no
+        # other reason than a comment explaining why MainUi goes in the
+        # IMPLEMENTATION list. A gate that fires on a comment is crying wolf,
+        # and the MainForm-ref check two lines up already had this fixed.
+        if _USES_MAIN.search(code):
             uses_now[rel] = True
         # a unit that declares the global owns it (main.pas, and the
         # same-named Tools/PackMaker|Packman units) -- not a leak
