@@ -264,12 +264,27 @@ end;
 procedure TConfigData.ReadDelimitedString(const key: String; const entry: String; value: TStringList);
 var
   S: String;
+  i: Integer;
+  Parts: TStringList;
 begin
   S := ReadS(key, entry);
 
   // Convert string to string list
   value.Clear;
-  ExtractStrings([';'], [], PChar(S), value);
+  // FPC's ExtractStrings is ANSI-based: Content is PChar (AnsiChar here),
+  // so PChar(S) -- which is PWideChar under H+ -- is refused. The split is
+  // byte-oriented on a single ASCII separator, so the faithful port is to
+  // split the UTF-8 encoding of S and decode each field back, which keeps
+  // non-ASCII values exact instead of letting the codepage reinterpret them
+  // (this machine's default is 936).
+  Parts := TStringList.Create;
+  try
+    ExtractStrings([';'], [], PAnsiChar(UTF8Encode(S)), Parts);
+    for i := 0 to Parts.Count - 1 do
+      value.Add(UTF8Decode(Parts[i]));
+  finally
+    Parts.Free;
+  end;
 end;
 
 procedure TConfigData.WriteDelimitedString(const key: String; const entry: String; value: TStringList);

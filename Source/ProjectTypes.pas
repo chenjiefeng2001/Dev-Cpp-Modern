@@ -103,7 +103,10 @@ type
   public
     function ToString: string;
     property OptionValue[const Index: Integer]: Integer read GetOptionValue;
-    class function FromString(const AStr: string): TArray<Integer>;
+    // FPC: a record helper's methods are static, and the compiler says so
+    // ("Class methods must be static in records"). Delphi allows the class
+    // function here because a Delphi record method has no implicit Self.
+    class function FromString(const AStr: string): TArray<Integer>; static;
   end;
 
 

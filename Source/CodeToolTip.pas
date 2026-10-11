@@ -108,7 +108,12 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure Show;
-    procedure ActivateHint(Rect: TRect; const AHint: String); override;
+    // The LCL's THintWindow.ActivateHint exists and is virtual, but its ppu is
+    // objfpc, so its `string` is AnsiString -- and under H+ this override must
+    // match the ancestor exactly. (FPC's error here reads as though the method
+    // did not exist, which is the signature mismatch reporting itself.) The
+    // hint is a single-byte string on the LCL's side of the boundary.
+    procedure ActivateHint(Rect: TRect; const AHint: AnsiString); override;
     procedure ReleaseHandle;
     property ForceHide: boolean read FForceHide write FForceHide;
     property Options: TToolTipOptions read FOptions write FOptions;

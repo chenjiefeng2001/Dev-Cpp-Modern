@@ -176,13 +176,13 @@ type
     fHoverTimer: TTimer;
     fHoverCoord: TLspBufferCoord;
     fHoverCoordValid: Boolean;
-    procedure OnHoverTimer(Sender: TObject);
     fParenthCompleteState: TSymbolCompleteState;
     fArrayCompleteState: TSymbolCompleteState;
     fBraceCompleteState: TSymbolCompleteState;
     fEncodingCorrection: TSymbolCorrectionEncoding;
     //fSingleQuoteCompleteState: TSymbolCompleteState;
     //fDoubleQuoteCompleteState: TSymbolCompleteState;
+    procedure OnHoverTimer(Sender: TObject);
     procedure EditorKeyPress(Sender: TObject; var Key: Char);
     procedure EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure EditorKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
