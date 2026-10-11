@@ -141,7 +141,16 @@ def compile_unit(unit_name):
         m = re.search(r"Can't find unit (\w+\.?\w*)", line)
         if m:
             blocked.append(m.group(1))
-    return proc.returncode == 0, sorted(missing), blocked
+    return proc.returncode == 0, sorted(missing), blocked, out
+
+
+def first_evidence(out):
+    """The first real compiler diagnostic, as the evidence line for a failure."""
+    for line in out.splitlines():
+        s = line.strip()
+        if re.search(r"\)\s*(Error|Fatal):", s) or s.startswith("Fatal:"):
+            return s
+    return None
 
 
 def main():
@@ -153,14 +162,22 @@ def main():
     ok = []
     blocked_by = {}
     missing_ids = {}
+    unexplained = {}
     for u in units:
-        good, miss, blocked = compile_unit(u)
+        good, miss, blocked, out = compile_unit(u)
         if good:
             ok.append(u)
+            continue
         for b in blocked:
             blocked_by.setdefault(b, set()).add(u)
         for mid in miss:
             missing_ids.setdefault(mid, set()).add(u)
+        # A unit that failed but matched no recognised diagnostic is not
+        # evidence of anything. Dropping it would let it read as "not
+        # blocked", which is the direction that can authorise skipping real
+        # work -- so it is reported as INDETERMINATE with its evidence line.
+        if not blocked and not miss:
+            unexplained[u] = first_evidence(out) or "(no diagnostic line found)"
 
     print("FPC CLOSURE SCAN -- main.pas's own units, compiled one by one")
     print("=" * 78)
@@ -181,15 +198,35 @@ def main():
                   % (i, len(users), ", ".join(sorted(users)[:4])
                      + (" ..." if len(users) > 4 else "")))
         print()
+    if unexplained:
+        print("INDETERMINATE (failed, but not for a reason this scan recognises)")
+        for u in sorted(unexplained):
+            print("  %-28s %s" % (u, unexplained[u]))
+        print()
     print("DETAIL")
-    for u in units:
-        if u in ok:
-            continue
+    classified = set(ok)
+    for v in blocked_by.values():
+        classified |= v
+    for v in missing_ids.values():
+        classified |= v
+    classified |= set(unexplained)
+    unaccounted = [u for u in units if u not in classified]
+    if unaccounted:
+        print("  %d unit(s) in the closure were neither compiled nor classified:"
+              % len(unaccounted))
+        for u in unaccounted:
+            print("    %s" % u)
+    else:
+        print("  every unit in the closure is accounted for: %d OK, %d blocked, "
+              "%d missing-identifier, %d indeterminate"
+              % (len(ok), sum(len(v) for v in blocked_by.values()),
+                 sum(len(v) for v in missing_ids.values()), len(unexplained)))
     if args.json:
         import json as _json
         pathlib.Path(args.json).write_text(
             _json.dumps({"ok": ok, "blocked": {k: sorted(v) for k, v in blocked_by.items()},
-                         "missing": {k: sorted(v) for k, v in missing_ids.items()}},
+                         "missing": {k: sorted(v) for k, v in missing_ids.items()},
+                         "indeterminate": unexplained, "unaccounted": unaccounted},
                         indent=2), encoding="utf-8")
     return 0 if len(ok) == len(units) else 1
 

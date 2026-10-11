@@ -597,6 +597,9 @@ type
     function GetCollapseMarkRect(Row: Integer; Line: Integer = -1): TRect;
     function GetFoldShapeRect(Row: Integer): TRect;
 //-- CodeFolding
+
+    function GetCurrentPPI: Integer;
+    procedure SetCurrentPPI(Value: Integer);
   protected
     FIgnoreNextChar: Boolean;
     FCharCodeString: string;
@@ -915,6 +918,8 @@ type
     property UseCodeFolding: Boolean read fUseCodeFolding write SetUseCodeFolding;
     property AllFoldRanges: TSynFoldRanges read fAllFoldRanges;
 //-- CodeFolding
+    property CurrentPPI: Integer read GetCurrentPPI write SetCurrentPPI;
+
     property BookMarkOptions: TSynBookMarkOpt
       read fBookMarkOpt write fBookMarkOpt;
     property BorderStyle: TSynBorderStyle read FBorderStyle write SetBorderStyle
@@ -1110,6 +1115,23 @@ uses
   SynEditStrConst,
   SynEditDataObject,
   SynEditDragDrop;
+
+function TCustomSynEdit.GetCurrentPPI: Integer;
+begin
+  // The port's own DPI (see the field's comment); 96 is the default the
+  // vendored scaling expressions divide by, so an unscaled control reads 96
+  // exactly as it would under Delphi before per-monitor DPI.
+  if FCurrentPPI = 0 then
+    Result := 96
+  else
+    Result := FCurrentPPI;
+end;
+
+procedure TCustomSynEdit.SetCurrentPPI(Value: Integer);
+begin
+  FCurrentPPI := Value;
+end;
+
 
 // See the interface's TSynStopWatch for why this type exists at all.
 class function TSynStopWatch.StartNew: TSynStopWatch;
