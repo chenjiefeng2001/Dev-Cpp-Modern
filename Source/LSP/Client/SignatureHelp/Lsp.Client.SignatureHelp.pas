@@ -33,7 +33,7 @@ uses
   Vcl.Controls, Vcl.Forms, Vcl.Graphics,
   {$ENDIF}
   {$IFDEF FPC}
-  Lsp.Transport, Lsp.DocumentSync,
+  Lsp.Transport, Lsp.DocumentSync, Lsp.Client.UiQueue,
   {$ELSE}
   LSP.Transport, Lsp.DocumentSync,
   {$ENDIF}
@@ -109,6 +109,17 @@ type
     FHintVisible: Boolean;
     FLastResult: TLspSignatureHelpResult;
     FHasResult: Boolean;
+{$IFDEF FPC}
+    // Response handling used to be posted to the UI thread as an anonymous
+    // method, which FPC 3.2.2 cannot express at all. The payload now travels
+    // in FUiQueue and PumpUiCall is the real method TThread.Queue takes.
+    // See LSP.Client.UiQueue for why it is a queue and not a single field.
+    FUiQueue: TLspUiQueue;
+    procedure PostUiCall(AKind: TLspUiCallKind; const AMessage: string;
+      AReqId: Integer);
+    procedure HideHintIfCurrent(AReqId: Integer);
+    procedure PumpUiCall;
+{$ENDIF}
     procedure HandleTransportMessage(const AMessage: string);
     procedure ProcessResponseOnUIThread(const AMessage: string; AReqId: Integer);
     procedure FillHintAndShow(const AResult: TLspSignatureHelpResult);
@@ -995,8 +1006,48 @@ begin
   except
   end;
   FreeAndNil(FHint);
+{$IFDEF FPC}
+  FreeAndNil(FUiQueue);
+{$ENDIF}
   inherited;
 end;
+
+{$IFDEF FPC}
+procedure TLspSignatureHelpManager.PostUiCall(AKind: TLspUiCallKind;
+  const AMessage: string; AReqId: Integer);
+begin
+  if not Assigned(FUiQueue) then
+    FUiQueue := TLspUiQueue.Create;
+  FUiQueue.Post(AKind, AMessage, AReqId);
+  // nil is rejected by TThread.Queue, and in this project's -Mdelphiunicode
+  // mode the bound form is `O.P` with NO @ -- the objfpc spelling is an error.
+  TThread.Queue(TThread.CurrentThread, PumpUiCall);
+end;
+
+
+{$IFDEF FPC}
+// The no-result branch used to be a closure whose entire body was this
+// check, so it becomes a named method that PumpUiCall can reach.
+procedure TLspSignatureHelpManager.HideHintIfCurrent(AReqId: Integer);
+begin
+  if AReqId = FActiveRequestId then
+    HideHint;
+end;
+{$ENDIF}
+procedure TLspSignatureHelpManager.PumpUiCall;
+var
+  Call: TLspUiCall;
+begin
+  if not Assigned(FUiQueue) or not FUiQueue.Take(Call) then
+    Exit;
+  case Call.Kind of
+    lsucNoResult:
+      HideHintIfCurrent(Call.ReqId);
+    lsucProcessResponse:
+      ProcessResponseOnUIThread(Call.Message, Call.ReqId);
+  end;
+end;
+{$ENDIF}
 
 procedure TLspSignatureHelpManager.SetEditor(
   const AEditor: IEditorControlAdapter);
@@ -1224,19 +1275,27 @@ begin
   if not ParseSignatureHelpResponse(AMessage, R) then
   begin
     // 无可用签名 (如光标在字符串/注释内): 在 UI 线程隐藏旧气泡
+{$IFDEF FPC}
+    PostUiCall(lsucNoResult, '', ReqId);
+{$ELSE}
     TThread.Queue(nil,
       procedure
       begin
         if ReqId = FActiveRequestId then
           HideHint;
       end);
+{$ENDIF}
     Exit;
   end;
+{$IFDEF FPC}
+  PostUiCall(lsucProcessResponse, AMessage, ReqId);
+{$ELSE}
   TThread.Queue(nil,
     procedure
     begin
       ProcessResponseOnUIThread(AMessage, ReqId);
     end);
+{$ENDIF}
 end;
 
 procedure TLspSignatureHelpManager.ProcessResponseOnUIThread(

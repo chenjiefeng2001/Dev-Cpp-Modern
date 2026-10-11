@@ -34,7 +34,7 @@ uses
   {$ENDIF}
   SynEditTypes, SynEdit, SynCompletionProposal,
   {$IFDEF FPC}
-  Lsp.Transport, Lsp.DocumentSync;
+  Lsp.Transport, Lsp.DocumentSync, Lsp.Client.UiQueue;
   {$ELSE}
   LSP.Transport, Lsp.DocumentSync;
   {$ENDIF}
@@ -91,6 +91,16 @@ type
     FActiveContext: TLspCompletionRequestContext;
     FIsIncomplete: Boolean;
     FProposal: TSynCompletionProposal;
+{$IFDEF FPC}
+    // Response handling used to be posted to the UI thread as an anonymous
+    // method, which FPC 3.2.2 cannot express at all. The payload now travels
+    // in FUiQueue and PumpUiCall is the real method TThread.Queue takes.
+    // See LSP.Client.UiQueue for why it is a queue and not a single field.
+    FUiQueue: TLspUiQueue;
+    procedure PostUiCall(AKind: TLspUiCallKind; const AMessage: string;
+      AReqId: Integer);
+    procedure PumpUiCall;
+{$ENDIF}
     procedure HandleTransportMessage(const AMessage: string);
     procedure ProcessResponseOnUIThread(const AMessage: string; AReqId: Integer);
     procedure FillProposalAndShow(const AItems: TArray<TLspCompletionItem>;
@@ -487,8 +497,38 @@ begin
     FreeAndNil(FProposal);
   end;
   FreeAndNil(FItems);
+{$IFDEF FPC}
+  FreeAndNil(FUiQueue);
+{$ENDIF}
   inherited;
 end;
+
+{$IFDEF FPC}
+procedure TLspCompletionManager.PostUiCall(AKind: TLspUiCallKind;
+  const AMessage: string; AReqId: Integer);
+begin
+  if not Assigned(FUiQueue) then
+    FUiQueue := TLspUiQueue.Create;
+  FUiQueue.Post(AKind, AMessage, AReqId);
+  // nil is rejected by TThread.Queue, and in this project's -Mdelphiunicode
+  // mode the bound form is `O.P` with NO @ -- the objfpc spelling is an error.
+  TThread.Queue(TThread.CurrentThread, PumpUiCall);
+end;
+
+procedure TLspCompletionManager.PumpUiCall;
+var
+  Call: TLspUiCall;
+begin
+  if not Assigned(FUiQueue) or not FUiQueue.Take(Call) then
+    Exit;
+  // This manager only ever posts one kind of work (process the response), so
+  // there is no no-result branch here to dispatch to.
+  case Call.Kind of
+    lsucProcessResponse:
+      ProcessResponseOnUIThread(Call.Message, Call.ReqId);
+  end;
+end;
+{$ENDIF}
 
 procedure TLspCompletionManager.SetEditor(AEditor: TCustomSynEdit);
 begin
@@ -738,11 +778,15 @@ begin
   FIsIncomplete := List.IsIncomplete;
 
   // 切到 UI 线程再碰编辑器/弹窗 (Transport 读线程回调禁止直接操作 VCL)
+{$IFDEF FPC}
+  PostUiCall(lsucProcessResponse, AMessage, ReqId);
+{$ELSE}
   TThread.Queue(nil,
     procedure
     begin
       ProcessResponseOnUIThread(AMessage, ReqId);
     end);
+{$ENDIF}
 end;
 
 procedure TLspCompletionManager.ProcessResponseOnUIThread(const AMessage: string;

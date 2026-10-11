@@ -41,9 +41,15 @@ type
     FOnCallStackSelChanged: TNotifyEvent;
     FOnThreadSelChanged: TNotifyEvent;
     procedure InitializePages;
-    procedure ListViewChange(Sender: TObject);
+    // The LCL types TListView.OnChange as
+    //   TLVChangeEvent = procedure(Sender: TObject; Item: TListItem;
+    //                              Change: TItemChange) of object
+    // (lcl/comctrls.pp), not the Delphi TNotifyEvent (Sender only), so this
+    // handler takes the item and the change kind as well. Neither is used
+    // here -- the routing below is driven entirely by Sender.
+    procedure ListViewChange(Sender: TObject; Item: TListItem;
+      Change: TItemChange);
   public
-    constructor CreateOwner(AOwner: TComponent); override;
     destructor Destroy; override;
 
     property ListViewWatch: TListView read FListViewWatch;
@@ -59,11 +65,11 @@ implementation
 
 { TWatchCallStackFrame }
 
-constructor TWatchCallStackFrame.CreateOwner(AOwner: TComponent);
-begin
-  inherited CreateOwner(AOwner);
-  InitializePages;
-end;
+// The former `constructor CreateOwner(AOwner: TComponent); override;` was
+// removed rather than remapped -- see ProjectTreeFrame.pas for the
+// measurement: no ancestor declares CreateOwner (neither the LCL's TFrame nor
+// the vendored VCL), and there is no call site anywhere in the project. The
+// InitializePages call below was already unreachable on every build.
 
 destructor TWatchCallStackFrame.Destroy;
 begin
@@ -122,7 +128,8 @@ begin
   FListViewThreads.OnChange := ListViewChange;
 end;
 
-procedure TWatchCallStackFrame.ListViewChange(Sender: TObject);
+procedure TWatchCallStackFrame.ListViewChange(Sender: TObject; Item: TListItem;
+  Change: TItemChange);
 begin
   // Route selection changes to the appropriate event.
   if not Assigned(Sender) then

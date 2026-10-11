@@ -28,7 +28,7 @@ uses
   System.SysUtils, System.Classes, System.Generics.Collections, System.SyncObjs,
   {$ENDIF}
   {$IFDEF FPC}
-  Lsp.Transport, Lsp.DocumentSync,
+  Lsp.Transport, Lsp.DocumentSync, Lsp.Client.UiQueue,
   {$ELSE}
   LSP.Transport, Lsp.DocumentSync,
   {$ENDIF}
@@ -70,6 +70,16 @@ type
     FActiveRequestId: Integer;
     FActiveContext: TLspDefinitionRequestContext;
     FLastLocations: TArray<TLspLocation>;
+{$IFDEF FPC}
+    // Response handling used to be posted to the UI thread as an anonymous
+    // method, which FPC 3.2.2 cannot express at all. The payload now travels
+    // in FUiQueue and PumpUiCall is the real method TThread.Queue takes.
+    // See LSP.Client.UiQueue for why it is a queue and not a single field.
+    FUiQueue: TLspUiQueue;
+    procedure PostUiCall(AKind: TLspUiCallKind; const AMessage: string;
+      AReqId: Integer);
+    procedure PumpUiCall;
+{$ENDIF}
     procedure HandleTransportMessage(const AMessage: string);
     procedure ProcessResponseOnUIThread(const AMessage: string; AReqId: Integer);
     procedure DoNoResult(AReqId: Integer);
@@ -436,8 +446,38 @@ begin
   end;
   FOnNavigate := nil;
   FOnNoResult := nil;
+{$IFDEF FPC}
+  FreeAndNil(FUiQueue);
+{$ENDIF}
   inherited;
 end;
+
+{$IFDEF FPC}
+procedure TLspDefinitionManager.PostUiCall(AKind: TLspUiCallKind;
+  const AMessage: string; AReqId: Integer);
+begin
+  if not Assigned(FUiQueue) then
+    FUiQueue := TLspUiQueue.Create;
+  FUiQueue.Post(AKind, AMessage, AReqId);
+  // nil is rejected by TThread.Queue, and in this project's -Mdelphiunicode
+  // mode the bound form is `O.P` with NO @ -- the objfpc spelling is an error.
+  TThread.Queue(TThread.CurrentThread, PumpUiCall);
+end;
+
+procedure TLspDefinitionManager.PumpUiCall;
+var
+  Call: TLspUiCall;
+begin
+  if not Assigned(FUiQueue) or not FUiQueue.Take(Call) then
+    Exit;
+  case Call.Kind of
+    lsucNoResult:
+      DoNoResult(Call.ReqId);
+    lsucProcessResponse:
+      ProcessResponseOnUIThread(Call.Message, Call.ReqId);
+  end;
+end;
+{$ENDIF}
 
 procedure TLspDefinitionManager.SetEditor(
   const AEditor: IEditorControlAdapter);
@@ -640,18 +680,26 @@ begin
   if not ParseDefinitionResponse(AMessage, Locs) or (Length(Locs) = 0) then
   begin
     // null / 空结果: 回退旧 parser 跳转 (调用方挂接 OnNoResult)
+{$IFDEF FPC}
+    PostUiCall(lsucNoResult, '', ReqId);
+{$ELSE}
     TThread.Queue(nil,
       procedure
       begin
         DoNoResult(ReqId);
       end);
+{$ENDIF}
     Exit;
   end;
+{$IFDEF FPC}
+  PostUiCall(lsucProcessResponse, AMessage, ReqId);
+{$ELSE}
   TThread.Queue(nil,
     procedure
     begin
       ProcessResponseOnUIThread(AMessage, ReqId);
     end);
+{$ENDIF}
 end;
 
 procedure TLspDefinitionManager.DoNoResult(AReqId: Integer);

@@ -35,8 +35,12 @@ type
   private
     FCompilerOutput: TListView;
     FOnCompilerMessage: TCompilerMessageEvent;
+    // A named method, not an anonymous one: TCompilerProgressHandler is
+    // `procedure(const ProgressEvent: TCompileProgressEvent) of object`, and
+    // FPC 3.2.2 has no anonymous-method syntax at all (`reference to` does not
+    // exist in this compiler), so the subscription needs a real method.
+    procedure CompilerProgressed(const ProgressEvent: TCompileProgressEvent);
   public
-    constructor CreateOwner(AOwner: TComponent); override;
     destructor Destroy; override;
 
     procedure AddCompilerMessage(const Line: string; const ErrorLevel: Integer);
@@ -53,21 +57,12 @@ implementation
 
 { TOutputConsoleFrame }
 
-constructor TOutputConsoleFrame.CreateOwner(AOwner: TComponent);
-begin
-  inherited CreateOwner(AOwner);
-
-  FCompilerOutput := TListView.Create(Self);
-  FCompilerOutput.Parent := Self;
-  FCompilerOutput.Align := alClient;
-  FCompilerOutput.ViewStyle := vsReport;
-  FCompilerOutput.RowSelect := True;
-  FCompilerOutput.Columns.Add.Caption := 'Line';
-  FCompilerOutput.Columns.Add.Caption := 'Message';
-  FCompilerOutput.Columns.Add.Caption := 'Type';
-
-  SubscribeCompilerEvents;
-end;
+// The former `constructor CreateOwner(AOwner: TComponent); override;` was
+// removed rather than remapped -- see ProjectTreeFrame.pas for the
+// measurement: no ancestor declares CreateOwner (neither the LCL's TFrame nor
+// the vendored VCL), and there is no call site anywhere in the project. The
+// FCompilerOutput creation and SubscribeCompilerEvents below were already
+// unreachable on every build.
 
 destructor TOutputConsoleFrame.Destroy;
 begin
@@ -113,13 +108,15 @@ begin
       AddCompilerMessage(Lines[I], 0);
 end;
 
+procedure TOutputConsoleFrame.CompilerProgressed(
+  const ProgressEvent: TCompileProgressEvent);
+begin
+  AddCompilerMessage(ProgressEvent.Message, ProgressEvent.Progress);
+end;
+
 procedure TOutputConsoleFrame.SubscribeCompilerEvents;
 begin
-  TEventManager.Instance.OnCompilerProgress :=
-    procedure(const ProgressEvent: TCompileProgressEvent)
-    begin
-      AddCompilerMessage(ProgressEvent.Message, ProgressEvent.Progress);
-    end;
+  TEventManager.Instance.OnCompilerProgress := CompilerProgressed;
 end;
 
 procedure TOutputConsoleFrame.UnsubscribeCompilerEvents;

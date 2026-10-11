@@ -28,12 +28,17 @@ uses
   System.SysUtils, System.Classes, System.Generics.Collections, System.SyncObjs,
   {$ENDIF}
   {$IFDEF FPC}
-  Controls, Forms, Graphics, Windows,
+  // Types comes after Windows on purpose: in FPC's windows unit `Rect` is a
+  // TYPE, so `Rect(0,0,W,H)` would parse as a cast and fail with
+  // "Syntax error, ")" expected but "," found". Types declares Rect as the
+  // function, and the last unit in the uses list wins. Same fix as
+  // CodeToolTip.pas already uses.
+  Controls, Forms, Graphics, Types,
   {$ELSE}
   Vcl.Controls, Vcl.Forms, Vcl.Graphics, Winapi.Windows,
   {$ENDIF}
   {$IFDEF FPC}
-  Lsp.Transport, Lsp.DocumentSync,
+  Lsp.Transport, Lsp.DocumentSync, Lsp.Client.UiQueue,
   {$ELSE}
   LSP.Transport, Lsp.DocumentSync,
   {$ENDIF}
@@ -92,6 +97,17 @@ type
     FHint: TLspHoverHintWindow;
     FHintVisible: Boolean;
     FLastRange: TLspHoverRange;
+{$IFDEF FPC}
+    // Response handling used to be posted to the UI thread as an anonymous
+    // method, which FPC 3.2.2 cannot express at all. The payload now travels
+    // in FUiQueue and PumpUiCall is the real method TThread.Queue takes.
+    // See LSP.Client.UiQueue for why it is a queue and not a single field.
+    FUiQueue: TLspUiQueue;
+    procedure PostUiCall(AKind: TLspUiCallKind; const AMessage: string;
+      AReqId: Integer);
+    procedure HideHintIfCurrent(AReqId: Integer);
+    procedure PumpUiCall;
+{$ENDIF}
     procedure HandleTransportMessage(const AMessage: string);
     procedure ProcessResponseOnUIThread(const AMessage: string; AReqId: Integer);
     procedure FillHintAndShow(const AResult: TLspHoverResult);
@@ -859,8 +875,48 @@ begin
   except
   end;
   FreeAndNil(FHint);
+{$IFDEF FPC}
+  FreeAndNil(FUiQueue);
+{$ENDIF}
   inherited;
 end;
+
+{$IFDEF FPC}
+procedure TLspHoverManager.PostUiCall(AKind: TLspUiCallKind;
+  const AMessage: string; AReqId: Integer);
+begin
+  if not Assigned(FUiQueue) then
+    FUiQueue := TLspUiQueue.Create;
+  FUiQueue.Post(AKind, AMessage, AReqId);
+  // nil is rejected by TThread.Queue, and in this project's -Mdelphiunicode
+  // mode the bound form is `O.P` with NO @ -- the objfpc spelling is an error.
+  TThread.Queue(TThread.CurrentThread, PumpUiCall);
+end;
+
+
+{$IFDEF FPC}
+// The no-result branch used to be a closure whose entire body was this
+// check, so it becomes a named method that PumpUiCall can reach.
+procedure TLspHoverManager.HideHintIfCurrent(AReqId: Integer);
+begin
+  if AReqId = FActiveRequestId then
+    HideHint;
+end;
+{$ENDIF}
+procedure TLspHoverManager.PumpUiCall;
+var
+  Call: TLspUiCall;
+begin
+  if not Assigned(FUiQueue) or not FUiQueue.Take(Call) then
+    Exit;
+  case Call.Kind of
+    lsucNoResult:
+      HideHintIfCurrent(Call.ReqId);
+    lsucProcessResponse:
+      ProcessResponseOnUIThread(Call.Message, Call.ReqId);
+  end;
+end;
+{$ENDIF}
 
 procedure TLspHoverManager.SetEditor(
   const AEditor: IEditorControlAdapter);
@@ -1086,19 +1142,27 @@ begin
   if not ParseHoverResponse(AMessage, R) or not R.HasContent then
   begin
     // 空结果 (空白处/未知符号): 隐藏旧气泡
+{$IFDEF FPC}
+    PostUiCall(lsucNoResult, '', ReqId);
+{$ELSE}
     TThread.Queue(nil,
       procedure
       begin
         if ReqId = FActiveRequestId then
           HideHint;
       end);
+{$ENDIF}
     Exit;
   end;
+{$IFDEF FPC}
+  PostUiCall(lsucProcessResponse, AMessage, ReqId);
+{$ELSE}
   TThread.Queue(nil,
     procedure
     begin
       ProcessResponseOnUIThread(AMessage, ReqId);
     end);
+{$ENDIF}
 end;
 
 procedure TLspHoverManager.ProcessResponseOnUIThread(const AMessage: string;

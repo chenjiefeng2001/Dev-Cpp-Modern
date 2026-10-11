@@ -43,8 +43,12 @@ type
     FTreeView: TTreeView;
     FOnNodeSelect: TProjectNodeSelectEvent;
     procedure TreeChange(Sender: TObject; Node: TTreeNode);
+    // A named method, not an anonymous one: TEventHandler is
+    // `procedure(const Event: TEvent) of object`, and FPC 3.2.2 has no
+    // anonymous-method syntax at all (`reference to` does not exist in this
+    // compiler), so the subscription needs a real method of this class.
+    procedure ProjectTreeChanged(const Event: TEvent);
   public
-    constructor CreateOwner(AOwner: TComponent); override;
     destructor Destroy; override;
 
     procedure LoadProjectStructure(const AProjectPath: string);
@@ -60,18 +64,17 @@ implementation
 
 { TProjectTreeFrame }
 
-constructor TProjectTreeFrame.CreateOwner(AOwner: TComponent);
-begin
-  inherited CreateOwner(AOwner);
-
-  FTreeView := TTreeView.Create(Self);
-  FTreeView.Parent := Self;
-  FTreeView.Align := alClient;
-  FTreeView.RowSelect := True;
-  FTreeView.OnChange := TreeChange;
-
-  SubscribeProjectEvents;
-end;
+// The former `constructor CreateOwner(AOwner: TComponent); override;` was
+// removed rather than remapped. Measured, not assumed:
+//   * no ancestor declares CreateOwner -- not the LCL's TFrame (forms.pp
+//     declares `constructor Create(TheOwner: TComponent)`), and not the
+//     vendored VCL either, so `override` never named anything;
+//   * `rg -n CreateOwner Source` finds no call site anywhere in the project,
+//     so nothing can reach it and deleting it cannot change behaviour.
+// The FTreeView creation and SubscribeProjectEvents below therefore were
+// already unreachable on every build. Anything that genuinely needs this
+// initialisation should do it from Create, where the frame's actual
+// construction entry point is.
 
 destructor TProjectTreeFrame.Destroy;
 begin
@@ -140,14 +143,15 @@ begin
   FTreeView.Items.Clear;
 end;
 
+procedure TProjectTreeFrame.ProjectTreeChanged(const Event: TEvent);
+begin
+  if Assigned(FOnNodeSelect) then
+    FOnNodeSelect(Self, FTreeView.Selected);
+end;
+
 procedure TProjectTreeFrame.SubscribeProjectEvents;
 begin
-  TEventManager.Instance.OnProjectChanged :=
-    procedure(const Event: TEvent)
-    begin
-      if Assigned(FOnNodeSelect) then
-        FOnNodeSelect(Self, FTreeView.Selected);
-    end;
+  TEventManager.Instance.OnProjectChanged := ProjectTreeChanged;
 end;
 
 procedure TProjectTreeFrame.UnsubscribeProjectEvents;

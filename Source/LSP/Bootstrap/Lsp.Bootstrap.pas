@@ -61,6 +61,29 @@ type
     property ClangdPath: string read FClangdPath;
   end;
 
+{$IFDEF FPC}
+  // Carries the startup body as a real thread. TThread.CreateAnonymousThread
+  // accepts only a TProcedure -- a routine with NO Self -- and a plain method
+  // is `procedure of object`, which this compiler rejects outright:
+  //     Got "...procedure of object...", expected "...procedure..."
+  // and FPC has no nested procedures to express the closure with. The long
+  // form is the way: the subclass supplies Execute. Same shape as
+  // TLspReadThread in Lsp.Transport.
+  //
+  // Declared AFTER TLspBootstrap, not before it: FPC has no forward
+  // references for types, so a thread class placed above the owner cannot
+  // name it. Here the owner already exists, so FOwner can be typed directly
+  // and no cast is needed at the use site.
+  TLspBootstrapThread = class(TThread)
+  private
+    FOwner: TLspBootstrap;
+  protected
+    procedure Execute; override;
+  public
+    constructor Create(AOwner: TLspBootstrap);
+  end;
+{$ENDIF}
+
 var
   LspBootstrap: TLspBootstrap;
 
@@ -68,6 +91,20 @@ var
 procedure LspBootstrapStartup(const AWorkDir: string);
 
 implementation
+
+{$IFDEF FPC}
+constructor TLspBootstrapThread.Create(AOwner: TLspBootstrap);
+begin
+  inherited Create(True);
+  FreeOnTerminate := True;
+  FOwner := AOwner;
+end;
+
+procedure TLspBootstrapThread.Execute;
+begin
+  FOwner.DoStartupThread;
+end;
+{$ENDIF}
 
 { TLspBootstrap }
 
@@ -98,11 +135,15 @@ begin
   finally
     FLock.Leave;
   end;
+{$IFDEF FPC}
+  TLspBootstrapThread.Create(Self).Start;
+{$ELSE}
   TThread.CreateAnonymousThread(
     procedure
     begin
       DoStartupThread;
     end).Start;
+{$ENDIF}
 end;
 
 // clangd 探测顺序:
@@ -210,11 +251,18 @@ begin
   end;
 
   FTransport := T; // 移交: 此后只读, FinishReady 在主线程继续
+{$IFDEF FPC}
+  // FinishReady takes no arguments and captures nothing, so the closure was
+  // doing nothing a bound method cannot. nil is rejected by TThread.Queue, and
+  // in -Mdelphiunicode the bound form is `O.P` with NO @.
+  TThread.Queue(TThread.CurrentThread, FinishReady);
+{$ELSE}
   TThread.Queue(nil,
     procedure
     begin
       FinishReady;
     end);
+{$ENDIF}
 end;
 
 procedure TLspBootstrap.FinishReady;
