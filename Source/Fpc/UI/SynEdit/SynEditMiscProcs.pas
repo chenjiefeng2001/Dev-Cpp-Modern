@@ -1,4 +1,4 @@
-{-------------------------------------------------------------------------------
+﻿{-------------------------------------------------------------------------------
 The contents of this file are subject to the Mozilla Public License
 Version 1.1 (the "License"); you may not use this file except in compliance
 with the License. You may obtain a copy of the License at
@@ -62,6 +62,16 @@ function MinMax(x, mi, ma: Integer): Integer;
 procedure SwapInt(var l, r: Integer);
 function MaxPoint(const P1, P2: TPoint): TPoint;
 function MinPoint(const P1, P2: TPoint): TPoint;
+
+// Orders two carets by line first, then column. Added because this port sits
+// ahead of Lazarus's own syneditmiscprocs.pp on the unit path, so anything
+// that recompiles from the Lazarus sources -- SynEditSearch does -- resolves
+// this name HERE. Without it:
+//     syneditsearch.pp(391,8) Error: Identifier not found "CompareCarets"
+// The body is Lazarus's own, transcribed unchanged: note it returns 1 when
+// FirstCaret sorts BEFORE SecondCaret, which is the reverse of the obvious
+// reading, so it must not be "corrected" on sight.
+function CompareCarets(const FirstCaret, SecondCaret: TPoint): Integer;
 
 function GetIntArray(Count: Cardinal; InitialValue: integer): PIntArray;
 
@@ -154,11 +164,24 @@ uses
   SysUtils,
   SynHighlighterMulti;
 
+function CompareCarets(const FirstCaret, SecondCaret: TPoint): Integer;
+begin
+  if (FirstCaret.Y < SecondCaret.Y) then
+    Result := 1
+  else if (FirstCaret.Y > SecondCaret.Y) then
+    Result := -1
+  else if (FirstCaret.X < SecondCaret.X) then
+    Result := 1
+  else if (FirstCaret.X > SecondCaret.X) then
+    Result := -1
+  else
+    Result := 0;
+end;
+
 // --- Max / Min / MulDiv (the bodies) -------------------------------------
 // Same three helpers, declared in the interface above. MulDiv delegates to
 // the RTL's; Max/Min are the LCL's integer semantics.
-function Max(x, y: integer): integer;
-begin
+function Max(x, y: integer): integer;begin
   if x > y then Result := x else Result := y;
 end;
 
