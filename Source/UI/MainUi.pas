@@ -487,7 +487,8 @@ procedure SetDisassemblyFlavor(const AFlavor: string);   // 'att' | 'intel'
 // ---------------------------------------------------------------------------
 
 procedure ApplyIdeFont(const AName: string; ASize: Integer);
-procedure CopyProjectViewTo(AListView: TListView);
+procedure CopyProjectViewTo(AListView: TListView); overload;
+procedure CopyProjectViewTo(ATreeView: TTreeView); overload;
 function RemoveProjectEditor(AIndex: Integer; ADoClose: Boolean): Boolean;
 function MainFormHandle: HWND;
 // ---------------------------------------------------------------------------
@@ -1539,6 +1540,25 @@ begin
     Exit;
   AListView.Images := MainForm.ProjectView.Images;
   AListView.Items.Assign(MainForm.ProjectView.Items);
+end;
+
+// The TTreeView form of the same call, and why it is a separate entry point
+// rather than a widened parameter: the VCL builds TTreeView on
+// TCustomListView, so Delphi passed a tree view to the TListView parameter
+// above without complaint. Lazarus does not -- TCustomTreeView is a
+// TCustomControl (lcl/comctrls.pp:3382) -- so the call was rejected:
+//
+//     Incompatible type for arg no. 1: Got "TTreeView", expected "TListView"
+//
+// ProjectOptionsFrm.lvFiles is a TTreeView in BOTH its .pas and its .dfm, so
+// this is the shape the project actually has rather than a conversion slip.
+// Widening to TCustomListView does not work either -- a tree view is not one.
+procedure CopyProjectViewTo(ATreeView: TTreeView);
+begin
+  if not Assigned(MainForm) or not Assigned(ATreeView) then
+    Exit;
+  ATreeView.Images := MainForm.ProjectView.Images;
+  ATreeView.Items.Assign(MainForm.ProjectView.Items);
 end;
 
 function RemoveProjectEditor(AIndex: Integer; ADoClose: Boolean): Boolean;

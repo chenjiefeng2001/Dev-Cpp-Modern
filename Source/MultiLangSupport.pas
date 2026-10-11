@@ -227,6 +227,43 @@ uses
 var
   fLangSingleton: TdevMultiLangSupport = nil;
 
+// AnsiToUtf8Ex -- the identity, and why that is the honest implementation here.
+//
+// THIS FUNCTION HAS NEVER EXISTED IN THIS REPOSITORY. Not in Source, not in
+// the vendored VCL tree, not in doc/code, and `git log -S "function
+// AnsiToUtf8Ex" --all` finds no commit that ever added it. MultiLangSupport
+// calls it at line 369 and six units put MultiLangSupport in their uses
+// clauses, so the Delphi tree in this repo could not have compiled either.
+//
+// That leaves the intent unrecoverable, so the mapping was chosen to change the
+// least: under -Mdelphiunicode `string` is UnicodeString and
+// `fStrings.Values[...]` is already a UnicodeString, so there are no bytes
+// left to convert and ACodePage has nothing left to apply. The call site keeps
+// its shape and its code-page argument; only the conversion is dropped.
+//
+// WHAT THIS DOES NOT FIX, and where the real issue sits
+// ------------------------------------------------------
+// One line above the caller, line 317:
+//
+//     fStrings.LoadFromFile(LangFile, TEncoding.ANSI);
+//
+// decodes every language file with the SYSTEM ANSI code page, while the text
+// is in the LANGUAGE's code page (fCurCodePage). So a Russian or Japanese
+// string is mis-decoded there, before this function is ever reached. An
+// identity here neither fixes nor worsens that -- it preserves whatever the
+// load produced, which is what the caller would have had to work with anyway.
+//
+// A real fix exists and is deliberately NOT taken here, because it is a
+// different change: read the file once to learn fLang (which is how
+// fCurCodePage is derived, line 325), then re-read it with
+// TEncoding.GetEncoding(fCurCodePage). That is two reads and a real behaviour
+// change, so it belongs in its own step with its own evidence, not hidden
+// inside a missing symbol's stub.
+function AnsiToUtf8Ex(const AValue: string; ACodePage: Integer): string;
+begin
+  Result := AValue;
+end;
+
 function GetEncoding(CPID: Integer): String;
 var
   I: Integer;
