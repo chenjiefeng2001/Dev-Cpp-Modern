@@ -25,7 +25,13 @@ uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, StdCtrls, Spin, ExtCtrls, ExtDlgs, Buttons,
   {$IFDEF FPC}
-  CheckLst, Grids, ValEdit, ComCtrls, Themes,
+  // Vcl.Themes, not Themes: the LCL ships a `Themes` unit that has
+  // StyleServices but NO TStyleManager, and this file calls
+  // TStyleManager.TrySetStyle at line 217. Naming the bare unit resolved to
+  // the LCL's and failed with
+  //     Identifier not found "TStyleManager"
+  // which reads as a missing type rather than a wrong unit.
+  CheckLst, Grids, ValEdit, ComCtrls, Vcl.Themes,
   {$ELSE}
   CheckLst, Grids, ValEdit, ComCtrls, vcl.Themes,
   {$ENDIF}

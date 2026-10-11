@@ -23,7 +23,11 @@ interface
 
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
-  StdCtrls, Buttons, ExtCtrls, Menus, FileCtrl, SynEdit, ToolWin, ComCtrls, Themes,
+  StdCtrls, Buttons, ExtCtrls, Menus, FileCtrl, SynEdit, ToolWin, ComCtrls,
+  // Vcl.Themes, not Themes: see EnviroFrm for the same fix and the reason.
+  // This file calls TStyleManager.TrySetStyle at line 224, and the LCL's
+  // `Themes` unit has StyleServices but no TStyleManager.
+  Vcl.Themes,
   Vcl.VirtualImage;
 
 type

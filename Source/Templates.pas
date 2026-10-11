@@ -25,6 +25,14 @@ uses
   Classes, Types, IniFiles, ProjectTypes;
 
 type
+  // FPC 3.2.2 has no `Point(X, Y)` function anywhere -- not in `Types`, not in
+  // the RTL -- because Delphi declares it in System.Types while FPC's types.pp
+  // declares only the `TPoint` record itself. The record constructor is
+  // available in every case and builds the same value, so the four call sites
+  // below read TPoint.Create(x, y). Recorded once here rather than at each site,
+  // where it read as:
+  //     Templates.pas(247,72) Error: Syntax error, ")" expected but "," found
+
   TTemplateUnit = record
     CName: String;
     CppName: String;
@@ -108,9 +116,17 @@ begin
    end
   else
    begin
-     MessageBox(MainUi.MainFormHandle,
-       PChar(Format(Lang[ID_ERR_TEMPFNF], [fFileName])),
-       PChar(Lang[ID_INFO]), MB_OK or MB_ICONINFORMATION);
+      // MessageBoxW, not MessageBox. In Delphi's Unicode VCL, `MessageBox`
+      // IS MessageBoxW, so this is the same call. Under FPC the name resolves
+      // to the ANSI entry point, and its PChar is PAnsiChar because the Windows
+      // unit is objfpc-compiled -- while PChar in THIS unit is PWideChar under
+      // -Mdelphiunicode, so the call failed with
+      //     Incompatible type for arg no. 3: Got "PWideChar", expected "PChar"
+      // Going through the ANSI entry point would also mangle the text, which is
+      // localised (Lang[ID_ERR_TEMPFNF]), so the Wide form is the faithful one.
+      MessageBoxW(MainUi.MainFormHandle,
+        PWideChar(Format(Lang[ID_ERR_TEMPFNF], [fFileName])),
+        PWideChar(Lang[ID_INFO]), MB_OK or MB_ICONINFORMATION);
      exit;
    end;
 
@@ -236,9 +252,9 @@ begin
    begin
      result.CText:= fTemplate.ReadString(cEditor, 'Text', '');
      result.CppText:= fTemplate.ReadString(cEditor, 'Text_Cpp', '');
-     result.CCaret:= point(fTemplate.ReadInteger(cEditor, 'CursorX', 1),
+     result.CCaret:= TPoint.Create(fTemplate.ReadInteger(cEditor, 'CursorX', 1),
                            fTemplate.ReadInteger(cEditor, 'CursorY', 1));
-     result.CppCaret:= point(fTemplate.ReadInteger(cEditor, 'CursorX_Cpp', 1),
+     result.CppCaret:= TPoint.Create(fTemplate.ReadInteger(cEditor, 'CursorX_Cpp', 1),
                              fTemplate.ReadInteger(cEditor, 'CursorY_Cpp', 1));
      result.IsCPP:= fTemplate.ReadBool(cTemplate, 'EnableC', FALSE);
      if not result.IsCPP then
@@ -251,8 +267,8 @@ begin
         result.CText:= fTemplate.ReadString('Unit0', 'C', '');
         result.CppText:= fTemplate.ReadString('Unit0', 'Cpp', '');
       end;
-     result.CCaret:= point(1,1);
-     result.CppCaret:= point(1,1);
+     result.CCaret:= TPoint.Create(1,1);
+     result.CppCaret:= TPoint.Create(1,1);
      result.IsCpp:= fTemplate.ReadBool(cProject, 'IsCpp', TRUE);
    end;
 end;
@@ -261,8 +277,9 @@ procedure TTemplate.SetOldData(value: TTemplateRec);
 begin
   if not assigned(fTemplate) then
    begin
-     MessageBox(MainUi.MainFormHandle,
-      PChar(Lang[ID_ERR_NOTEMPLATE]), PChar(Lang[ID_INFO]), MB_OK or MB_ICONWARNING);
+      // MessageBoxW for the reason given at the other call site above.
+      MessageBoxW(MainUi.MainFormHandle,
+       PWideChar(Lang[ID_ERR_NOTEMPLATE]), PWideChar(Lang[ID_INFO]), MB_OK or MB_ICONWARNING);
      exit;
    end;
 

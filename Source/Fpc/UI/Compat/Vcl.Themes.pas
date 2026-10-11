@@ -62,6 +62,23 @@ type
   public
     class function IsCustomStyleActive: Boolean; static;
     class function IsSystemStyle: Boolean; static;
+    // Applies a VCL style by name, e.g. 'Windows10 SlateGray'. Always returns
+    // False and applies nothing, because applying it is not possible here: a
+    // .vlf style is a VCL resource read through the VCL style service, and the
+    // LCL has no style service at all.
+    //
+    // This is the SAME missing service that Source/Fpc/UI/Compat/
+    // VclPropertySkips.pas:138-141 already records for `StyleElements`, so it
+    // follows an existing decision rather than making a new one. Both call
+    // sites (EnviroFrm:217, LangFrm:224) pass a name from cDelphiStyle and
+    // ignore the result, so nothing depends on the return value.
+    //
+    // WHAT THIS COSTS, stated plainly: the chosen theme no longer changes the
+    // window chrome and control look under FPC -- the app renders with the LCL
+    // widgetset's own appearance. The same setting still drives the icon
+    // colours (devData.Style -> cSVGColor -> FixedColor) and the image theme
+    // collection, so those parts of the setting keep working.
+    class function TrySetStyle(const AName: string): Boolean; static;
   end;
 
 type
@@ -104,6 +121,11 @@ end;
 class function TStyleManager.IsSystemStyle: Boolean;
 begin
   Result := True;    // the corollary of the above, stated rather than assumed
+end;
+
+class function TStyleManager.TrySetStyle(const AName: string): Boolean;
+begin
+  Result := False;
 end;
 
 function TStyleServices.GetSystemColor(Color: TColor): TColor;

@@ -135,8 +135,24 @@ type
     FThemeGen: Integer;
     FRasterFailures: Integer;
     FMissingData: Boolean;
+    // The vendored control's FixedColor defaults to TColors.SysDefault, meaning
+    // "take the colour from the document". That is not a colour value, so it is
+    // modelled here as a separate flag rather than as a magic TColor: a magic
+    // sentinel would be one more thing that can collide with a real colour, and
+    // the flag cannot.
+    FFixedColor: TColor;
+    FHasFixedColor: Boolean;
+    // Stored, published, and deliberately WITHOUT a rendering effect here --
+    // see the property's comment. Default True, matching the vendored control.
+    FDisabledGrayScale: Boolean;
     procedure RenderAll;
     procedure SetListName(const AValue: string);
+    procedure SetFixedColor(const AValue: TColor);
+    procedure SetDisabledGrayScale(const AValue: Boolean);
+    // Rasterises one source and adds it, counting a failure rather than
+    // letting it cost the list its other icons. Shared by RenderAll and
+    // LoadFromFiles so both go through the same recolour + rasterise path.
+    function AddSvgSource(const ASvg: string; AEdge: Integer): Boolean;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -146,6 +162,25 @@ type
     // Re-render every icon. The generation counter exists so an in-flight
     // paint is never handed an image that was freed under it.
     procedure ThemeChanged;
+
+    // Append one item per file, reading each as an SVG document.
+    //
+    // The name of an added item is the file's base name with the extension
+    // removed -- ChangeFileExt(ExtractFileName(...), ''), which is what
+    // TSVGIconItems.LoadFromFiles does and what NewProjectFrm strips by hand
+    // with Copy(Icon, 1, Length(Icon) - 4). The two have to agree exactly or
+    // GetIndexByName returns -1 for a file that loaded fine.
+    //
+    // DIVERGES FROM THE VENDORED CONTROL in one deliberate way: it returns the
+    // number added and never raises. The vendored one raises on an unreadable
+    // file, which aborts the caller's loop. Here the loss is counted into
+    // RasterFailures, the channel this control already uses to make an
+    // incomplete list visible instead of quiet.
+    function LoadFromFiles(const AFileNames: TStrings;
+      const AAppend: Boolean = True): Integer;
+    // Index of the first item named AName, or -1. Matches the vendored
+    // IndexOf/GetIndexByName, which also return -1 rather than raising.
+    function GetIndexByName(const AName: string): Integer;
 
     // Icons the renderer could not draw. Non-zero means the list is INCOMPLETE,
     // and the gap is deliberate rather than silent.
@@ -157,6 +192,10 @@ type
     // exact failure this work item exists to remove -- so it is reported rather
     // than being indistinguishable from a list that legitimately has no icons.
     property MissingData: Boolean read FMissingData;
+
+    // True when FixedColor has been assigned, i.e. when rendering is forced to
+    // one colour instead of taking the document's own.
+    property HasFixedColor: Boolean read FHasFixedColor;
   published
     // MUST be published, not public.
     //
@@ -167,6 +206,59 @@ type
     // which is luck, not design: nothing about the LFM looks wrong and the
     // converter still reports success.
     property ListName: string read FListName write SetListName;
+    // Published for the same reason as ListName: a fragment that carries
+    // `FixedColor = ...` must stream, and a public property would not.
+    property FixedColor: TColor read FFixedColor write SetFixedColor;
+    // Kept and streamed, but it changes NOTHING here, and that is a measured
+    // statement rather than a stub.
+    //
+    // The vendored control renders two variants per icon and this flag chooses
+    // between them, which is why its setter calls Change. The LCL has no such
+    // pair: TCustomImageList.Draw(.., AEnabled) maps AEnabled through
+    // `EffectMap: array[Boolean] of TGraphicsDrawEffect = (gdeDisabled,
+    // gdeNormal)` (lcl/include/imglist.inc:27) and the widgetset greys the
+    // pixels at draw time. One bitmap per index is therefore all the LCL can
+    // hold, and the disabled look is already handled above this class.
+    //
+    // The one use site sets it to False, which is not even the vendored default
+    // (True), so the assignment changes nothing in either tree.
+    property DisabledGrayScale: Boolean read FDisabledGrayScale
+      write SetDisabledGrayScale default True;
+  end;
+
+// The carrier the generated fragment declares as its root -- tools/f3_dfm_to_lfm.py
+// writes `object SvgImageLists: TSvgImageLists` into every `*.svg-lists.lfm`.
+//
+// It owns the `TLclSvgImageList` children and finds them by name. It is a plain
+// TComponent: a component reader creates and owns nested `object` blocks by
+// itself, so there is no streaming code here, and no visual behaviour either.
+//
+// This class did not exist while the fragments were being generated, which is
+// why they are separate files and why SvgLfmProbe had to declare its own stub
+// of this name. The stub proved the fragment's SHAPE streams; it could not
+// prove this carrier works, because it was not this carrier.
+type
+  TSvgImageLists = class(TComponent)
+  public
+    // The list published under AName, or nil. A miss returns nil rather than
+    // raising: NewProjectFrm falls back to image index 0 when its list is
+    // absent, and a hard failure there would take the whole template browser
+    // down over one missing icon set.
+    function Find(const AName: string): TLclSvgImageList;
+    // Number of TLclSvgImageList children, regardless of whether their data
+    // resolved. Distinct from a list's own Count, which is 0 when MissingData.
+    function ListCount: Integer;
+    // Create a child for every list SvgData carries, each named after the data.
+    //
+    // Driven by the data unit rather than by a hand-written name list, because
+    // a hard-coded list of names is a second copy of something the extractor
+    // already owns: rename a list upstream and this would silently not create
+    // it, leaving a form that compiles, streams, and shows nothing.
+    //
+    // Idempotent: an existing child with that ListName is left alone, so this
+    // is safe to call from a streaming callback after a fragment has already
+    // created the children.
+    procedure EnsureAllFromData;
   end;
 
 // Build the list whose data record is called AName (e.g.
@@ -568,11 +660,151 @@ begin
   end;
 end;
 
+procedure TLclSvgImageList.SetFixedColor(const AValue: TColor);
+begin
+  if FHasFixedColor and (FFixedColor = AValue) then
+    // Re-rendering costs a full parse of every icon in the list, and a theme
+    // switch assigns the same colour repeatedly.
+    Exit;
+  FFixedColor := AValue;
+  FHasFixedColor := True;
+  RenderAll;
+end;
+
+procedure TLclSvgImageList.SetDisabledGrayScale(const AValue: Boolean);
+begin
+  // No Change, and deliberately so: nothing in this class renders from it (see
+  // the property comment). Re-rendering here would parse every icon to produce
+  // pixels that would be identical.
+  FDisabledGrayScale := AValue;
+end;
+
+function TLclSvgImageList.LoadFromFiles(const AFileNames: TStrings;
+  const AAppend: Boolean): Integer;
+var
+  I, N, Edge, Len: Integer;
+  Text, IconName: string;
+  Bytes: TBytes;
+  Stream: TFileStream;
+begin
+  Result := 0;
+  if AFileNames = nil then
+    Exit;
+  Edge := Width;
+  if Edge <= 0 then
+    Edge := DEFAULT_ICON_EDGE;
+  BeginUpdate;
+  try
+    if not AAppend then
+    begin
+      Clear;
+      SetLength(FSvg, 0);
+      SetLength(FNames, 0);
+      FRasterFailures := 0;
+    end;
+    for I := 0 to AFileNames.Count - 1 do
+    begin
+      Text := '';
+      // Read as bytes and DECODE. Under -Mdelphiunicode a string is
+      // UnicodeString, so ReadBuffer straight into Text[1] would leave the
+      // file's UTF-8 bytes sitting in a string as if they were already
+      // decoded -- and Rasterise encodes to UTF-8 again, so the text would
+      // reach the parser double-encoded.
+      Stream := TFileStream.Create(AFileNames[I], fmOpenRead or fmShareDenyWrite);
+      try
+        Len := Stream.Size;
+        if Len > 0 then
+        begin
+          SetLength(Bytes, Len);
+          Stream.ReadBuffer(Bytes[0], Len);
+          Text := TEncoding.UTF8.GetString(Bytes);
+        end;
+      finally
+        Stream.Free;
+      end;
+
+      IconName := ChangeFileExt(ExtractFileName(AFileNames[I]), '');
+      N := Length(FSvg);
+      SetLength(FSvg, N + 1);
+      SetLength(FNames, N + 1);
+      FSvg[N] := Text;
+      FNames[N] := IconName;
+      if AddSvgSource(Text, Edge) then
+        Inc(Result);
+    end;
+  finally
+    EndUpdate;
+  end;
+  Inc(FThemeGen);
+end;
+
+procedure TSvgImageLists.EnsureAllFromData;
+var
+  I: Integer;
+  L: TLclSvgImageList;
+begin
+  for I := Low(SVG_IMAGE_LISTS) to High(SVG_IMAGE_LISTS) do
+  begin
+    if Find(SVG_IMAGE_LISTS[I].Name) <> nil then
+      Continue;
+    L := TLclSvgImageList.Create(Self);
+    // Assigning ListName is what pulls the data: SetListName looks the name up
+    // in SvgData and calls LoadFrom, which sets the pixel edge from the record
+    // and renders. Nothing else has to know the list exists.
+    L.ListName := SVG_IMAGE_LISTS[I].Name;
+    // A name SvgData carries always resolves, so MissingData here would mean
+    // the two copies of the table disagree -- which is worth saying out loud
+    // rather than leaving as a blank toolbar.
+    if L.MissingData then
+      raise Exception.CreateFmt(
+        'SvgData lists %s but FindSvgListIndex does not resolve it',
+        [SVG_IMAGE_LISTS[I].Name]);
+  end;
+end;
+
+function TLclSvgImageList.GetIndexByName(const AName: string): Integer;
+var
+  I: Integer;
+begin
+  // First match wins, which is what the vendored IndexOf does: it returns the
+  // item's index, and GetIconByName hands back the first item with that name.
+  // 20 of the 117 extracted names repeat across the set, so "first" is a real
+  // decision rather than a formality.
+  for I := 0 to High(FNames) do
+    if FNames[I] = AName then
+      Exit(I);
+  Result := -1;
+end;
+
+function TSvgImageLists.Find(const AName: string): TLclSvgImageList;
+var
+  I: Integer;
+begin
+  Result := nil;
+  // Components is protected on TComponent, which is why this lookup lives on a
+  // TComponent subclass rather than in a free function over a form.
+  for I := 0 to ComponentCount - 1 do
+    if Components[I] is TLclSvgImageList then
+      if TLclSvgImageList(Components[I]).ListName = AName then
+        Exit(TLclSvgImageList(Components[I]));
+end;
+
+function TSvgImageLists.ListCount: Integer;
+var
+  I: Integer;
+begin
+  Result := 0;
+  for I := 0 to ComponentCount - 1 do
+    if Components[I] is TLclSvgImageList then
+      Inc(Result);
+end;
+
 constructor TLclSvgImageList.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FRasterFailures := 0;
   FMissingData := False;
+  FDisabledGrayScale := True;
 end;
 
 destructor TLclSvgImageList.Destroy;
@@ -580,10 +812,107 @@ begin
   inherited Destroy;
 end;
 
+// Rewrites every 6-digit hex colour literal in one SVG source to AHex.
+//
+// WHY HEX-ONLY IS TOTAL HERE, MEASURED NOT ASSUMED: across all 302 colour
+// literals in the extracted payloads there are exactly 6 distinct values, all
+// of the form #rrggbb. There is no rgb(), no rgba() and no currentColor --
+// the counts are 0 for all three -- so a hex-only substitution covers the
+// whole corpus rather than most of it. A named colour or a functional
+// notation would be missed; if the extractor ever admits one, this is the
+// place that has to grow, and RasterProbe's failure list is what would show
+// it.
+//
+// The six hex digits that follow a '#' must not be followed by a further hex
+// digit, so a 3- or 8-digit form is left alone instead of being half-rewritten.
+function IsHexDigit(const C: Char): Boolean;
+begin
+  Result := (C >= '0') and (C <= '9') or (C >= 'a') and (C <= 'f') or
+            (C >= 'A') and (C <= 'F');
+end;
+
+function IsSixHexDigits(const S: string; At: Integer): Boolean;
+begin
+  Result := (At + 6 <= Length(S)) and
+            IsHexDigit(S[At]) and IsHexDigit(S[At + 1]) and
+            IsHexDigit(S[At + 2]) and IsHexDigit(S[At + 3]) and
+            IsHexDigit(S[At + 4]) and IsHexDigit(S[At + 5]) and
+            not ((At + 7 <= Length(S)) and IsHexDigit(S[At + 7]));
+end;
+
+function ReplaceHexColours(const ASvg, AHex: string): string;
+var
+  I, Len, N: Integer;
+  Dst: string;
+begin
+  Len := Length(ASvg);
+  // ASvg and AHex are the same length by construction (7 chars each), so the
+  // result is Len long and no reallocation can happen mid-loop.
+  SetLength(Dst, Len);
+  N := 0;
+  I := 1;
+  while I <= Len do
+  begin
+    if (ASvg[I] = '#') and IsSixHexDigits(ASvg, I + 1) then
+    begin
+      Dst[N + 1] := AHex[1];
+      Dst[N + 2] := AHex[2];
+      Dst[N + 3] := AHex[3];
+      Dst[N + 4] := AHex[4];
+      Dst[N + 5] := AHex[5];
+      Dst[N + 6] := AHex[6];
+      Inc(N, 6);
+      Inc(I, 7);
+    end
+    else
+    begin
+      Inc(N);
+      Dst[N] := ASvg[I];
+      Inc(I);
+    end;
+  end;
+  SetLength(Dst, N);
+  Result := Dst;
+end;
+
+function TLclSvgImageList.AddSvgSource(const ASvg: string;
+  AEdge: Integer): Boolean;
+var
+  Bmp: TBitmap;
+  Source: string;
+  Hex: string;
+begin
+  Source := ASvg;
+  if FHasFixedColor then
+  begin
+    // TColor is 0x00BBGGRR -- Windows COLORREF, low byte RED. Measured, not
+    // assumed: RGBToColor(18,172,138) yields low=18 mid=172 high=138. Read it
+    // the other way round and every themed icon comes out with its red and
+    // blue channels exchanged, which looks like a plausible colour rather than
+    // a bug, so it would survive review.
+    Hex := '#' + IntToHex(FFixedColor and $FF, 2)
+               + IntToHex((FFixedColor shr 8) and $FF, 2)
+               + IntToHex((FFixedColor shr 16) and $FF, 2);
+    Source := ReplaceHexColours(ASvg, Hex);
+  end;
+  Bmp := Rasterise(Source, AEdge);
+  if Bmp = nil then
+  begin
+    Inc(FRasterFailures);
+    Exit(False);
+  end;
+  try
+    // Add COPIES the pixels, so the bitmap is disposable immediately.
+    Add(Bmp, nil);
+  finally
+    Bmp.Free;
+  end;
+  Result := True;
+end;
+
 procedure TLclSvgImageList.RenderAll;
 var
   I, Edge: Integer;
-  Bmp: TBitmap;
 begin
   // BeginUpdate/EndUpdate because TCustomImageList notifies the widgetset on
   // every Add; without them an 85-icon list repaints 85 times.
@@ -593,20 +922,7 @@ begin
     FRasterFailures := 0;
     Edge := Width;
     for I := 0 to High(FSvg) do
-    begin
-      Bmp := Rasterise(FSvg[I], Edge);
-      if Bmp = nil then
-      begin
-        Inc(FRasterFailures);
-        Continue;
-      end;
-      try
-        // Add COPIES the pixels, so the bitmap is disposable immediately.
-        Add(Bmp, nil);
-      finally
-        Bmp.Free;
-      end;
-    end;
+      AddSvgSource(FSvg[I], Edge);
   finally
     EndUpdate;
   end;

@@ -291,9 +291,6 @@ function ProjectExecutable: string;                          // Project.Executab
 function ActiveEditorFileName: string;                       // GetEditor.FileName
 // -- window identification (1) ------------------------------------------
 // A string, not a TClass: handing the caller TMainForm.ClassRef would
-// re-export the god class through the very door this unit exists to close.
-function MainWindowClassName: string;
-
 // ---------------------------------------------------------------------------
 // Project identity slice (TFilePropertiesForm) -- F1, sixth batch.
 //
@@ -599,8 +596,6 @@ procedure AppendDebugOutput(const ALine: string);
 function GdbCommandIsUserOwned: Boolean;              // edGdbCommand.Text <> ''
 procedure SetGdbCommandUserOwned(AValue: Boolean);
 procedure EchoGdbCommand(const ACommand, AParams: string);
-procedure RestoreLeftPageIndex(AIndex: Integer);
-procedure RefreshWatchVars;
 
 // ---------------------------------------------------------------
 // Auto-save timer slice (TMainForm.AutoSaveTimer) -- F1, step 2.
@@ -678,9 +673,14 @@ implementation
 // VCL widget units used by the project/output slices are needed here only.
 uses
   {$IFDEF FPC}
-  System.Actions, StdCtrls, Editor, EditorList, devFileMonitor,
+  // Neither branch names an actions unit, and neither needs one: this unit
+  // references no TAction, TActionList or TStandardAction. It named
+  // System.Actions on BOTH branches, which FPC rejects outright --
+  // "Can't find unit System.Actions" -- and which reads as a missing library
+  // rather than as a unit nothing uses.
+  StdCtrls, Editor, EditorList, devFileMonitor,
   {$ELSE}
-  System.Actions, Vcl.StdCtrls, Editor, EditorList, devFileMonitor,
+  Vcl.StdCtrls, Editor, EditorList, devFileMonitor,
   {$ENDIF}
   {$IFDEF FPC}
   Debugger, DebugReader, Project, FileCtrl, ClassBrowser, CppParser,

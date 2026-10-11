@@ -310,11 +310,26 @@ begin
     begin
       for X := 0 to ImgLists[Y].Count-1 do
       begin
+        // Delphi's VCL TImageList.GetBitmap returns a Boolean; the LCL's is a
+        // PROCEDURE, and for an out-of-range index it returns without touching
+        // the bitmap (lcl/include/imglist.inc:480). Testing the bound here is
+        // what preserves the original meaning: SingleBmp is allocated ONCE
+        // above and reused every iteration, so a skipped fill would leave the
+        // PREVIOUS icon in it and draw that one a second time.
+        {$IFDEF FPC}
+        if (X >= 0) and (X < ImgLists[Y].Count) then
+        begin
+          ImgLists[Y].GetBitmap(X, SingleBmp);
+          //SingleBmp.TransparentColor := SingleBmp.Canvas.Pixels[0,cTileH-1];
+          Bmp.Canvas.Draw(X*cTileW, Y*cTileW, SingleBmp);
+        end;
+        {$ELSE}
         if ImgLists[Y].GetBitmap(X, SingleBmp) then
         begin
           //SingleBmp.TransparentColor := SingleBmp.Canvas.Pixels[0,cTileH-1];
           Bmp.Canvas.Draw(X*cTileW, Y*cTileW, SingleBmp);
         end;
+        {$ENDIF}
       end; 
     end;
 

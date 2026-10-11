@@ -66,11 +66,12 @@ uses
   LclSvgImageList, SvgData;
 
 type
-  // The carrier the generated fragment declares as its root. It has to exist
-  // under exactly this name -- see emit_svg_fragment() in
-  // tools/f3_dfm_to_lfm.py, which is what writes `object SvgImageLists:
-  // TSvgImageLists` into every fragment.
-  TSvgImageLists = class(TComponent);
+  // The carrier the generated fragment declares as its root used to be declared
+  // HERE as `TSvgImageLists = class(TComponent);` -- a stub, because no such
+  // class existed. That made this probe green on a fake: it proved the
+  // fragment's shape streams, not that the real carrier works. The real
+  // TSvgImageLists now lives in LclSvgImageList, so the stub is gone and this
+  // probe tests the class the forms actually instantiate.
 
   // The class RESOLVER. `ReadComponentFromBinaryStream` calls
   // OnFindComponentClass unconditionally, with no nil guard

@@ -30,7 +30,17 @@ type
     tabs: TTabControl;
     vle: TValueListEditor;
     procedure tabsChange(Sender: TObject);
-    procedure vleSetEditText(Sender: TObject; ACol, ARow: Integer; const Value: string);
+    // TValueListEditor is a lazutils PropertyGrid, and that unit is objfpc-
+    // compiled, so OnSetEditText is
+    //     procedure(Sender: TObject; ACol, ARow: Integer; const Value: AnsiString)
+    // while the Delphi VGrid is the one that carries a WideString/string. The
+    // handler therefore takes AnsiString and decodes once, because everything
+    // it compares against -- 'Yes', 'No', and option^.Choices.Names -- is a
+    // real `string` (UnicodeString here), and comparing an ANSI value against
+    // those directly would truncate any non-ASCII choice name.
+    // Lazarus treats its AnsiStrings as UTF-8, hence UTF8Decode.
+    procedure vleSetEditText(Sender: TObject; ACol, ARow: Integer;
+      const Value: AnsiString);
   public
     fCurrentIndex: integer;
     procedure FillOptions;
@@ -106,12 +116,14 @@ begin
   vle.Strings.EndUpdate;
 end;
 
-procedure TCompOptionsFrame.vleSetEditText(Sender: TObject; ACol, ARow: Integer; const Value: string);
+procedure TCompOptionsFrame.vleSetEditText(Sender: TObject; ACol, ARow: Integer; const Value: AnsiString);
 var
   option: PCompilerOption;
   I: integer;
   CompilerSet: TdevCompilerSet;
+  UValue: string;
 begin
+  UValue := UTF8Decode(Value);
   if (fCurrentIndex >= devCompilerSets.Count) or (fCurrentIndex < 0) then
     Exit;
 
@@ -119,13 +131,13 @@ begin
 
   option := PCompilerOption(CompilerSet.Options[Integer(vle.Strings.Objects[ARow])]);
 
-  if SameStr(Value, 'Yes') then
+  if SameStr(UValue, 'Yes') then
     option^.Value := 1
-  else if SameStr(Value, 'No') then
+  else if SameStr(UValue, 'No') then
     option^.Value := 0
   else if Assigned(option^.Choices) then begin
     for i := 0 to option^.Choices.Count - 1 do
-      if SameStr(Value, option^.Choices.Names[i]) then begin
+      if SameStr(UValue, option^.Choices.Names[i]) then begin
         option^.Value := i;
         break;
       end;

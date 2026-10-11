@@ -70,6 +70,15 @@ FU = [
     # which reads as a missing port and is a missing search path.
     # Ordered after the win32 ppu dir so the compiled units still win.
     r"C:\lazarus\components\synedit",
+    # FPVectorial, the LCL's SVG/vector parser. TLclSvgImageList uses it
+    # (SvgVectorialReader, FPVectorial2Canvas) and nothing else in the closure
+    # does, so it is missing from this list until the icon lists were rewired
+    # off SVGIconImageList. Without it DataFrm fails with
+    #     "Can't find unit FPVectorial used by LclSvgImageList"
+    # which reads as a broken port rather than a missing search path -- the
+    # same failure mode the synedit SOURCE dir above had.
+    r"C:\lazarus\components\fpvectorial\lib\x86_64-win64",
+    r"C:\lazarus\components\fpvectorial\lib",
     # The Source ROOT itself must be on the path, not just its subdirectories:
     # a rglob("*/") yields children only, and with the root missing every
     # unit declared directly under Source/ (main.pas, Editor.pas, all the

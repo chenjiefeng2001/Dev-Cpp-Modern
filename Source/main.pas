@@ -32,7 +32,7 @@ uses
   ProjectTreeFrame, WatchCallStackFrame,
   StrUtils, SynEditTypes, devFileMonitor, devMonitorTypes, EditorList,
   devShortcuts, debugreader, ExceptionFrm, CommCtrl, devcfg, SynEditTextBuffer,
-  CppPreprocessor, CBUtils, StatementList, AStyleFormatterOptionsFrm, ClangFormatterOptionsFrm, System.Actions,
+  CppPreprocessor, CBUtils, StatementList, AStyleFormatterOptionsFrm, ClangFormatterOptionsFrm,
   {$IFDEF FPC}
   Themes, SVGColor, Vcl.Imaging.pngimage, Vcl.WinXCtrls, Vcl.WinXPanels, ExtDlgs,
   {$ELSE}

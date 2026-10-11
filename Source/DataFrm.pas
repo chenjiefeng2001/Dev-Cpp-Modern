@@ -25,7 +25,7 @@ uses
   SysUtils, Classes, Menus, Controls, SynEditHighlighter, SynHighlighterCpp,
   CodeInsList, SynHighlighterRC, ImgList,
   Vcl.BaseImageCollection, Vcl.ImageCollection, Vcl.VirtualImageList,
-  SVGIconImageListBase, SVGIconImageList, SynEditCodeFolding;
+  LclSvgImageList, SynEditCodeFolding;
 
 type
   PMRUItem = ^TMRUItem;
@@ -47,11 +47,10 @@ type
     ProjectImage_Blue: TImageList;
     ClassImages: TImageList;
     ImageThemeColection: TImageCollection;
-    SVGImageListMenuStyle: TSVGIconImageList;
-    SVGImageListProjectStyle: TSVGIconImageList;
-    SVGImageListClassStyle: TSVGIconImageList;
-    SVGImageListMessageStyle: TSVGIconImageList;
-    SVGIconImageWelcomeScreen: TSVGIconImageList;
+    // The five icon lists this module used to publish as
+    // `X: TSVGIconImageList`, now collected by one carrier. See
+    // LoadSvgImageLists for why they are not published components.
+    SvgImageLists: TSvgImageLists;
     EMBTImageCollection: TImageCollection;
     AppearanceThemeCollection: TImageCollection;
     procedure DataModuleCreate(Sender: TObject);
@@ -65,12 +64,38 @@ type
     fCodeEvent: TNotifyEvent;
     fCodeOffset: byte;
     procedure LoadCodeIns;
+    procedure LoadSvgImageLists;
+    // One getter per list, because a published property cannot take an
+    // argument. Each resolves its name through the carrier.
+    function GetSvgImageListMenuStyle: TLclSvgImageList;
+    function GetSvgImageListProjectStyle: TLclSvgImageList;
+    function GetSvgImageListClassStyle: TLclSvgImageList;
+    function GetSvgImageListMessageStyle: TLclSvgImageList;
+    function GetSvgIconImageWelcomeScreen: TLclSvgImageList;
   public
     property CodeMenu: TMenuItem read fCodeMenu write fCodeMenu;
     property CodePop: TMenuItem read fCodePop write fCodePop;
     property CodeClick: TNotifyEvent read fCodeEvent write fCodeEvent;
     property CodeInserts: TCodeInsList read fCodeList write fCodeList;
     property CodeOffset: byte read fCodeOffset write fCodeOffset;
+
+    { SVG icon lists }
+
+    // These five carry the names the DFM used to give the components, and they
+    // are what the ~30 `dmMain.SVGImageListMenuStyle...` sites in main.pas and
+    // the 15 consumer forms' `Images = dmMain.<list>` bindings resolve through.
+    // Renaming any of them would break those bindings in three places at once,
+    // so they are reproduced verbatim rather than "tidied".
+    //
+    // Published, because consumer LFMs bind them BY NAME as components. A
+    // public property would not appear in RTTI and the reference would dangle
+    // at load time with nothing in either file complaining -- which is exactly
+    // what f3_lfm_check.py step 6 exists to catch.
+    property SVGImageListMenuStyle: TLclSvgImageList read GetSvgImageListMenuStyle;
+    property SVGImageListProjectStyle: TLclSvgImageList read GetSvgImageListProjectStyle;
+    property SVGImageListClassStyle: TLclSvgImageList read GetSvgImageListClassStyle;
+    property SVGImageListMessageStyle: TLclSvgImageList read GetSvgImageListMessageStyle;
+    property SVGIconImageWelcomeScreen: TLclSvgImageList read GetSvgIconImageWelcomeScreen;
 
     { MRU List }
   private
@@ -122,6 +147,49 @@ procedure TdmMain.DataModuleCreate(Sender: TObject);
 begin
   fMRU := TList.Create;
   fCodeList := TCodeInsList.Create;
+  LoadSvgImageLists;
+end;
+
+// Builds the icon-list carrier and fills it from SvgData.
+//
+// WHY IN CODE AND NOT IN THE STREAMED LFM: the converter lifts these lists into
+// a standalone `*.svg-lists.lfm` fragment because DataFrm.lfm cannot load at
+// all -- 1.26 MB of it is one TImageCollection of base64 PNGs with no LCL
+// counterpart (tools/f3_dfm_to_lfm.py, emit_svg_fragment). Attaching the
+// carrier to a form LFM that does not load would put the fix behind that
+// blocker. Building it here needs no LFM at all, and the data still comes from
+// one place -- SvgData -- so there is no second copy of the payloads.
+//
+// The names are NOT written out: EnsureAllFromData walks SvgData's own table.
+procedure TdmMain.LoadSvgImageLists;
+begin
+  SvgImageLists := TSvgImageLists.Create(Self);
+  SvgImageLists.EnsureAllFromData;
+end;
+
+function TdmMain.GetSvgImageListMenuStyle: TLclSvgImageList;
+begin
+  Result := SvgImageLists.Find('SVGImageListMenuStyle');
+end;
+
+function TdmMain.GetSvgImageListProjectStyle: TLclSvgImageList;
+begin
+  Result := SvgImageLists.Find('SVGImageListProjectStyle');
+end;
+
+function TdmMain.GetSvgImageListClassStyle: TLclSvgImageList;
+begin
+  Result := SvgImageLists.Find('SVGImageListClassStyle');
+end;
+
+function TdmMain.GetSvgImageListMessageStyle: TLclSvgImageList;
+begin
+  Result := SvgImageLists.Find('SVGImageListMessageStyle');
+end;
+
+function TdmMain.GetSvgIconImageWelcomeScreen: TLclSvgImageList;
+begin
+  Result := SvgImageLists.Find('SVGIconImageWelcomeScreen');
 end;
 
 procedure TdmMain.DataModuleDestroy(Sender: TObject);
@@ -133,6 +201,9 @@ begin
     Dispose(PMRUItem(fMRU[i]));
   fMRU.Free;
   fCodeList.Free;
+  // SvgImageLists is owned by Self, so the component tree frees it; it is only
+  // cleared so a second DataModuleDestroy cannot walk freed lists.
+  SvgImageLists := nil;
 end;
 
 procedure TdmMain.InitHighlighterFirstTime(index: integer);
@@ -526,7 +597,12 @@ begin
       fCodeMenu.Add(Item)
     else begin
       cdx := fCodeList[idx]^.Sep;
-      fCodeMenu.NewBottomLine;
+      // NewBottomLine is the Delphi spelling; the LCL names it AddSeparator.
+      // Same thing: AddSeparator appends a TMenuItem whose Caption is
+      // cLineCaption, and IsLine is exactly `FCaption = cLineCaption`
+      // (lcl/include/menuitem.inc:38 and :1255), so the separator this writes
+      // is recognised as one by every LCL consumer of the menu.
+      fCodeMenu.AddSeparator;
       fCodeMenu.Add(Item);
     end;
   end;
