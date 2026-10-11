@@ -543,10 +543,10 @@ begin
     fOptions.PrivateResource := ExtractRelativePath(Directory, Res);
   end else begin
     if FileExists(Res) then
-      DeleteFile(PChar(Res));
+      SysUtils.DeleteFile(Res);
     Res := ChangeFileExt(Res, RES_EXT);
     if FileExists(Res) then
-      DeleteFile(PChar(Res));
+      SysUtils.DeleteFile(Res);
     fOptions.PrivateResource := '';
   end;
   if FileExists(Res) then
@@ -581,7 +581,7 @@ begin
     ResFile.SaveToFile(Executable + '.Manifest');
     FileSetDate(Executable + '.Manifest', DateTimeToFileDate(Now)); // fix the "Clock skew detected" warning ;)
   end else if FileExists(Executable + '.Manifest') then
-    DeleteFile(PChar(Executable + '.Manifest'));
+    SysUtils.DeleteFile(Executable + '.Manifest');
 
   // create private header file
   Res := ChangeFileExt(Res, H_EXT);

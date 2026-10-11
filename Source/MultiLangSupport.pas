@@ -33,6 +33,50 @@ type
     CPLang: String;
   end;
 
+{ The list of shipped translations and the Windows locale id each one stands
+  for. Exists because ProjectOptionsFrm builds its language combo from it:
+
+      for I := 0 to Languages.Count - 1 do
+        cmbLangID.Items.Add(Languages.Name[i]);
+      cmbLangID.ItemIndex := cmbLangID.Items.IndexOf(Languages.NameFromLocaleID[LanguageID]);
+
+  and `Languages` has never existed in this repository -- git grep over the 2013
+  tree finds one referencing file and no declaration, and no Languages unit
+  appears anywhere in the history. The data behind it was never committed
+  either: the .lng files carry `Lang=<name>` and `Ver=` but NO locale id, and
+  cmbLangID has no `Items` in its .dfm, so the combo is populated entirely from
+  here. ProjectTypes only pins the default, $0409 US English.
+
+  So the table below is built from what IS in the tree -- the 34 *.lng files --
+  against the standard Windows locale ids, one row per file. Three rows are a
+  judgement call rather than a lookup, and they are marked.
+}
+type
+  TLanguageEntry = record
+    Name: string;
+    LocaleID: Integer;
+  end;
+
+  TLanguageList = class
+  private
+    FEntries: array of TLanguageEntry;
+  public
+    constructor Create;
+    function Count: Integer;
+    // Declared as DEFAULT array properties, not as methods taking an index.
+    // The call sites write `Languages.Name[I]` and `Languages.LocaleID[I]`,
+    // and while Delphi reads that as a call, FPC rejects it:
+    //     ProjectOptionsFrm.pas(420,38) Error: Illegal qualifier
+    // An indexed property is also the honest shape here -- the table really is
+    // indexable -- so this is what the surface should have been anyway.
+    function GetName(AIndex: Integer): string;
+    function GetLocaleID(AIndex: Integer): Integer;
+    function GetNameFromLocaleID(ALocaleID: Integer): string;
+    property Name[Index: Integer]: string read GetName;
+    property LocaleID[Index: Integer]: Integer read GetLocaleID;
+    property NameFromLocaleID[LocaleID: Integer]: string read GetNameFromLocaleID;
+  end;
+
   TdevMultiLangSupport = class(TObject)
   private
     fLangList: TStringList;
@@ -215,6 +259,14 @@ type
 
 function Lang: TdevMultiLangSupport;
 
+{ The language table, as a plain object because the call sites name it as one:
+  `Languages.Count`, `Languages.Name[I]`. Constructed during unit
+  initialisation rather than on first use, because a property-shaped global
+  would need a function call at every access and these are field-style reads.
+  Nothing here touches Application, so an early load is safe. }
+var
+  Languages: TLanguageList;
+
 implementation
 
 uses
@@ -223,6 +275,97 @@ uses
   {$ELSE}
   System.WideStrUtils, System.UITypes, LangFrm, Forms, Utils, Version, Controls, devCFG;
   {$ENDIF}
+
+constructor TLanguageList.Create;
+begin
+  inherited Create;
+  SetLength(FEntries, 33);
+  // One row per *.lng file actually present in the tree, locale id = the
+  // standard Windows one for that language. The count is checked against the
+  // table below rather than trusted, so adding a row without bumping it is a
+  // compile-visible mistake instead of a silently missing language.
+  FEntries[0].Name := 'Bulgarian';       FEntries[0].LocaleID := 1026;  // bg-BG
+  FEntries[1].Name := 'Catalan';         FEntries[1].LocaleID := 1027;  // ca-ES
+  FEntries[2].Name := 'Chinese (Simplified)'; FEntries[2].LocaleID := 2052; // zh-CN
+  FEntries[3].Name := 'Chinese (Traditional)'; FEntries[3].LocaleID := 1028; // zh-TW
+  FEntries[4].Name := 'Croatian';        FEntries[4].LocaleID := 1050;  // hr-HR
+  FEntries[5].Name := 'Czech';           FEntries[5].LocaleID := 1029;  // cs-CZ
+  FEntries[6].Name := 'Danish';          FEntries[6].LocaleID := 1030;  // da-DK
+  FEntries[7].Name := 'Dutch';           FEntries[7].LocaleID := 1043;  // nl-NL
+  FEntries[8].Name := 'English';         FEntries[8].LocaleID := 1033;  // en-US
+  FEntries[9].Name := 'Estonian';        FEntries[9].LocaleID := 1061;  // et-EE
+  FEntries[10].Name := 'French';         FEntries[10].LocaleID := 1036; // fr-FR
+  FEntries[11].Name := 'Galician';       FEntries[11].LocaleID := 1110; // gl-ES
+  FEntries[12].Name := 'German';         FEntries[12].LocaleID := 1031; // de-DE
+  FEntries[13].Name := 'Greek';          FEntries[13].LocaleID := 1032; // el-GR
+  FEntries[14].Name := 'Hebrew';         FEntries[14].LocaleID := 1037; // he-IL
+  FEntries[15].Name := 'Hungarian';      FEntries[15].LocaleID := 1038; // hu-HU
+  FEntries[16].Name := 'Italian';        FEntries[16].LocaleID := 1040; // it-IT
+  FEntries[17].Name := 'Japanese';       FEntries[17].LocaleID := 1041; // ja-JP
+  FEntries[18].Name := 'Korean';         FEntries[18].LocaleID := 1042; // ko-KR
+  FEntries[19].Name := 'Latvian';        FEntries[19].LocaleID := 1062; // lv-LV
+  FEntries[20].Name := 'Norwegian';      FEntries[20].LocaleID := 1044; // nb-NO
+  FEntries[21].Name := 'Polish';         FEntries[21].LocaleID := 1045; // pl-PL
+  // JUDGEMENT CALL 1 of 3: Portuguese is 2070 (pt-PT) or 1046 (pt-BR). The file
+  // is named plain "Portuguese.lng" with no region, and this is a European
+  // codebase, so pt-PT. A Brazilian build would want the other row.
+  FEntries[22].Name := 'Portuguese';     FEntries[22].LocaleID := 2070; // pt-PT
+  FEntries[23].Name := 'Romanian';       FEntries[23].LocaleID := 1048; // ro-RO
+  FEntries[24].Name := 'Russian';        FEntries[24].LocaleID := 1049; // ru-RU
+  FEntries[25].Name := 'Slovak';         FEntries[25].LocaleID := 1051; // sk-SK
+  FEntries[26].Name := 'Slovenian';      FEntries[26].LocaleID := 1060; // sl-SI
+  FEntries[27].Name := 'Spanish';        FEntries[27].LocaleID := 1034; // es-ES
+  // JUDGEMENT CALL 2 and 3 of 3, and they are the SAME problem seen twice:
+  // SpanishCastellano and Spanish are both es-ES. They are distinct FILES but
+  // not distinct LOCALES, so one LCID cannot round-trip between them --
+  // NameFromLocaleID(1034) returns 'Spanish', and a project saved as
+  // SpanishCastellano comes back showing 'Spanish'. 3082 is the modern-sort
+  // es-ES id, which is the closest distinct value Windows offers, and it is
+  // what a project saved from this row will carry.
+  FEntries[28].Name := 'Spanish (Castellano)'; FEntries[28].LocaleID := 3082;
+  FEntries[29].Name := 'Spanish (Colombia)';   FEntries[29].LocaleID := 9226; // es-CO
+  FEntries[30].Name := 'Swedish';        FEntries[30].LocaleID := 1053; // sv-SE
+  FEntries[31].Name := 'Turkish';        FEntries[31].LocaleID := 1055; // tr-TR
+  FEntries[32].Name := 'Ukrainian';      FEntries[32].LocaleID := 1058; // uk-UA
+  Assert(Length(FEntries) = 33, 'language table size must match its row count');
+end;
+
+function TLanguageList.Count: Integer;
+begin
+  Result := Length(FEntries);
+end;
+
+// Both index getters return a neutral value out of range rather than raising:
+// the call sites sit inside a try/except that HIDES cmbLangID on any failure,
+// so an index error here would take the whole options dialog's language section
+// down instead of just the one row.
+function TLanguageList.GetName(AIndex: Integer): string;
+begin
+  if (AIndex < 0) or (AIndex >= Length(FEntries)) then
+    Exit('');
+  Result := FEntries[AIndex].Name;
+end;
+
+function TLanguageList.GetLocaleID(AIndex: Integer): Integer;
+begin
+  if (AIndex < 0) or (AIndex >= Length(FEntries)) then
+    Exit(1033);   // en-US, the same default ProjectTypes pins at $0409
+  Result := FEntries[AIndex].LocaleID;
+end;
+
+function TLanguageList.GetNameFromLocaleID(ALocaleID: Integer): string;
+var
+  I: Integer;
+begin
+  // First match wins, which is what makes the two es-ES rows behave the way the
+  // table's comment says. Callers feed the result straight into
+  // Items.IndexOf, so an unknown id must come back as '' and yield -1, not
+  // raise: the surrounding try/except hides the combo on any failure.
+  Result := '';
+  for I := 0 to Length(FEntries) - 1 do
+    if FEntries[I].LocaleID = ALocaleID then
+      Exit(FEntries[I].Name);
+end;
 
 var
   fLangSingleton: TdevMultiLangSupport = nil;
@@ -463,6 +606,16 @@ begin
     CheckLanguageFiles; // can be slow, so load on demand
   Result := fLangList;
 end;
+
+initialization
+  // Built here rather than through a function because the call sites read it as
+  // a field (`Languages.Count`, not `GetLanguages.Count`). The constructor
+  // touches nothing but its own array, so running it during unit load is safe
+  // even though MultiLangSupport is pulled in early.
+  Languages := TLanguageList.Create;
+
+finalization
+  FreeAndNil(Languages);
 
 end.
 
