@@ -293,7 +293,7 @@ begin
     WriteInteger('Template', 'ver', 1);
     WriteString('Template', 'Name', cmbName.Text);
     if IconFiles[0] <> '' then begin
-      CopyFile(PChar(IconFiles[0]), PChar(devDirs.Templates + cmbName.Text + '.ico'), False);
+      CopyFileW(PWideChar(IconFiles[0]), PChar(devDirs.Templates + cmbName.Text + '.ico'), False);
       WriteString('Template', 'Icon', cmbName.Text + '.ico');
     end;
     WriteString('Template', 'Description', txtDescr.Text);
@@ -305,7 +305,7 @@ begin
         WriteString('Unit' + IntToStr(C), 'CppName', lstFiles.Items[I]);
         S := StringReplace(cmbName.Text + '_' + lstFiles.Items[I] + '.txt', ' ', '_', [rfReplaceAll]);
         WriteString('Unit' + IntToStr(C), 'Cpp', S);
-        CopyFile(PChar(TempProject.Units[I].FileName), PChar(devDirs.Templates + S), False);
+        CopyFileW(PWideChar(TempProject.Units[I].FileName), PChar(devDirs.Templates + S), False);
         Inc(C);
       end;
 
@@ -315,7 +315,7 @@ begin
     WriteString('Project', 'Compiler', StringReplace(memCompiler.Text, #13#10, '_@@_', [rfReplaceAll]));
     WriteString('Project', 'CppCompiler', StringReplace(memCppCompiler.Text, #13#10, '_@@_', [rfReplaceAll]));
     WriteString('Project', 'Linker', StringReplace(memLinker.Text, #13#10, '_@@_', [rfReplaceAll]));
-    WriteString('Project', 'CompilerSettings', TempProject.Options.CompilerOptions.ToString);
+    WriteString('Project', 'CompilerSettings', CompilerOptionsToString(TempProject.Options.CompilerOptions));
     WriteInteger('Project', 'CompilerSet', TempProject.Options.CompilerSet);
     WriteBool('Project', 'IncludeVersionInfo', TempProject.Options.IncludeVersionInfo);
     WriteBool('Project', 'SupportXPThemes', TempProject.Options.SupportXPThemes);
@@ -328,7 +328,7 @@ begin
       WriteString('Project', 'ResourceIncludes', TempProject.Options.ResourceIncludes.DelimitedText);
 
     if IconFiles[1] <> '' then begin
-      CopyFile(PChar(IconFiles[1]), PChar(devDirs.Templates + cmbName.Text + '.project.ico'), False);
+      CopyFileW(PWideChar(IconFiles[1]), PChar(devDirs.Templates + cmbName.Text + '.project.ico'), False);
       WriteString('Project', 'Icon', cmbName.Text + '.project.ico');
     end;
     MessageDlg('The new template has been created!'#10#10 +

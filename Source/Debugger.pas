@@ -119,7 +119,14 @@ end;
 procedure TDebugger.Start;
 var
   pi: TProcessInformation;
-  si: TStartupInfo;
+  // TStartupInfoW, not TStartupInfo: FPC's TStartupInfo is the ANSI struct
+  // (STARTUPINFOA), and the process is now launched with CreateProcessW, which
+  // rejects it:
+  //     Debugger.pas(168,103) Error: Incompatible type for arg no. 9:
+  //       Got "STARTUPINFOA", expected "STARTUPINFOW"
+  // Every field this procedure actually sets is a HANDLE or a DWORD, so the
+  // two structs are interchangeable field-for-field here; only the name differs.
+  si: TStartupInfoW;
   sa: TSecurityAttributes;
   GDBFile, GDBCommand: String;
   CompilerSet: TdevCompilerSet;
@@ -144,8 +151,8 @@ begin
     Exit;
 
   // Set up the start up info struct.
-  FillChar(si, sizeof(TStartupInfo), 0);
-  si.cb := sizeof(TStartupInfo);
+  FillChar(si, sizeof(TStartupInfoW), 0);
+  si.cb := sizeof(TStartupInfoW);
   si.dwFlags := STARTF_USESTDHANDLES or STARTF_USESHOWWINDOW or STARTF_USESHOWWINDOW;
   si.hStdInput := fInputread;
   si.hStdOutput := fOutputwrite;
@@ -159,7 +166,13 @@ begin
   if CompilerSet.BinDir.Count > 0 then begin
     GDBFile := CompilerSet.BinDir[0] + pd + CompilerSet.gdbName;
     GDBCommand := '"' + GDBFile + '"' + ' --annotate=2 --silent';
-    if not CreateProcess(nil, PChar(GDBCommand), nil, nil, true, CREATE_NEW_CONSOLE, nil, nil, si, pi) then begin
+    // CreateProcessW, not CreateProcess: the command line is built from
+    // CompilerSet.BinDir, so it can carry non-ASCII, and Delphi's Unicode
+    // CreateProcess IS CreateProcessW. The plain name resolves to the ANSI
+    // entry point, whose PChar is objfpc PAnsiChar:
+    //     Debugger.pas(162,48) Error: Incompatible type for arg no. 2:
+    //       Got "PWideChar", expected "PChar"
+    if not CreateProcessW(nil, PWideChar(GDBCommand), nil, nil, true, CREATE_NEW_CONSOLE, nil, nil, si, pi) then begin
       MessageDlg(Format(Lang[ID_ERR_ERRORLAUNCHINGGDB], [GDBFile, SysErrorMessage(GetLastError)]), mtError,
         [mbOK], 0);
       Executing := false;
@@ -224,7 +237,11 @@ var
 begin
   if Executing then begin
 
-    Buff := TEncoding.ANSI.GetBytes((command + ' ' + params).Trim) + [10];
+    // Trim(...), not `.Trim`: FPC 3.2.2's only TStringHelper is `Type Helper for
+    // AnsiString` and there is none for UnicodeString, which is what `string`
+    // is under -Mdelphiunicode, so the helper method is rejected with
+    //     Debugger.pas(227,62) Error: Illegal qualifier
+    Buff := TEncoding.ANSI.GetBytes(Trim(command + ' ' + params)) + [10];
 
     if not WriteFile(fInputwrite, (@Buff[Low(Buff)])^, Length(Buff), nBytesWrote, nil) then
       MessageDlg(Lang[ID_ERR_WRITEGDB], mtError, [mbOK], 0);

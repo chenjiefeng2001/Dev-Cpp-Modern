@@ -5163,7 +5163,15 @@ begin
       srcNode.MoveTo(Item, naAddChild);
       if not WasExpanded then
         Item.Collapse(False);
+{$IFNDEF FPC}
       Item.AlphaSort(False);
+{$ELSE}
+      // See Project.pas for the full note. The LCL's TTreeNode.AlphaSort is a
+      // no-argument function that sorts on call and there is no per-node
+      // "unsorted" flag, so AlphaSort(False) -- "keep the order I just built" --
+      // is expressed by not sorting. This node was just MoveTo'd into place, so
+      // doing nothing preserves exactly the position it was moved to.
+{$ENDIF}
       ProjectView.Items.EndUpdate;
 
       fProject.UpdateFolders;

@@ -2042,7 +2042,7 @@ begin
     fgprofName := devData.ReadS(key, GPROF_PROGRAM);
 
     // Load the option in string format
-    INIOptions := TCompilerOptionsValues.FromString(devData.ReadS(key, 'Options'));
+    INIOptions := CompilerOptionsFromString(devData.ReadS(key, 'Options'));
 
     // Extra parameters
     fCompOpt := devData.ReadS(key, 'CompOpt');
@@ -2115,7 +2115,7 @@ begin
     devData.Write(key, GPROF_PROGRAM, fgprofName);
 
     // Save option string
-    devData.Write(key, 'Options', INIOptions.ToString);
+    devData.Write(key, 'Options', CompilerOptionsToString(INIOptions));
 
     // Save extra 'general' options
     devData.Write(key, 'CompOpt', fCompOpt);

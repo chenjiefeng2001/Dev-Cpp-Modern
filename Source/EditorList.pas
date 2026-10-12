@@ -324,7 +324,11 @@ begin
     Exit;
 
   // Ask user if he wants to save
-  if Editor.Text.Modified and not Editor.Text.Text.IsEmpty then begin
+  // `<> ''`, not `.IsEmpty`: FPC 3.2.2's only TStringHelper is `Type Helper for
+  // AnsiString` and there is none for UnicodeString, which is what `string` is
+  // under -Mdelphiunicode, so the helper method is rejected outright with
+  //     EditorList.pas(327,52) Error: Illegal qualifier
+  if Editor.Text.Modified and (Editor.Text.Text <> '') then begin
     case MessageDlg(Format(Lang[ID_MSG_ASKSAVECLOSE], [Editor.FileName]), mtConfirmation, mbYesNoCancel, 0) of
       mrYes:
         if not Editor.Save then
@@ -461,7 +465,11 @@ begin
   if Assigned(MainUi.CurrentProject) then begin
     I := MainUi.ProjectUnitIndexOf(FullFileName);
     if I <> -1 then begin
-      result := MainUi.OpenProjectUnit(I);
+      // The cast is the facade's contract, not a workaround: MainUi publishes
+      // this as TObject so the facade does not name TEditor (see the comment on
+      // its declaration, "// OpenUnit(Index) -> TEditor"), and the caller is
+      // declared `: TEditor`.
+      result := TEditor(MainUi.OpenProjectUnit(I));
       Exit;
     end;
   end;

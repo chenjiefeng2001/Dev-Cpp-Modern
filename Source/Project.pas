@@ -769,7 +769,7 @@ begin
         MessageDlg(Lang[ID_MSG_COMPILERNOTFOUND], mtError, [mbOk], 0);
         fOptions.CompilerSet := devCompilerSets.DefaultSetIndex;
       end;
-      fOptions.CompilerOptions := TArray<Integer>.FromString(ReadString('Project', 'CompilerSettings', ''));
+      fOptions.CompilerOptions := CompilerOptionsFromString(ReadString('Project', 'CompilerSettings', ''));
       fOptions.VersionInfo.Major := ReadInteger('VersionInfo', 'Major', 0);
       fOptions.VersionInfo.Minor := ReadInteger('VersionInfo', 'Minor', 1);
       fOptions.VersionInfo.Release := ReadInteger('VersionInfo', 'Release', 1);
@@ -845,7 +845,7 @@ begin
     WriteBool('Project', 'IncludeVersionInfo', fOptions.IncludeVersionInfo);
     WriteBool('Project', 'SupportXPThemes', fOptions.SupportXPThemes);
     WriteInteger('Project', 'CompilerSet', fOptions.CompilerSet);
-    WriteString('Project', 'CompilerSettings', fOptions.CompilerOptions.ToString);
+    WriteString('Project', 'CompilerSettings', CompilerOptionsToString(fOptions.CompilerOptions));
 
     WriteInteger('VersionInfo', 'Major', fOptions.VersionInfo.Major);
     WriteInteger('VersionInfo', 'Minor', fOptions.VersionInfo.Minor);
@@ -961,8 +961,12 @@ begin
     while I > 0 do begin
       findnode := nil;
       for C := 0 to Node.Count - 1 do
-        if node.Item[C].Text = Copy(S, 1, I - 1) then begin
-          findnode := node.Item[C];
+        // Items, not Item: the Delphi VCL spells a tree node's default array
+        // property `Item`, the LCL spells it `Items`
+        // (lcl/comctrls.pp:3163, `property Items[ItemIndex: Integer]: TTreeNode
+        // read GetItems write SetItems; default`). Same node, different name:
+        if node.Items[C].Text = Copy(S, 1, I - 1) then begin
+          findnode := node.Items[C];
           Break;
         end;
       if not Assigned(findnode) then
@@ -1022,7 +1026,9 @@ begin
 
       if not FileExists(FileName) then
       begin
-        MessageBox(Application.Handle, PChar(Format(Lang[ID_ERR_FILENOTFOUND], [FileName])), 'Error', MB_ICONERROR);
+        // MessageBoxW for the reason given in Templates.pas: Delphi's Unicode
+        // MessageBox IS MessageBoxW, and this text is localised.
+        MessageBoxW(Application.Handle, PWideChar(Format(Lang[ID_ERR_FILENOTFOUND], [FileName])), PWideChar('Error'), MB_ICONERROR);
         SetModified(TRUE);
       end
       else
@@ -1224,7 +1230,7 @@ function TProject.RemoveFolder(Node: TTreeNode): boolean;
   begin
     // Recursively remove folders
     for I := Node.Count - 1 downto 0 do begin
-      ChildNode := Node.Item[i];
+      ChildNode := Node.Items[i];
 
       // Remove folder inside folder
       if (ChildNode.Data = Pointer(-1)) and (ChildNode.Level > 0) then
@@ -1572,7 +1578,7 @@ begin
       // Copy icon to project directoy
       IconFileName := ChangeFileExt(ExtractFileName(FileName), '.ico');
       if not SameText(IconFileName, fOptions.Icon) and (fOptions.Icon <> '') then begin
-        CopyFile(PChar(fOptions.Icon), PChar(ExpandFileto(IconFileName, Directory)), False);
+        CopyFileW(PWideChar(fOptions.Icon), PChar(ExpandFileto(IconFileName, Directory)), False);
         fOptions.Icon := IconFileName;
       end;
 
@@ -1627,7 +1633,7 @@ begin
       OriginalIcon := ValidateFile(fOptions.Icon, '', true);
       if OriginalIcon <> '' then begin // file found!
         DestIcon := ExpandFileTo(ExtractFileName(ChangeFileExt(FileName, '.ico')), Directory);
-        CopyFile(PChar(OriginalIcon), PChar(DestIcon), False);
+        CopyFileW(PWideChar(OriginalIcon), PChar(DestIcon), False);
         fOptions.Icon := DestIcon;
       end else
         fOptions.Icon := '';
@@ -1734,10 +1740,25 @@ begin
       fUnits[idx].Node.Data := pointer(idx);
     end;
 
+{$IFNDEF FPC}
     for idx := 0 to pred(fFolders.Count) do
       TTreeNode(fFolderNodes[idx]).AlphaSort(False);
 
     Node.AlphaSort(False);
+{$ELSE}
+    // No equivalent, and the omission IS the equivalent. Delphi's
+    // TTreeNode.AlphaSort(Reset) sets a per-node "sort alphabetically" flag;
+    // the LCL has no such flag. Its TTreeNode.AlphaSort is a no-argument
+    // FUNCTION that performs the sort on call --
+    //     function TTreeNode.AlphaSort: Boolean;  Result := CustomSort(nil);
+    // (lcl/include/treeview.inc:1890) -- and the tree sorts a node only when
+    // that is called or when TreeView.SortType says so.
+    //
+    // AlphaSort(False) means "keep insertion order", and the order here is
+    // deliberate: units are added first, then folders. Not calling it is
+    // therefore the faithful translation, and calling it would be the opposite
+    // of what the source asks for.
+{$ENDIF}
 
     // expand nodes expanded before recreating the project tree
     fNode.Collapse(True);
@@ -1763,10 +1784,10 @@ procedure TProject.UpdateFolders;
     I: integer;
   begin
     for I := 0 to Node.Count - 1 do
-      if Node.Item[I].Data = Pointer(-1) then begin
-        fFolders.Add(GetFolderPath(Node.Item[I]));
-        if Node.Item[I].HasChildren then
-          RunNode(Node.Item[I]);
+      if Node.Items[I].Data = Pointer(-1) then begin
+        fFolders.Add(GetFolderPath(Node.Items[I]));
+        if Node.Items[I].HasChildren then
+          RunNode(Node.Items[I]);
       end;
   end;
 var
@@ -1819,7 +1840,7 @@ begin
   // check if using old way to store resources and fix it
   oldRes := finifile.ReadString('Project', 'Resources', '');
   if oldRes <> '' then begin
-    CopyFile(PChar(Filename), PChar(FileName + '.bak'), False);
+    CopyFileW(PWideChar(Filename), PChar(FileName + '.bak'), False);
     sl := TStringList.Create;
     try
       sl.Delimiter := ';';

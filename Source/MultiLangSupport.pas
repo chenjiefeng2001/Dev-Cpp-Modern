@@ -428,16 +428,20 @@ begin
   Result := 1252; //put the default encoding here
 
   for I := 0 to MaxEncodings - 1 do
-    // Pos, not ALanguage.IndexOf(...): the two tests are identical
-    // (`IndexOf(x) > -1` is exactly `Pos(x, s) > 0`), but the method form
-    // fails to compile here --
+    // Pos, not ALanguage.IndexOf(...): under -Mdelphiunicode `string` is
+    // UnicodeString, and FPC 3.2.2's only TStringHelper is
+    //     TStringHelper = Type Helper for AnsiString
+    // (rtl/objpas/sysutils/syshelph.inc:60) -- there is NO helper for
+    // UnicodeString, so every helper method on a `string` is rejected with
     //     MultiLangSupport.pas(251,18) Error: Illegal qualifier
-    // Reproduced in a standalone program: `ALanguage.IndexOf(Encodings[I].CPLang)`
-    // is rejected while `ALanguage.IndexOf('en')` and
-    // `Pos(Encodings[I].CPLang, ALanguage)` both compile, so it is the argument
-    // being a field of a record in a typed CONSTANT that breaks it, not the
-    // receiver. Recorded because IndexOf reads as the obviously-correct
-    // spelling here and would get "fixed" straight back.
+    // Isolated in a standalone program, all of these fail and this one works:
+    //     S.IndexOf('en')              -> Illegal qualifier
+    //     S.IndexOf(Enc[0].CPLang)     -> Illegal qualifier
+    //     S.IsEmpty                    -> Illegal qualifier
+    //     Pos(Enc[0].CPLang, S)        -> OK
+    // so the RTL's Pos/Length/Copy are the spellings that work here, not just
+    // a preference. The two tests are equivalent: `IndexOf(x) > -1` is exactly
+    // `Pos(x, s) > 0`.
     if Pos(Encodings[I].CPLang, ALanguage) > 0 then
     begin
       Result := Encodings[I].CPID;

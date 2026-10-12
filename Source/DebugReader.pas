@@ -226,7 +226,12 @@ begin
     end;
 
     MessageBeep(MB_ICONERROR);
-    if SignalDialog.ShowModal = ID_OK then begin
+    // mrOK, not ID_OK: SignalDialog comes from CreateMessageDialog, whose
+    // ShowModal returns the LCL's TMsgResult, and `ID_OK` is not a constant in
+    // either tree -- Delphi spells the Windows one IDOK, with no underscore.
+    //     DebugReader.pas(229,33) Error: Identifier not found "ID_OK"
+    // mrOK and IDOK are both 1, so the comparison is unchanged.
+    if SignalDialog.ShowModal = mrOK then begin
       devData.ShowCPUSignal := SignalCheck.Checked;
       if SignalCheck.Checked and not Assigned(CPUForm) then begin
         MainUi.OpenCpuWindow;

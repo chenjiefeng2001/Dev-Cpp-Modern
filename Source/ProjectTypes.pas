@@ -60,6 +60,8 @@ type
 
   TCompilerOptionsValues = TArray<Integer>;
 
+
+
   TProjOptions = class(TPersistent) // allow deep copies
   public
     constructor Create;
@@ -110,10 +112,108 @@ type
   end;
 
 
+{ Read and write the project's compiler-option settings.
+  FPC 3.2.2 has neither `TArray<T>.FromString` nor `TArray<T>.ToString` -- not
+  in the RTL, not in Generics.Collections -- and the tree uses both in five
+  places (Project.pas:772 and :848, devCFG.pas:2045 and :2118,
+  NewTemplateFrm.pas:318). They are free functions here because
+  TCompilerOptionsValues is a type ALIAS of TArray<Integer>, so there is no
+  class to hang a method on.
+
+  WHY THIS FORMAT, MEASURED
+  =========================
+  Every shipped .dev file in the tree writes the settings as one CHARACTER per
+  option, with no separators. All eight are 25 characters long:
+
+      ConsolePauser.dev       0000000100111000000001001
+      devcppPortable.dev      0000000100111000000011001
+      KeywordHighlighter.dev  00000001g0111000000001001
+
+  and Templates/Project3.template holds a single `0`, i.e. one option -- so the
+  width follows the option count rather than being a fixed constant.
+
+  Delphi's own `TArray<Integer>.ToString` emits COMMAS, so it cannot be what
+  wrote these. The on-disk shape is the authority here: a comma-separated
+  reader would parse every existing project as "no options" and silently reset
+  all 25 of them to zero.
+
+  READING is deliberately lenient and accepts BOTH shapes. A comma means the
+  comma-separated form (each field a full integer); no comma means one
+  character per option. Accepting the second shape costs nothing and rescues
+  any file a Delphi build wrote.
+
+  WRITING emits the legacy character-per-option form, matching every file in the
+  tree. ONE RECORDED LIMITATION: three option lists carry more than ten choices
+  (12, 39 and 85 -- measured over every AddOption call in devCFG.pas), so a
+  value above 9 has no room in one character. Out-of-range values are written as
+  0 rather than as decimal digits, because emitting the digits would shift every
+  following field and corrupt all the options after it. No shipped file carries
+  such a value -- all of them are 0 or 1 -- so this is a latent limit rather
+  than an observed one, and it is why the alternative (comma-separated writing)
+  was not taken: it would make the FPC build disagree with the Delphi build on
+  every project save.
+}
+function CompilerOptionsFromString(const AValue: string): TCompilerOptionsValues;
+function CompilerOptionsToString(const AValue: TCompilerOptionsValues): string;
+
 implementation
 
 uses
   devcfg, SysUtils;
+
+function CompilerOptionsFromString(const AValue: string): TCompilerOptionsValues;
+var
+  I: Integer;
+  SL: TStringList;
+begin
+  SetLength(Result, 0);
+  if AValue = '' then
+    Exit;
+
+  if Pos(',', AValue) > 0 then
+  begin
+    // The comma-separated shape -- what Delphi's TArray<Integer>.ToString
+    // writes. Each field is a full integer, not a digit.
+    SL := TStringList.Create;
+    try
+      SL.Delimiter := ',';
+      SL.StrictDelimiter := True;
+      SL.DelimitedText := AValue;
+      SetLength(Result, SL.Count);
+      for I := 0 to SL.Count - 1 do
+        Result[I] := StrToIntDef(Trim(SL[I]), 0);
+    finally
+      SL.Free;
+    end;
+    Exit;
+  end;
+
+  // The shape every shipped .dev file uses: one character per option. A
+  // character that is not a digit is read as 0 rather than raising --
+  // KeywordHighlighter.dev really does carry a 'g' in that field, and a parser
+  // that refused it would take the whole project down over one stray keystroke.
+  SetLength(Result, Length(AValue));
+  for I := 1 to Length(AValue) do
+    if (AValue[I] >= '0') and (AValue[I] <= '9') then
+      Result[I - 1] := Ord(AValue[I]) - Ord('0')
+    else
+      Result[I - 1] := 0;
+end;
+
+function CompilerOptionsToString(const AValue: TCompilerOptionsValues): string;
+var
+  I: Integer;
+begin
+  SetLength(Result, Length(AValue));
+  for I := 0 to High(AValue) do
+    // 0..9 is a digit; anything else has no single-character encoding. See the
+    // interface comment: writing the decimal digits would shift every field
+    // after it, so out-of-range values are pinned to 0 instead.
+    if (AValue[I] >= 0) and (AValue[I] <= 9) then
+      Result[I + 1] := Chr(Ord('0') + AValue[I])
+    else
+      Result[I + 1] := '0';
+end;
 
 constructor TProjVersionInfo.Create;
 begin

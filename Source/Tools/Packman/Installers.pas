@@ -101,7 +101,7 @@ begin
 
       if not DirectoryExists(ExtractFileDir(TheFile.Dest)) then
           Mkdir(ExtractFileDir(TheFile.Dest));
-      CopyFile(PChar(String(TheFile.Source)), PChar(String(TheFile.Dest)), False);
+      CopyFileW(PWideChar(String(TheFile.Source)), PChar(String(TheFile.Dest)), False);
 
       if (IMod = 0) or (i mod IMod = 0) then
           Application.ProcessMessages;
