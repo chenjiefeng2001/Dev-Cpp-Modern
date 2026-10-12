@@ -165,16 +165,26 @@ var
   si: TSystemInfo;
   mbi: TMemoryBasicInformation;
   pagesize: dword;
-  tmpSP: dword;
+  // PtrUInt, not dword: the stack pointer is 64 bits on this target, and
+  // truncating it to a dword would produce a bogus address on any frame above
+  // 4 GB -- which on x64 is most of them.
+  tmpSP: PtrUInt;
 begin
-  GetSystemInfo(si);
+  // @si / @mbi: these are var parameters. Delphi lets a record stand in for the
+  // reference; FPC does not.
+  GetSystemInfo(@si);
   pagesize := si.dwPageSize;
   asm
-    mov tmpSP,esp
+    // `register rsp` is what tells the assembler the register may be read. The
+    // name is rsp, not esp: the original `mov tmpSP,esp` is x86-32 code, which
+    // this build is not --
+    //     ExceptionFrm.pas(173,15) Error: Unknown identifier "ESP"
+    register rsp;
+    mov tmpSP, rsp
   end;
   tmpSP := pagesize * (tmpSP div pagesize);
-  VirtualQuery(pointer(tmpSP), mbi, sizeof(mbi));
-  result := mbi.RegionSize + dword(mbi.BaseAddress);
+  VirtualQuery(Pointer(tmpSP), @mbi, SizeOf(mbi));
+  Result := mbi.RegionSize + PtrUInt(mbi.BaseAddress);
 end;
 
 procedure TExceptionFrm.ReadMapFile(const Fname: String);
@@ -477,9 +487,15 @@ begin
   fOSversion := Format('%d.%d (build %d)', [vi.dwMajorVersion, vi.dwMinorVersion, vi.dwBuildNumber]);
   fAdditionalInfo := vi.szCSDVersion;
 
-  BufSize := MAX_PATH;
-  GetComputerName(Buf, BufSize);
-  fComputerName := StrPas(Buf);
+  // GetComputerNameW, not GetComputerName: Buf is `array[0..MAX_PATH] of Char`
+  // and Char is WideChar here, so the buffer is twice the size the ANSI call
+  // expects, and StrPas then reads a Unicode buffer as ANSI --
+  //     ExceptionFrm.pas(481,22) Error: Incompatible type for arg no. 1:
+  //       Got "Array[0..260] Of WideChar", expected "PChar"
+  // PWideChar(Buf) stops at the terminator, so no length arithmetic is needed.
+  BufSize := MAX_PATH + 1;
+  GetComputerNameW(Buf, BufSize);
+  fComputerName := PWideChar(Buf);
 
   // Set Memory tab
   ms.dwLength := SizeOf(TMemoryStatus);
@@ -513,8 +529,12 @@ end;
 
 procedure TExceptionFrm.btnSendClick(Sender: TObject);
 var
-  Socket: TClientSocket;
-  I: integer;
+  // `Socket: TClientSocket` and `I: integer` removed. Both were used ONLY
+  // inside the commented-out block below, which posts a bug report to
+  // www.wilcobrourier.nl; the live body just opens the GitHub issues page.
+  // TClientSocket is a Delphi VCL type with no LCL counterpart, which is why
+  //     ExceptionFrm.pas(516,11) Error: Identifier not found "TClientSocket"
+  // was being reported for a declaration nothing reads.
   //	SocketResult: integer;
   //	Buffer: array[0..1024] of Char;
   Cmd, EmailBody, EmailSubject: String;
@@ -565,7 +585,7 @@ begin
     Exit;
   end;}
 
-  ShellExecute(GetDesktopWindow(), 'open', PChar('https://github.com/Embarcadero/Dev-Cpp/issues'), nil, nil, SW_SHOWNORMAL);
+  ShellExecuteW(GetDesktopWindow(), 'open', PWideChar('https://github.com/Embarcadero/Dev-Cpp/issues'), nil, nil, SW_SHOWNORMAL);
 
   btnSend.Caption := 'Thank you!';
   btnSend.Enabled := false;
@@ -614,7 +634,7 @@ end;
 
 procedure TExceptionFrm.lblUpdateLinkClick(Sender: TObject);
 begin
-  ShellExecute(GetDesktopWindow(), 'open', PChar(TLabel(Sender).Caption), nil, nil, SW_SHOWNORMAL);
+  ShellExecuteW(GetDesktopWindow(), 'open', PWideChar(TLabel(Sender).Caption), nil, nil, SW_SHOWNORMAL);
 end;
 
 procedure TExceptionFrm.memUserReportEnter(Sender: TObject);

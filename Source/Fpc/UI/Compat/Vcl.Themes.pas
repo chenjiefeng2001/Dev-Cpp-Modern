@@ -83,11 +83,38 @@ type
 
 type
   { VCL's global styling facade. GetSystemColor forwards to Win32; everything
-    else is the single boolean, which is True here (see the header). }
+type
+  { The two style-query enums ClassBrowser uses. Only the members it names are
+    declared, because that is all the closure needs and a guessed rest-of-enum
+    would be invented data. }
+  TStyleFontColor = (sfTabTextActiveNormal);
+  TStyleColor = (scTreeView);
+
+  { VCL's global styling facade. GetSystemColor forwards to Win32; everything
+    else is the single boolean, which is True here (see the header).
+
+    The two Get* queries answer for the NO STYLE ENGINE case, which is what
+    this build always is:
+
+      GetStyleFontColor -> clWindowText, the ordinary window text colour. The
+        caller compares the result against 16777215 (white, the Slate Gray
+        theme) and 14803425 (the Blue Whale theme) and falls back to its own
+        default of clMaroon when neither matches. clWindowText matches neither,
+        so the fallback is what happens -- which is the correct outcome when no
+        theme is applied.
+
+      GetStyleColor -> clWindow for scTreeView, which is what the VCL returns
+        for that element with no style loaded, and is the brush the caller
+        paints the argument text on.
+
+    These are the same "LCL has no styles service" boundary already recorded for
+    TrySetStyle and for the StyleElements skips in VclPropertySkips.pas. }
   TStyleServices = class
   public
     function GetSystemColor(Color: TColor): TColor;
     function IsSystemStyle: Boolean;
+    function GetStyleFontColor(AFontColor: TStyleFontColor): TColor;
+    function GetStyleColor(AColor: TStyleColor): TColor;
   end;
 
 var
@@ -141,6 +168,19 @@ end;
 function TStyleServices.IsSystemStyle: Boolean;
 begin
   Result := TStyleManager.IsSystemStyle;
+end;
+
+function TStyleServices.GetStyleFontColor(AFontColor: TStyleFontColor): TColor;
+begin
+  // Deliberately not one of the two values ClassBrowser special-cases, so the
+  // caller takes its own default branch. See the interface comment.
+  Result := clWindowText;
+end;
+
+function TStyleServices.GetStyleColor(AColor: TStyleColor): TColor;
+begin
+  // What the VCL returns for scTreeView with no style loaded.
+  Result := clWindow;
 end;
 
 procedure DrawStyleEdge(ACanvas: TCanvas; ARect: TRect;

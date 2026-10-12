@@ -116,10 +116,46 @@ type
     procedure WriteMakeObjFilesRules(var F: TextFile); // append linkage rules
   end;
 
+
+{ Delphi allows `resourcestring` inside a method body; FPC requires them to be
+  static or global --
+      Compiler.pas(636,3) Error: Resourcestrings can be only static or global
+  -- so the three method-local blocks move here. Two of them declared a constant
+  of the SAME NAME with DIFFERENT values, which was legal only because each was
+  local to its own method:
+      GetLibrariesParams  cAppendStr = '%s -L"%s"'
+      GetIncludeParams    cAppendStr = '%s -I"%s"'
+  Hoisted as-is they would collide, so they are cLibAppendStr and cIncAppendStr.
+  No value is changed by either the move or the rename. }
+resourcestring
+  // windres, input, output
+  cResourceCmdLine = '%s --input-format=rc -i %s -o %s';
+  // gcc, input, compileparams, includeparams, librariesparams
+  cSyntaxCmdLine = '%s "%s" %s %s %s';
+  // gcc, input, compileparams, includeparams, librariesparams
+  cHeaderCmdLine = '%s "%s" %s %s %s';
+  // gcc, input, compileparams, includeparams, librariesparams
+  cSourceCmdLine = '%s "%s" %s %s %s';
+  // link, input, output
+  cMakeLine = '%s "%s" %s %s';
+  // gcc, libdir, librariesparams
+  cLibAppendStr = '%s -L"%s"';
+  // gcc, incdir, includesparams
+  cIncAppendStr = '%s -I"%s"';
+
+
 implementation
 
 uses
+  {$IFDEF FPC}
+  // No System.IOUtils: it supplied TDirectory and nothing else, and FPC
+  // 3.2.2 has no TDirectory -- checked with only the FPC units on the path
+  // and again with Lazarus's lazutils ahead of them, so it is genuinely
+  // absent rather than out of order. CreateDir below stands in for it.
+  System.UITypes, MultiLangSupport, Macros, devExec, MainUi, StrUtils;
+  {$ELSE}
   System.UITypes, MultiLangSupport, Macros, devExec, MainUi, StrUtils, System.IOUtils;
+  {$ENDIF}
 
 procedure TCompiler.DoLogEntry(const msg: String);
 begin
@@ -172,10 +208,15 @@ begin
   // Create OBJ output directory
   SetCurrentDir(fProject.Directory); // .dev file location
   if fProject.Options.ObjectOutput <> '' then
-    TDirectory.CreateDirectory(fProject.Options.ObjectOutput);
+    // CreateDir, not TDirectory.CreateDirectory: no TDirectory in this compiler.
+    // Both original calls discarded the result.
+    CreateDir(fProject.Options.ObjectOutput);
 
-  if not fProject.Options.ExeOutput.IsEmpty then
-    TDirectory.CreateDirectory(fProject.Options.ExeOutput);
+  // `<> ''`, not `.IsEmpty`: FPC 3.2.2's only TStringHelper is `Type Helper for
+  // AnsiString` and there is none for UnicodeString, which is what `string`
+  // is under -Mdelphiunicode, so the helper method is rejected outright.
+  if fProject.Options.ExeOutput <> '' then
+    CreateDir(fProject.Options.ExeOutput);
 
   // Should not return custom filename
   fMakefile := fProject.MakeFileName;
@@ -618,17 +659,6 @@ begin
 end;
 
 procedure TCompiler.Compile;
-resourcestring
-  // windres, input, output
-  cResourceCmdLine = '%s --input-format=rc -i %s -o %s';
-  // gcc, input, compileparams, includeparams, librariesparams
-  cSyntaxCmdLine = '%s "%s" %s %s %s';
-  // gcc, input, compileparams, includeparams, librariesparams
-  cHeaderCmdLine = '%s "%s" %s %s %s';
-  // gcc, input, output, compileparams, includeparams, librariesparams
-  cSourceCmdLine = '%s "%s" -o "%s" %s %s %s';
-  // make, makefile
-  cMakeLine = '%s %s -f "%s" all';
 var
   cmdline: String;
   s: String;
@@ -1155,14 +1185,12 @@ begin
 end;
 
 procedure TCompiler.GetLibrariesParams;
-resourcestring
-  cAppendStr = '%s -L"%s"';
 var
   i, val: integer;
   option: TCompilerOption;
 begin
   // Add libraries
-  fLibrariesParams := FormatList(fCompilerSet.LibDir, cAppendStr);
+  fLibrariesParams := FormatList(fCompilerSet.LibDir, cLibAppendStr);
 
   // Add global compiler linker extras
   if fCompilerSet.AddtoLink and (Length(fCompilerSet.LinkOpts) > 0) then
@@ -1171,7 +1199,7 @@ begin
   // Add libs added via project
   if (fTarget = ctProject) and assigned(fProject) then begin
     for i := 0 to pred(fProject.Options.Libs.Count) do
-      fLibrariesParams := format(cAppendStr, [fLibrariesParams, fProject.Options.Libs[i]]);
+      fLibrariesParams := format(cLibAppendStr, [fLibrariesParams, fProject.Options.Libs[i]]);
 
     // got sick of "symbol 'blah blah' is deprecated"
     if fProject.Options.typ = dptGUI then
@@ -1208,19 +1236,17 @@ begin
 end;
 
 procedure TCompiler.GetIncludesParams;
-resourcestring
-  cAppendStr = '%s -I"%s"';
 var
   i: integer;
 begin
-  fIncludesParams := FormatList(fCompilerSet.CDir, cAppendStr);
-  fCppIncludesParams := FormatList(fCompilerSet.CppDir, cAppendStr);
+  fIncludesParams := FormatList(fCompilerSet.CDir, cIncAppendStr);
+  fCppIncludesParams := FormatList(fCompilerSet.CppDir, cIncAppendStr);
 
   if (fTarget = ctProject) and assigned(fProject) then
     for i := 0 to pred(fProject.Options.Includes.Count) do
       if DirectoryExists(fProject.Options.Includes[i]) then begin
-        fIncludesParams := format(cAppendStr, [fIncludesParams, fProject.Options.Includes[i]]);
-        fCppIncludesParams := format(cAppendStr, [fCppIncludesParams, fProject.Options.Includes[i]]);
+        fIncludesParams := format(cIncAppendStr, [fIncludesParams, fProject.Options.Includes[i]]);
+        fCppIncludesParams := format(cIncAppendStr, [fCppIncludesParams, fProject.Options.Includes[i]]);
       end;
 
   fIncludesParams := Trim(fIncludesParams);

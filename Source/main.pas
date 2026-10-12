@@ -27,7 +27,7 @@ uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs, System.UITypes,
   Core.Events, Core.Services,
   Menus, StdCtrls, ComCtrls, ToolWin, ExtCtrls, Buttons, utils, SynEditPrint,
-  Project, editor, DateUtils, compiler, ActnList, ToolFrm, AppEvnts,
+  Project, editor, DateUtils, compiler, ActnList, ToolFrm,
   debugger, ClassBrowser, CodeCompletion, CppParser, CppTokenizer, SyncObjs,
   ProjectTreeFrame, WatchCallStackFrame,
   StrUtils, SynEditTypes, devFileMonitor, devMonitorTypes, EditorList,

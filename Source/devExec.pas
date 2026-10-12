@@ -76,20 +76,28 @@ end;
 
 procedure TExecThread.ExecAndWait;
 var
-  StartupInfo: TStartupInfo;
+  // TStartupInfoW, not TStartupInfo: FPC's TStartupInfo is STARTUPINFOA, and
+  // the process is launched with CreateProcessW, which rejects it. Every field
+  // set below is a DWORD or a WORD, so the two structs are interchangeable
+  // field-for-field here.
+  StartupInfo: TStartupInfoW;
   ProcessInfo: TProcessInformation;
 begin
-  FillChar(StartupInfo, SizeOf(TStartupInfo), 0);
+  FillChar(StartupInfo, SizeOf(TStartupInfoW), 0);
   with StartupInfo do begin
-    cb := SizeOf(TStartupInfo);
+    cb := SizeOf(TStartupInfoW);
     dwFlags := STARTF_USESHOWWINDOW or STARTF_FORCEONFEEDBACK;
     if fVisible then
       wShowWindow := SW_SHOW
     else
       wShowWindow := SW_HIDE;
   end;
-  if CreateProcess(nil, PChar('"' + fFile + '" ' + fParams), nil, nil, False, NORMAL_PRIORITY_CLASS, nil,
-    PChar(fPath),
+  // CreateProcessW, not CreateProcess: fFile, fParams and fPath come from
+  // the project and can carry non-ASCII. Delphi's Unicode CreateProcess IS
+  // CreateProcessW; the plain name is the ANSI entry point whose PChar is
+  // objfpc PAnsiChar.
+  if CreateProcessW(nil, PWideChar('"' + fFile + '" ' + fParams), nil, nil, False, NORMAL_PRIORITY_CLASS, nil,
+    PWideChar(fPath),
     StartupInfo, ProcessInfo) then begin
     fProcess := ProcessInfo.hProcess;
     WaitForSingleObject(ProcessInfo.hProcess, fTimeOut);
