@@ -57,15 +57,20 @@ check(not banned, "portable runner uses no VCL/LCL/Win32 units")
 
 # 5. Every unit referenced by the .lpi files must exist, and the portable
 #    project must carry the Phase-F portable set (headless FPC coverage).
+# Spelled exactly as the files are, because these paths are compared against the
+# .lpi <Units> entries. Windows hides a case mismatch here -- which is how twelve
+# LSP units kept a file name that disagreed with their declared unit for as long
+# as the local build stayed green -- so do not "fix" a mismatch by loosening the
+# comparison. tools/f3_unit_case_check.py guards the same invariant.
 PORTABLE_SET = ("Core/Core.Events.pas", "Core/Core.Services.pas",
                 "Debugger/GDB/GDB.MiTypes.pas", "Debugger/GDB/GDB.MiParser.pas",
-                "LSP/JsonRpc/Lsp.JsonRpc.pas",
-                "LSP/Process/Lsp.Process.pas",
-                "LSP/Process/Lsp.Process.Fpc.pas",
-                "LSP/Process/Lsp.Process.Factory.pas",
-                "LSP/Transport/Lsp.Transport.pas")
+                "LSP/JsonRpc/LSP.JsonRpc.pas",
+                "LSP/Process/LSP.Process.pas",
+                "LSP/Process/LSP.Process.Fpc.pas",
+                "LSP/Process/LSP.Process.Factory.pas",
+                "LSP/Transport/LSP.Transport.pas")
 # Windows-only implementation: must never enter an FPC project.
-WIN32_ONLY = ("LSP/Process/Lsp.Process.Win32.pas",)
+WIN32_ONLY = ("LSP/Process/LSP.Process.Win32.pas",)
 for lpi in ("FpcCorePortable.lpi", "FpcCoreWin.lpi"):
     p = ROOT / "Tests" / "FpcCoreTests" / lpi
     root = ET.parse(str(p)).getroot()
