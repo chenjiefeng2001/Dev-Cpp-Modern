@@ -68,16 +68,9 @@
   <CompilerOptions>
     <Version Value="11"/>
     <SearchPaths>
-      <Other>
-        <Include Value="../../Source/Core"/>
-        <Include Value="../../Source/Debugger/GDB"/>
-        <Include Value="../../Source/LSP/JsonRpc"/>
-        <Include Value="../../Source/LSP/Transport"/>
-        <Include Value="../../Source/LSP/Process"/>
-        <Include Value="../../Source/Toolchain"/>
-      </Other>
+      <OtherUnitFiles Value="../../Source/Core;../../Source/Debugger/GDB;../../Source/LSP/JsonRpc;../../Source/LSP/Transport;../../Source/LSP/Process;../../Source/Toolchain"/>
     </SearchPaths>
-    <Parsing>
+<Parsing>
       <SyntaxMode Value="Delphi"/>
       <UseAnsiStrings Value="True"/>
       <ParamCount Value="0"/>
