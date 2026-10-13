@@ -243,6 +243,8 @@ var
   // correct decoder checks look like failures.
   HdrLen: Integer;
   HdrLen3: Integer;
+  K: Integer;
+  Lit: string;
 begin
   WriteLn('LSP.JsonRpc');
   HdrLen := Length(BytesOf('Content-Length: 7'#13#10#13#10));
@@ -259,6 +261,35 @@ begin
   // 2) non-ASCII body: Content-Length counts UTF-8 bytes, not characters.
   //    U+4E2D ('zhong') encodes to 3 UTF-8 bytes.
   Frame1 := BuildLspFrameBytes(#$4E2D);
+  // Printed UNCONDITIONALLY, not only on failure. This check passed on Windows
+  // and failed on the Linux runner with only `len=22` in the log, which is not
+  // enough to tell whether the frame builder or the expectation is wrong: the
+  // expected total and the header length are equally candidates. A diagnostic
+  // that only appears when it fails is a diagnostic that disappears exactly when
+  // someone changes the value it was measuring.
+  WriteLn(Format('  DIAG #$4E2D: charlen=%d utf8bytes=%d BytesOf(hdr)=%d hdrlen3=%d frame=%d expected=%d',
+    [Length(#$4E2D),
+     TEncoding.UTF8.GetByteCount(#$4E2D),
+     Length(BytesOf('Content-Length: 3'#13#10#13#10)),
+     HdrLen3,
+     Length(Frame1),
+     HdrLen3 + 3]));
+  WriteLn('  DIAG header=' + TEncoding.UTF8.GetString(Copy(Frame1, 0, HdrLen3 + 4)));
+  // The body as BYTE VALUES. Decoding it as text is what hid the problem: the
+  // raw UTF-8 bytes reinterpreted as characters print as nothing recognisable,
+  // so a one-byte body and a three-byte body look alike in the log.
+  Write(Format('  DIAG body bytes (%d):', [Length(Frame1) - HdrLen3]));
+  for K := HdrLen3 to High(Frame1) do
+    Write(Format(' %d', [Frame1[K]]));
+  WriteLn;
+  // And the character the test means to send, spelled three ways, so a platform
+  // that resolves `#$4E2D` differently is visible rather than inferred.
+  // A string literal cannot be indexed in FPC, so bind it first.
+  Lit := #$4E2D;
+  WriteLn(Format('  DIAG literal: len=%d ord1=%d typedwide=%d typedansi=%d',
+    [Length(Lit), Ord(Lit[1]),
+     TEncoding.UTF8.GetByteCount(WideString(WideChar($4E2D))),
+     TEncoding.UTF8.GetByteCount(AnsiString(WideChar($4E2D)))]));
   Probe.Check('frame counts UTF-8 bytes, not characters',
     (BytesEqual(Copy(Frame1, 0, HdrLen3), BytesOf('Content-Length: 3'#13#10#13#10))) and
     (Length(Frame1) = HdrLen3 + 3),
