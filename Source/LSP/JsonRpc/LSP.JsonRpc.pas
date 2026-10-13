@@ -241,6 +241,36 @@ end;
 
 { Framing helpers }
 
+// Encode to UTF-8 without going through TEncoding.
+//
+// TEncoding.UTF8 is codepage-dependent on the Linux runner: asked for U+4E2D it
+// reported ONE byte and emitted 63 ('?'), so an LSP frame carrying one CJK
+// character went out as "Content-Length: 1" + "?". UnicodeToUtf8, which backs
+// UTF8Encode, has no code page in it at all.
+//
+// The RawByteString -> TBytes copy is ELEMENT-wise on purpose. A pointer cast
+// would alias the string's bytes, which is the same mistake the header build
+// below already records once: Move(Header[1], Framed[0], Length(Header)) copied
+// string ELEMENTS into a byte buffer -- one byte each under AnsiString, two
+// under UnicodeString -- and failed only at run time.
+{$IFDEF FPC}
+function Utf8Bytes(const S: string): TBytes;
+var
+  Raw: RawByteString;
+  I: Integer;
+begin
+  Raw := UTF8Encode(S);
+  SetLength(Result, Length(Raw));
+  for I := 1 to Length(Raw) do
+    Result[I - 1] := Byte(Raw[I]);
+end;
+{$ELSE}
+function Utf8Bytes(const S: string): TBytes;
+begin
+  Result := TEncoding.UTF8.GetBytes(S);
+end;
+{$ENDIF}
+
 function BuildLspFrameBytes(const AJsonBody: string): TBytes;
 var
   Utf8Body: TBytes;
@@ -248,12 +278,13 @@ var
   Framed: TBytes;
   ByteCount: Integer;
 begin
-  // Content-Length counts UTF-8 *bytes*, not characters.
-  ByteCount := TEncoding.UTF8.GetByteCount(AJsonBody);
-  // FPC's TEncoding.GetBytes takes ONE argument and RETURNS the array
-  // (rtl/.../sysencoding.inc). The Delphi form used here filled a
-  // caller-supplied buffer at an offset, and does not exist in this RTL.
-  Utf8Body := TEncoding.UTF8.GetBytes(AJsonBody);
+  // Content-Length counts UTF-8 *bytes*, not characters -- and it counts them
+  // from the bytes actually produced, not from a separate GetByteCount call.
+  // There is no UTF8Length in this RTL, and on a platform where the count and
+  // the encoding disagree the header would simply describe a body that is not
+  // there.
+  Utf8Body := Utf8Bytes(AJsonBody);
+  ByteCount := Length(Utf8Body);
 
   Header := 'Content-Length: ' + IntToStr(ByteCount) + #13#10#13#10;
 
@@ -262,7 +293,7 @@ begin
   // copied string ELEMENTS into a byte buffer: 1 byte each under AnsiString,
   // 2 under UnicodeString, and wrong in both cases. It compiled cleanly and
   // failed only at RUN time, as EEncodingError from the decoder.
-  Framed := TEncoding.UTF8.GetBytes(Header);
+  Framed := Utf8Bytes(Header);
 
   // The header must be COPIED, not merely counted. Sizing Result and writing
   // only the body past it produces a correctly-sized frame whose header is all

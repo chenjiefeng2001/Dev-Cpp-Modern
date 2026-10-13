@@ -229,6 +229,18 @@ begin
       Exit(False);
 end;
 
+// A TBytes rendered as space-separated decimal, for failure messages. The
+// numbers are the evidence; a decoded string is not, because raw UTF-8 bytes
+// reinterpreted as characters hide a wrong body behind plausible output.
+function ByteList(const A: TBytes): string;
+var
+  I: Integer;
+begin
+  Result := '';
+  for I := 0 to High(A) do
+    Result := Result + IntToStr(A[I]) + ' ';
+end;
+
 procedure CheckJsonRpcFraming;
 var
   Dec: TLspFrameDecoder;
@@ -290,6 +302,13 @@ begin
     [Length(Lit), Ord(Lit[1]),
      TEncoding.UTF8.GetByteCount(WideString(WideChar($4E2D))),
      TEncoding.UTF8.GetByteCount(AnsiString(WideChar($4E2D)))]));
+  // The BODY as exact bytes, not as a length. U+4E2D encodes to E4 B8 AD; the
+  // Linux runner produced a single 63 ('?') instead, which has the right LENGTH
+  // for a one-byte body and the wrong bytes. Pinning the vector makes this an
+  // assertion about the encoding, not about its size.
+  Probe.Check('U+4E2D encodes to E4 B8 AD on the wire',
+    BytesEqual(Copy(Frame1, HdrLen3, 3), [228, 184, 173]),
+    'body=' + ByteList(Copy(Frame1, HdrLen3, Length(Frame1) - HdrLen3)));
   Probe.Check('frame counts UTF-8 bytes, not characters',
     (BytesEqual(Copy(Frame1, 0, HdrLen3), BytesOf('Content-Length: 3'#13#10#13#10))) and
     (Length(Frame1) = HdrLen3 + 3),
