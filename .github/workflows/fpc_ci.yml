@@ -73,6 +73,11 @@ on:
       - "Tests/FpcCoreTests/syn/**"
       - "Source/**/*.dfm"
       - ".github/workflows/fpc_ci.yml"
+      # A change to line-ending policy changes what every gate below reads,
+      # and it does so without touching a single file any of them would
+      # otherwise see. Without this entry the commit that fixes a CI-only
+      # failure cannot demonstrate that it fixed one -- it does not trigger.
+      - ".gitattributes"
   pull_request:
     paths:
       - "Source/Core/**"
@@ -116,6 +121,11 @@ on:
       - "Tests/FpcCoreTests/forms/**"
       - "Tests/FpcCoreTests/syn/**"
       - "Source/**/*.dfm"
+      # A change to line-ending policy changes what every gate below reads,
+      # and it does so without touching a single file any of them would
+      # otherwise see. Without this entry the commit that fixes a CI-only
+      # failure cannot demonstrate that it fixed one -- it does not trigger.
+      - ".gitattributes"
   workflow_dispatch:
 
 permissions:
