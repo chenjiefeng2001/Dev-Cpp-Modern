@@ -81,10 +81,10 @@
       <OtherUnitFiles Value="../../Source/Core;../../Source/Debugger/GDB;../../Source/LSP/JsonRpc;../../Source/LSP/Transport;../../Source/LSP/Process;../../Source/Toolchain"/>
     </SearchPaths>
 <Parsing>
-      <SyntaxMode Value="Delphi"/>
       <UseAnsiStrings Value="True"/>
       <ParamCount Value="0"/>
       <SyntaxOptions>
+        <SyntaxMode Value="DelphiUnicode"/>
         <UseTypeHelpers Value="False"/>
       </SyntaxOptions>
     </Parsing>
