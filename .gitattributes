@@ -1,0 +1,35 @@
+# Line endings, stated in the repository instead of in each developer's config.
+#
+# Every gate in this project asserts CRLF, and none of them could rely on the
+# clone's settings:
+#
+#   qa_check.py             CRLF everywhere except FPC_DIRS, which it skips
+#   lcl_svg_struct_check.py "the repo is pure CRLF" over LclSvgImageList.pas
+#                           and SvgData.pas
+#   f3_lfm_check.py         CRLF over all 55 generated .lfm files
+#   f3_image_extract.py     byte identity between DataFrm.dfm and the generated
+#                           ImageCollectionData.pas
+#
+# What actually satisfied them was each Windows developer's LOCAL
+# core.autocrlf=true, which is recorded nowhere. The blobs are bare LF, so a CI
+# checkout on Linux -- where autocrlf does nothing -- handed five gates bare LF
+# and CI had been red on every run since at least 2026-10-07, on files nobody had
+# touched. Reproduced locally in a worktree with core.autocrlf=false before
+# changing anything.
+#
+# So the conversion moves into the repo, where a clone can see it. text=auto
+# leaves the 640 binary files alone.
+#
+# Scoped to CRLF rather than "whatever autocrlf says" deliberately: it makes a
+# Linux checkout byte-identical to a Windows one, which is the whole point. Two
+# checkouts of the same commit must not differ in a way a byte-identity gate can
+# see.
+#
+# This does not rewrite any blob. The files stay LF in the object store and are
+# converted on checkout; renormalising them would have been a repo-wide rewrite
+# touching 2119 files, none of which this commit is about.
+#
+# Verified in a worktree with core.autocrlf=false -- what a Linux runner sees --
+# that all six text gates pass, and that they still FAIL when a file inside
+# their scope is deliberately given bare LF. An attribute that silenced the
+# gates instead of satisfying them would leave CI green with the invariant broken.
