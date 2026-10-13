@@ -9,6 +9,7 @@
         <MainUnitHasResources Value="False"/>
       </Flags>
       <SessionStorageDirectory Value=""/>
+      <MainUnit Value="0"/>
     </General>
     <BuildMode>
       <Flags Name="Default">
@@ -27,38 +28,7 @@
     </BuildMode>
     <RequiredPackages Count="0"/>
     <UnitOutputDirectory Value="lib/$(TargetOS)"/>
-  </ProjectOptions>
-  <CompilerOptions>
-    <Version Value="11"/>
-    <SearchPaths>
-      <Other>
-        <Include Value="../../Source/Core"/>
-        <Include Value="../../Source/Debugger/GDB"/>
-        <Include Value="../../Source/LSP/JsonRpc"/>
-        <Include Value="../../Source/LSP/Transport"/>
-        <Include Value="../../Source/LSP/Process"/>
-        <Include Value="../../Source/Toolchain"/>
-      </Other>
-    </SearchPaths>
-    <Parsing>
-      <SyntaxMode Value="Delphi"/>
-      <UseAnsiStrings Value="True"/>
-      <ParamCount Value="0"/>
-      <SyntaxOptions>
-        <UseTypeHelpers Value="False"/>
-      </SyntaxOptions>
-    </Parsing>
-    <Linking>
-      <PassLinkerOptions Value="False"/>
-      <GenerateDebugInfo Value="True"/>
-      <StripSymbols Value="False"/>
-      <StaticLinked Value="False"/>
-    </Linking>
-    <Target>
-      <Filename Value="lib/$(TargetOS)/FpcCoreTestsWin"/>
-    </Target>
-  </CompilerOptions>
-  <Units Count="11">
+    <Units Count="11">
     <Unit0>
       <Filename Value="FpcCoreTests.lpr"/>
       <IsPartOfProject Value="True"/>
@@ -104,4 +74,35 @@
       <IsPartOfProject Value="True"/>
     </Unit10>
   </Units>
+  </ProjectOptions>
+  <CompilerOptions>
+    <Version Value="11"/>
+    <SearchPaths>
+      <Other>
+        <Include Value="../../Source/Core"/>
+        <Include Value="../../Source/Debugger/GDB"/>
+        <Include Value="../../Source/LSP/JsonRpc"/>
+        <Include Value="../../Source/LSP/Transport"/>
+        <Include Value="../../Source/LSP/Process"/>
+        <Include Value="../../Source/Toolchain"/>
+      </Other>
+    </SearchPaths>
+    <Parsing>
+      <SyntaxMode Value="Delphi"/>
+      <UseAnsiStrings Value="True"/>
+      <ParamCount Value="0"/>
+      <SyntaxOptions>
+        <UseTypeHelpers Value="False"/>
+      </SyntaxOptions>
+    </Parsing>
+    <Linking>
+      <PassLinkerOptions Value="False"/>
+      <GenerateDebugInfo Value="True"/>
+      <StripSymbols Value="False"/>
+      <StaticLinked Value="False"/>
+    </Linking>
+    <Target>
+      <Filename Value="lib/$(TargetOS)/FpcCoreTestsWin"/>
+    </Target>
+  </CompilerOptions>
 </CONFIG>
