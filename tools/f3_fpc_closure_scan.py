@@ -61,6 +61,14 @@ FU = [
     r"C:\lazarus\lcl\units\x86_64-win64\win32",
     r"C:\lazarus\lcl\units\x86_64-win64",
     r"C:\lazarus\components\lazutils\lib\x86_64-win64",
+    # The LCL `printers` package, for PrintersDlgs -- the unit that holds the
+    # concrete TPrinterSetupDialog (components\printers\printersdlgs.pp:103).
+    # LCL's own Dialogs declares only TCustomPrinterSetupDialog, whose Execute
+    # is abstract, so `PrinterSetupDialog.Execute` in main.pas fails with
+    # "Illegal qualifier" unless this package is on the path. Same situation as
+    # FPVectorial above: a real dependency that reads as a missing port.
+    r"C:\lazarus\components\printers\lib\x86_64-win64\win32",
+    r"C:\lazarus\components\printers\lib\x86_64-win64",
     r"C:\lazarus\components\synedit\units\x86_64-win64\win32",
     # The LCL synedit's SOURCE directory, not just its compiled units. The
     # win32 ppu dir alone is not enough: synedit.pp references LazSynIMMBase

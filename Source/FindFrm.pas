@@ -183,10 +183,10 @@ begin
     if cboFindText.Items.IndexOf(cboFindText.Text) = -1 then
       cboFindText.AddItem(cboFindText.Text, nil);
   end else begin
-    MessageBox(
+    MessageBoxW(
       Self.Handle,
-      PChar(Lang[ID_ERR_SEARCHCANNOTBEEMPTY]),
-      PChar(Lang[ID_INFO]),
+      PWideChar(Lang[ID_ERR_SEARCHCANNOTBEEMPTY]),
+      PWideChar(Lang[ID_INFO]),
       MB_ICONINFORMATION or MB_TOPMOST);
     cboFindText.SetFocus;
     Exit;
@@ -347,10 +347,10 @@ begin
   if actiontype = faFindFiles then begin
     MainUi.ShowFindResults(findcount);
   end else if findcount = 0 then begin
-    MessageBox(
+    MessageBoxW(
       Self.Handle,
-      PChar(Format(Lang[ID_MSG_TEXTNOTFOUND], [cboFindText.Text])),
-      PChar(Lang[ID_INFO]),
+      PWideChar(Format(Lang[ID_MSG_TEXTNOTFOUND], [cboFindText.Text])),
+      PWideChar(Lang[ID_INFO]),
       MB_ICONINFORMATION or MB_TOPMOST);
     cboFindText.SetFocus;
   end;

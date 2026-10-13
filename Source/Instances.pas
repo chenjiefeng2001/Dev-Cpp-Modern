@@ -76,10 +76,13 @@ end;
 procedure SendToPreviousInstance(Instance: THandle; const Data: String);
 var
   DataStruct: TCopyDataStruct;
-  Buffer: PChar;
+  Buffer: PWideChar;
 begin
   // Convert string to char array
-  Buffer := StrAlloc(Length(Data) + 1);
+  // StrAlloc returns PChar -- objfpc PAnsiChar -- under -Mdelphiunicode too, so
+  // it allocates bytes and the wide characters have to be sized in explicitly.
+  // StrPCopy below does honour delphiunicode and writes WideChars.
+  Buffer := PWideChar(StrAlloc((Length(Data) + 1) * SizeOf(WideChar)));
   try
     StrPCopy(Buffer, Data);
 
@@ -108,7 +111,7 @@ begin
   Result := True;
 
   // Get its class name (from WNDCLASSEX)
-  if GetClassName(Handle, Buffer, SizeOf(Buffer)) = 0 then
+  if GetClassNameW(Handle, Buffer, SizeOf(Buffer)) = 0 then
     Exit;
   WindowClassName := Buffer;
 
@@ -159,7 +162,7 @@ begin
   if (UniqueMutex <> 0) and (GetLastError = ERROR_ALREADY_EXISTS) then begin
     //ShowMessage('ERROR_ALREADY_EXISTS');
     // Store our own module filename
-    if GetModuleFileName(GetModuleHandle(nil), Buffer, SizeOf(Buffer)) = 0 then
+    if GetModuleFileNameW(GetModuleHandle(nil), Buffer, SizeOf(Buffer)) = 0 then
       Exit;
     ThisModuleFileName := Buffer;
 

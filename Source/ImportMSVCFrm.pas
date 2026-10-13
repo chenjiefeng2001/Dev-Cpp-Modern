@@ -83,6 +83,21 @@ implementation
 uses
   System.UITypes, IniFiles, StrUtils, version, MultiLangSupport, devcfg, utils;
 
+// FPC 3.2.2 ships AnsiExtractQuotedStr and no Unicode counterpart, and its
+// PChar is objfpc PAnsiChar. A Visual Studio project file can legitimately
+// carry non-ASCII paths, so the string crosses the ACP and comes back.
+// Same boundary, and same reason, as LclTextInput.UnicodeInputQuery.
+function ExtractQuotedStrACP(const S: String; Quote: Char): String;
+var
+  AnsiPath: AnsiString;
+  AP: PAnsiChar;
+begin
+  AnsiPath := TEncoding.Default.GetString(TEncoding.Default.GetBytes(S));
+  AP := PAnsiChar(AnsiPath);
+  Result := TEncoding.Default.GetString(
+    TEncoding.Default.GetBytes(AnsiExtractQuotedStr(AP, Quote)));
+end;
+
 {$R *.dfm}
 
 { TImportMSVCForm }
@@ -445,8 +460,8 @@ begin
       Inc(I);
       repeat
         if StartsText('# Name', fSL[I]) then begin
-          P := PChar(Trim(Copy(fSL[I], 7, Length(fSL[I]) - 6)));
-          Targets.Add(AnsiExtractQuotedStr(P, '"'));
+          Targets.Add(ExtractQuotedStrACP(
+            Trim(Copy(fSL[I], 7, Length(fSL[I]) - 6)), '"'));
           Result := True;
         end;
         Inc(I);
@@ -473,8 +488,7 @@ var
   P: PChar;
 begin
   if StartsText('"', s) and EndsText('"', s) then begin
-    P := PChar(S);
-    Result := AnsiExtractQuotedStr(P, '"');
+    Result := ExtractQuotedStrACP(S, '"');
   end
   else
     Result := S;

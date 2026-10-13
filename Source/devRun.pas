@@ -60,7 +60,13 @@ end;
 
 procedure TDevRun.Execute;
 begin
-  Output := RunAndGetOutput(Command, Directory, LineOutput, FCheckAbort);
+  // ShowReturnValue = False explicitly. The declaration carries no default,
+  // so the original four-argument call only compiled because Delphi had
+  // one; and the value is not arbitrary -- True appends the process exit
+  // code to the captured output (Utils.pas:588-592), which would corrupt
+  // the compiler output this form displays.
+  Output := RunAndGetOutput(Command, Directory, LineOutput, FCheckAbort,
+    False);
 end;
 
 end.

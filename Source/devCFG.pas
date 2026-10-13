@@ -24,7 +24,7 @@ interface
 uses
   Dialogs, Windows, Classes, Graphics, SynEdit, editor, CFGData, IniFiles, ProjectTypes, Math, ShellAPI, ShlObj,
   {$IFDEF FPC}
-  ComCtrls, System.UITypes, Themes, SynEditTextBuffer, SysUtils;
+  ComCtrls, System.UITypes, Themes, SynEditTextBuffer, SynEditTypes, SysUtils;
   {$ELSE}
   ComCtrls, System.UITypes, Vcl.Themes, SynEditTextBuffer, System.SysUtils;
   {$ENDIF}
@@ -1233,6 +1233,7 @@ end;
 
 procedure TdevCompilerSet.SetProperties(const BinDir, BinFile: String);
 var
+  AnsiOutput: AnsiString;
   output {,DummyFileName,Cmd}: String;
   DelimPos1, DelimPos2 {,DummyHandle}: integer;
 begin
@@ -1298,7 +1299,15 @@ begin
   // http://stackoverflow.com/questions/1335027/delphi-stringlist-delimiter-is-always-a-space-character-even-if-delimiter-is-se
   output := GetCompilerOutput(BinDir + pd, 'cpp.exe', '-dM -E -x c++ -std=gnu++11 NUL');
   // TODO: use command of current file
-  ExtractStrings([#10], [], PChar(output), fDefines);
+  // ExtractStrings' source parameter is PChar -- objfpc PAnsiChar -- while
+  // PAnsiChar, not PChar: under -Mdelphiunicode PChar is PWideChar and is a
+  // hard typecast rather than a string-to-pointer conversion, so PChar on an
+  // AnsiString would reinterpret the bytes instead of converting them.
+  // The delimiters are [#10] and
+  // [] which are both empty of high bytes, so the ACP round-trip here is
+  // lossless in practice; this is the same boundary as LclTextInput.
+  AnsiOutput := TEncoding.Default.GetString(TEncoding.Default.GetBytes(output));
+  ExtractStrings([#10], [], PAnsiChar(AnsiOutput), fDefines);
 end;
 
 procedure TdevCompilerSet.SetExecutables;
@@ -1361,7 +1370,10 @@ begin
 end;
 
 procedure TdevCompilerSet.SetOptions;
+  var
+  CPUNumber: Integer;
 var
+  sl2: TStringList;
   sl: TStringList;
 begin
 
@@ -1461,7 +1473,7 @@ begin
   AddOption(ID_COPT_ARCH, ID_COPT_GRP_CODEGEN, True, True, False, 0, '-march=', sl);
 
   // Optimization
-  var sl2 := TStringList.Create;
+  sl2 := TStringList.Create;
   sl2.Assign(sl);
   sl2.Insert(2, 'generic: Produce code optimized for the most common IA32/AMD64/EM64T processors=generic');
   sl2.Insert(3, 'intel: Produce code optimized for the most current Intel processors, which are Haswell and Silvermont for this version of GCC=intel');
@@ -1570,7 +1582,7 @@ begin
   sl := TStringList.Create;
   sl.Add(''); // /!\ Must contain a starting empty value in order to do not have always to pass the parameter
   sl.Add('1 Thread=1');
-  for var CPUNumber := 2 to System.CPUCount do begin
+  for CPUNumber := 2 to System.CPUCount do begin
     sl.Add(CPUNumber.ToString + ' Threads=' + CPUNumber.ToString);
   end;
   sl.Add('Auto=');
@@ -1633,7 +1645,7 @@ begin
     Result := Result + [PCompilerOption(fOptions[I])^.Value];
 end;
 
-procedure TdevCompilerSet.SetINIOptions(const value: TArray<Integer>);
+procedure TdevCompilerSet.SetINIOptions(const value: TCompilerOptionsValues);
 var
   I: integer;
 begin
@@ -1688,12 +1700,14 @@ var
 
   procedure RemoveDirs(var dirlist: TStringList; baddirs: String);
   var
+    AnsiAddDirs: AnsiString;
     i, index: integer;
     baddirlist: TStringList;
   begin
     baddirlist := TStringList.Create;
     try
-      ExtractStrings([';'], [], PChar(baddirs), baddirlist);
+      AnsiAddDirs := TEncoding.Default.GetString(TEncoding.Default.GetBytes(baddirs));
+      ExtractStrings([';'], [], PAnsiChar(AnsiAddDirs), baddirlist);
       for I := 0 to baddirlist.Count - 1 do begin
         index := dirlist.IndexOf(baddirlist[i]);
         if index <> -1 then
@@ -2374,7 +2388,10 @@ begin
   else
   begin
     // Get my documents folder
-    if SHGetSpecialFolderPath(Application.Handle, DocumentsPath, CSIDL_MYDOCUMENTS, false) then
+    // SHGetSpecialFolderPathW, not SHGetSpecialFolderPath: the unsuffixed
+    // declaration takes PChar -- objfpc PAnsiChar -- while DocumentsPath is
+    // an array of Char, and Char is WideChar under -Mdelphiunicode.
+    if SHGetSpecialFolderPathW(Application.Handle, PWideChar(DocumentsPath), CSIDL_MYDOCUMENTS, false) then
       fDefault := DocumentsPath
     else
       fDefault := fExec;
@@ -2469,7 +2486,12 @@ begin
   fParserHints := TRUE; // Editor hints
   fShowFunctionTip := TRUE;
   fTrimTrailingSpaces := FALSE;
-  fNewDocEncoding := DefaultEncodingNames[0]; //ANSI
+  // Was `DefaultEncodingNames[0]`, annotated //ANSI. That is a Delphi RTL
+  // array, absent here, and its names are a different vocabulary from the
+  // CPName values this application actually stores in devcpp.ini. Take the
+  // first name of this project's own table instead -- see
+  // MultiLangSupport.StandardEncodingFromName.
+  fNewDocEncoding := FirstNewDocEncodingName;
   
   // Caret
   fInsertCaret := 0;

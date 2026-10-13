@@ -257,6 +257,52 @@ type
       (CPID: 65001; CPName: 'utf-8')
     );
 
+{ Resolving an encoding. Two shapes, because the call sites disagree about what
+  they are holding:
+
+    Editor.pas / main.pas    StandardEncodingFromName(Encodings[LEncIndex])
+                            -- an entire TCPData row, straight out of the table
+    devCFG.pas               StandardEncodingFromName(fNewDocEncoding)
+                            -- a string, out of devcpp.ini
+
+  So there are two overloads rather than one function and a `.CPName` bolted on
+  at each call site, which keeps the round-trip through the ini honest: the name
+  the combo stores is the name the table is searched for.
+
+  Neither the record overload nor Delphi's RTL had to be changed. Delphi's
+  StandardEncodingFromName is a string function and TCPData has no implicit
+  conversion, so the indexed call sites could not have been feeding it a record
+  in the first place.
+
+  The string overload is FPC-only on purpose. FPC has no such function at all --
+  probing it with every RTL unit in scope gives
+      probe_tmp.pas(11,8) Error: Identifier not found "StandardEncodingFromName"
+  -- whereas on Delphi the existing RTL one still resolves, and shadowing it
+  would quietly change which vocabulary the ini is read against. }
+function StandardEncodingFromName(const AData: TCPData): TEncoding; overload;
+
+{$IFDEF FPC}
+function StandardEncodingFromName(const AName: String): TEncoding; overload;
+{$ENDIF}
+
+{ Fills AList with the distinct CPName values of Encodings, in table order.
+
+  Deduped because the table carries one row per LANGUAGE but the combo needs one
+  row per ENCODING: windows-1250 appears seven times (Croatian, Czech, Hungarian,
+  Polish, Romanian, Slovak, Slovenian), windows-1251 twice, iso-8859-4 twice, and
+  only CPLang distinguishes them. First CPLang wins, per decision -- the label is
+  not persisted, so it only affects what the user reads.
+
+  20 rows collapse to 14. The value added is always a bare CPName, which is what
+  StandardEncodingFromName and the ini agree on. }
+procedure AddNewDocEncodingNames(AList: TStrings);
+
+{ The default for a brand-new document: the first entry of the same
+  deduped list the combo is built from, so the default is always one of
+  the names the user can actually pick. devCFG.pas assigned
+  DefaultEncodingNames[0] before, annotated //ANSI. }
+function FirstNewDocEncodingName: String;
+
 function Lang: TdevMultiLangSupport;
 
 { The language table, as a plain object because the call sites name it as one:
@@ -275,6 +321,56 @@ uses
   {$ELSE}
   System.WideStrUtils, System.UITypes, LangFrm, Forms, Utils, Version, Controls, devCFG;
   {$ENDIF}
+
+function StandardEncodingFromName(const AData: TCPData): TEncoding;
+begin
+  Result := TEncoding.GetEncoding(AData.CPID);
+end;
+
+{$IFDEF FPC}
+function StandardEncodingFromName(const AName: String): TEncoding;
+var
+  I: Integer;
+begin
+  Result := nil;
+  for I := 0 to MaxEncodings - 1 do
+    if SameText(Encodings[I].CPName, AName) then
+    begin
+      Result := StandardEncodingFromName(Encodings[I]);
+      Exit;
+    end;
+
+  // An unknown name must not become a nil TEncoding: Editor.pas feeds the
+  // result straight into TStringStream.Create and Lines.LoadFromStream, and a
+  // nil there is a crash on the open-file path rather than a bad default.
+  if Result = nil then
+    Result := TEncoding.Default;
+end;
+{$ENDIF}
+
+function FirstNewDocEncodingName: String;
+begin
+  Result := Encodings[0].CPName;
+end;
+
+procedure AddNewDocEncodingNames(AList: TStrings);
+var
+  I, J: Integer;
+  AlreadyListed: Boolean;
+begin
+  for I := 0 to MaxEncodings - 1 do
+  begin
+    AlreadyListed := False;
+    for J := 0 to I - 1 do
+      if SameText(Encodings[J].CPName, Encodings[I].CPName) then
+      begin
+        AlreadyListed := True;
+        Break;
+      end;
+    if not AlreadyListed then
+      AList.Add(Encodings[I].CPName);
+  end;
+end;
 
 constructor TLanguageList.Create;
 begin

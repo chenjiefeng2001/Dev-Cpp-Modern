@@ -36,9 +36,17 @@ uses
 // (e.g. project load/save) are injected as delegates by the host.
 
 type
-  TProjectLoadDelegate = reference to function(const AFileName: string): Boolean;
-  TProjectSaveDelegate = reference to function: Boolean;
-  TEditorLookupDelegate = reference to function(const AFileName: string): TObject;
+  // Method pointers, not `reference to` closures. FPC 3.2.2 has no anonymous
+  // functions, so `reference to` cannot be shimmed at all -- see the
+  // matching note in Core.Events.pas and Lsp.Client.UiQueue.pas, and the
+  // probe recorded in ConsoleAppHostFrm.pas.
+  //
+  // The change is inert here: the one caller, MainForm.FormCreate
+  // (main.pas:6387), passes nil for all three, and TEditorLookupDelegate has
+  // no reference at all.
+  TProjectLoadDelegate = function(const AFileName: string): Boolean of object;
+  TProjectSaveDelegate = function: Boolean of object;
+  TEditorLookupDelegate = function(const AFileName: string): TObject of object;
 
   TProjectServiceImpl = class(TInterfacedObject, IProjectService)
   private

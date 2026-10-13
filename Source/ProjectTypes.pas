@@ -344,19 +344,34 @@ end;
 { TCompilerOptionsHelper }
 
 class function TCompilerOptionsValuesHelper.FromString(const AStr: string): TArray<Integer>;
+var
+  Parts: TStringList;
+  I: Integer;
 begin
   Result := [];
-  if AStr.IndexOf(';')>-1 then
+  // Pos/Trim/TStringList rather than AStr.IndexOf, AStr.Split and OV.Trim: FPC
+  // 3.2.2's only TStringHelper is `Type Helper for AnsiString`, and under
+  // -Mdelphiunicode `string` is UnicodeString, so none of those three resolve.
+  if Pos(';', AStr) > 0 then
   begin
     // read compiler options with a ; delimiter
-    for var OV in AStr.Split([';']) do
-      Result := Result + [StrToIntDef(OV.Trim, 0)];
+    Parts := TStringList.Create;
+    try
+      Parts.StrictDelimiter := True;
+      Parts.Delimiter := ';';
+      Parts.DelimitedText := AStr;
+      for I := 0 to Parts.Count - 1 do
+        Result := Result + [StrToIntDef(Trim(Parts[I]), 0)];
+    finally
+      Parts.Free;
+    end;
   end
   else
   begin
-    // read compiler options that have no delimiter
-    for var OV in AStr do
-      Result := Result + [StrToIntDef(OV, 0)];
+    // read compiler options that have no delimiter: one character per option,
+    // which is the on-disk format the writer below still emits
+    for I := 1 to Length(AStr) do
+      Result := Result + [StrToIntDef(AStr[I], 0)];
   end;
 end;
 
@@ -369,9 +384,11 @@ begin
 end;
 
 function TCompilerOptionsValuesHelper.ToString: string;
+  var
+  OV: Integer;
 begin
   Result := '';
-  for var OV in Self do
+  for OV in Self do
     if Result = '' then
       Result := OV.ToString
     else

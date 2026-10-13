@@ -121,12 +121,18 @@ var
   S: String;
 begin
   S := TLabel(Sender).Caption;
-  ShellExecute(GetDesktopWindow(), 'open', PChar(s), nil, nil, SW_SHOWNORMAL);
+  // ShellExecuteW, as elsewhere: PChar is PWideChar in this unit and the ANSI
+  // entry point wants objfpc PAnsiChar.
+  ShellExecuteW(GetDesktopWindow(), 'open', PWideChar(s), nil, nil, SW_SHOWNORMAL);
 end;
 
 procedure TAboutForm.FormCreate(Sender: TObject);
 var
   datestring: String;
+  // Hoisted out of the body: FPC 3.2.2 rejects a mid-body
+  // `var f: Double := 1;` with
+  //     AboutFrm.pas(140,3) Error: Illegal expression
+  f: Double;
 begin
   LoadText;
 
@@ -137,7 +143,7 @@ begin
   if FileExists(devData.Splash) then // TODO: check all folders?
     imgBanner.Picture.LoadFromFile(devData.Splash);
 
-  var f: Double := 1;
+  f := 1;
   if Assigned(imgBanner.Picture) then
     f := imgBanner.Picture.Height / imgBanner.Picture.Width;
 

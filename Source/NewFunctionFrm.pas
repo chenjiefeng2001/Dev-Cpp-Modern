@@ -132,7 +132,15 @@ begin
   else
     VarScope := scsNone; // shut up compiler
   end;
-  Line := MainUi.SuggestMemberInsertionLine(st, VarScope, AddScopeStr);
+  // Ord(VarScope): MainUi.SuggestMemberInsertionLine takes AScope as Integer, and
+  // FPC will not implicitly widen TStatementClassScope to it. NewVarFrm.pas
+  // already spells it Ord(scsPublic) at the same call.
+  // TObject(st), not st: TStatement is a RECORD (CBUtils.pas:70), so there is
+  // no inheritance to widen along -- and MainUi's facade slot carries the
+  // POINTER, casting it back with PStatement(AStatement). FPC requires the
+  // pointer-to-object cast to be explicit.
+  Line := MainUi.SuggestMemberInsertionLine(TObject(st), Ord(VarScope),
+    AddScopeStr);
   if Line = -1 then begin
     MessageDlg(Lang[ID_NEWVAR_MSG_NOLINE], mtError, [mbOk], 0);
     Exit;

@@ -286,7 +286,12 @@ end;
 
 //----------------------------------------------------------------------------------------------------------------------
 
-procedure TCodeToolTip.ActivateHint(Rect: TRect; const AHint: String);
+// AnsiString, matching the declaration above: the LCL's
+// THintWindow.ActivateHint takes AnsiString (hintwindow.inc:260) because its
+// own units are objfpc. This unit is -Mdelphiunicode, where `String` is
+// UnicodeString, and the two do not match -- which is exactly what
+// "function header doesn't match any method of this class" was reporting.
+procedure TCodeToolTip.ActivateHint(Rect: TRect; const AHint: AnsiString);
 begin
   inherited;
   FActivated := True;

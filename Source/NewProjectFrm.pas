@@ -24,7 +24,15 @@ interface
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
   StdCtrls, ExtCtrls, ImgList, Buttons, ComCtrls, Templates, Inifiles,
-  SVGIconImageListBase, SVGIconImageList;
+  // LclSvgImageList, not SVGIconImageList{,Base}. The DFM's TSVGIconImageList
+  // became TLclSvgImageList, and the converter already wrote that into
+  // NewProjectFrm.lfm (line 144), so the field type has to match the class the
+  // fragment streams or the component will not resolve.
+  //
+  // No carrier here, unlike DataFrm: this list is a DIRECT child of the form in
+  // the LFM, so a published field of the same name streams it exactly as the
+  // DFM declared it. `ListName` then makes it pull its own data out of SvgData.
+  LclSvgImageList;
 
 type
   TNewProjectForm = class(TForm)
@@ -39,7 +47,7 @@ type
     ProjView: TListView;
     TemplateLabel: TLabel;
     btnHelp: TBitBtn;
-    SVGIconImageList: TSVGIconImageList;
+    SVGIconImageList: TLclSvgImageList;
     ImageList: TImageList;
     procedure ProjViewChange(Sender: TObject; Item: TListItem; Change: TItemChange);
     procedure FormCreate(Sender: TObject);

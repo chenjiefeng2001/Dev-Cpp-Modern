@@ -197,7 +197,7 @@ begin
     MRUMax := seMRUMax.Value;
     if not MultiLineTab then begin
       if cboTabsTop.ItemIndex in [2, 3] then begin
-        MessageBox(application.handle, PChar(Lang[ID_ENV_MULTILINETABERROR]), PChar(Lang[ID_ERROR]), MB_OK);
+        MessageBoxW(application.handle, PWideChar(Lang[ID_ENV_MULTILINETABERROR]), PChar(Lang[ID_ERROR]), MB_OK);
         cboTabsTop.ItemIndex := 0;
       end;
     end;
@@ -234,7 +234,7 @@ begin
       else
         Unassociate(I);
   except
-    MessageBox(application.handle, PChar(Lang[ID_ENV_UACERROR]), PChar(Lang[ID_ERROR]), MB_OK);
+    MessageBoxW(application.handle, PWideChar(Lang[ID_ENV_UACERROR]), PChar(Lang[ID_ERROR]), MB_OK);
     devData.CheckAssocs := false; // don't bother the user again on next startup
   end;
 
@@ -251,6 +251,8 @@ begin
 end;
 
 procedure TEnviroForm.ListBoxStyleClick(Sender: TObject);
+var
+  I: Integer;
 begin
   if devData.Style = 0 then
   begin
@@ -262,11 +264,18 @@ begin
   begin
     Panel1.Visible := true;
     viThemePreview.Visible := false;
+    // TPanel.StyleName is a VCL styles hook. There is no LCL equivalent -- the
+    // same "LCL has no styles service" boundary already recorded for
+    // TStyleManager, DrawStyleEdge and VclPropertySkips' StyleElements entries.
+    {$IFNDEF FPC}
     Panel1.StyleName := cDelphiStyle[ListBoxStyle.ItemIndex];
+    {$ENDIF}
     Panel1.Repaint;
-    for var I := 0 to Panel1.ControlCount-1 do
-     Panel1.Controls[i].Repaint;
-    end;
+    // Hoisted out of the for-header: FPC 3.2.2 has no inline for-loop variables.
+    // Note the body used a lowercase `i` while the header declared `I`.
+    for I := 0 to Panel1.ControlCount-1 do
+      Panel1.Controls[I].Repaint;
+  end;
 end;
 
 procedure TEnviroForm.LoadText;

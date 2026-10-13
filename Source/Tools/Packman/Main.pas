@@ -492,9 +492,11 @@ begin
 end;
 
 procedure TMainForm.SetStyle(SelStyleName: string);
+  var
+  i: Integer;
 begin
   if TStyleManager.TrySetStyle(SelStyleName) then begin
-    for var i := 0 to StylesMenu.Count - 1 do
+    for i := 0 to StylesMenu.Count - 1 do
       StylesMenu.Items[i].Checked := StylesMenu.Items[i].Caption.Replace('&', '').Equals(SelStyleName);
 
     //ConfigPackman.SetStyle(SelStyleName);

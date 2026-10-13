@@ -9,7 +9,13 @@ uses
   System.SysUtils, System.Classes, Winapi.Windows, Vcl.Forms, Vcl.ComCtrls,
   {$ENDIF}
   {$IFDEF FPC}
-  ExtCtrls, MultiLangSupport;
+  // PStatementNode / TStatementNode are declared in StatementList
+  // (StatementList.pas:28-29); without it the class-list helpers below
+  // cannot name their node type.
+  ExtCtrls, MultiLangSupport, StatementList,
+  // TTarget, and with it the ctProject constant, are declared in
+  // Compiler.pas:36; the compile-target branch below needs both.
+  Compiler;
   {$ELSE}
   Vcl.ExtCtrls, MultiLangSupport;
   {$ENDIF}
@@ -27,7 +33,7 @@ uses
 //
 // Semantics of each entry point mirror the previous inline call sites exactly:
 //   CompileProgressReset(Max)  == Min := 0; Max := N; Position := 0
-//   ShowError(Text)            == MessageBox(MainForm.Handle, ..., ID_ERROR)
+//   ShowError(Text)            == MessageBoxW(MainForm.Handle, ..., ID_ERROR)
 // Compiler.pas was the first consumer (22 references removed).
 // ---------------------------------------------------------------------------
 
@@ -691,6 +697,8 @@ uses
   CBUtils, CPUFrm, main;
 
 procedure RefreshAppTitle;
+var
+  TempCpp, TempH: AnsiString;
 begin
   if Assigned(MainForm) then
     MainForm.UpdateAppTitle;
@@ -738,7 +746,7 @@ procedure ShowError(const AMessage: string);
 begin
   if not Assigned(MainForm) then
     Exit;
-  MessageBox(MainForm.Handle, PChar(AMessage), PChar(Lang[ID_ERROR]),
+  MessageBoxW(MainForm.Handle, PWideChar(AMessage), PWideChar(Lang[ID_ERROR]),
     MB_OK or MB_ICONERROR);
 end;
 
@@ -1324,16 +1332,6 @@ begin
   Result := MainForm.EditorList.GetEditor.FileName;
 end;
 
-function ActiveEditorFileName: string;
-begin
-  Result := '';
-  if not Assigned(MainForm) then
-    Exit;
-  // No nil guard on GetEditor -- see the interface note: the original call
-  // sites dereferenced a possibly-nil TEditor through .FileName.
-  Result := MainForm.EditorList.GetEditor.FileName;
-end;
-
 { Project identity slice implementation }
 
 function IsProjectFile(const AFileName: string): Boolean;
@@ -1358,7 +1356,9 @@ begin
   Result := '';
   if not Assigned(MainForm) or not Assigned(MainForm.Project) then
     Exit;
-  Result := MainForm.Project.ListUnitStr(ASeparator);
+  // ListUnitStr(Separator: char), while this facade takes a string -- the
+  // separator is a single character, so pass the first one.
+  Result := MainForm.Project.ListUnitStr(ASeparator[1]);
 end;
 
 function ProjectName: string;
@@ -1433,14 +1433,27 @@ begin
     Exit;
   if PStatement(Node.Data)^._Kind <> skClass then
     Exit;
-  Result := PStatement(Node.Data);
+  // TObject(...) explicitly: TStatement is a record (CBUtils.pas:70), so there
+  // is no class relationship for the compiler to widen along.
+  Result := TObject(PStatement(Node.Data));
 end;
 
 procedure ListClassNames(AList: TStrings);
+var
+  Temp: TStringList;
 begin
   if not Assigned(MainForm) then
     Exit;
-  TCppParser(MainForm.CppParser).GetClassesList(AList);
+  // CppParser.GetClassesList declares a TStringList, and the facade's contract is
+  // TStrings, so go through a temporary and copy back rather than narrowing the
+  // public signature to the concrete type.
+  Temp := TStringList.Create;
+  try
+    TCppParser(MainForm.CppParser).GetClassesList(Temp);
+    AList.Assign(Temp);
+  finally
+    Temp.Free;
+  end;
 end;
 
 function IsClassInCurrentProject(const AClassName: string): Boolean;
@@ -1468,13 +1481,20 @@ end;
 
 procedure ClassSourcePair(const ADefinitionFile: string; out ACppFile,
   AHeaderFile: string);
+var
+  TempCpp, TempH: AnsiString;
 begin
   ACppFile := '';
   AHeaderFile := '';
   if not Assigned(MainForm) then
     Exit;
-  TCppParser(MainForm.CppParser).GetSourcePair(ADefinitionFile, ACppFile,
-    AHeaderFile);
+  // GetSourcePair's out-parameters are AnsiString because CppParser is one of
+  // the {$mode objfpc} units in Source/Fpc/UI/ClassBrowsing, while this facade
+  // is delphiunicode. The crossing happens here rather than by retyping the
+  // facade, which callers use with UnicodeString throughout.
+  TCppParser(MainForm.CppParser).GetSourcePair(ADefinitionFile, TempCpp, TempH);
+  ACppFile := TempCpp;
+  AHeaderFile := TempH;
 end;
 
 function SuggestMemberInsertionLine(AStatement: TObject; AScope: Integer;
@@ -1538,7 +1558,20 @@ procedure CopyProjectViewTo(AListView: TListView);
 begin
   if not Assigned(MainForm) or not Assigned(AListView) then
     Exit;
+  // Recorded loss: LCL's TListView has no `Images` property and no public
+  // setter either. It keeps an ARRAY of lists keyed by TListViewImageList
+  // (comctrls.pp:1413-1415, lvilSmall/lvilLarge/lvilState), but every accessor
+  // is private: GetImageList at :1459, SetImageList at :1480, SetImageListWS
+  // at :1482 -- all under `private`. So there is no supported way to hand a
+  // caller an image list, and this cannot be mapped the way StyleServices or
+  // TButton.Glyph could.
+  //
+  // The items below are still copied, so the list is complete; what is lost is
+  // the project's themed icons in the project-options file list, which fall back
+  // to the destination list's own images.
+  {$IFNDEF FPC}
   AListView.Images := MainForm.ProjectView.Images;
+  {$ENDIF}
   AListView.Items.Assign(MainForm.ProjectView.Items);
 end;
 
@@ -1639,7 +1672,7 @@ procedure SetGdbCommandUserOwned(AValue: Boolean);
 begin
   if not Assigned(MainForm) then
     Exit;
-  MainForm.fDebugger.CommandChanged := AValue;
+  MainForm.Debugger.CommandChanged := AValue;
 end;
 
 procedure EchoGdbCommand(const ACommand, AParams: string);
@@ -1656,7 +1689,7 @@ begin
 
   // The echo consumed the right to overwrite: the box now holds an engine
   // command, not the user's word.
-  MainForm.fDebugger.CommandChanged := False;
+  MainForm.Debugger.CommandChanged := False;
 end;
 
 procedure ApplyEditorAutoSave(const AEnabled: Boolean;

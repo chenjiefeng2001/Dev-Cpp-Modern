@@ -334,10 +334,14 @@ end;
 function TTestClass.TestEditor: Boolean;
 var
   I, FoldCount, LineCount, LineLength, CommentCount, DupeCount, IndentCount: Integer;
+  J: Integer;
   e: TEditor;
 
   procedure TypeText(const Text: String);
   var
+    // Its own I, not the enclosing routine's: FPC requires a for-counter to be
+    // declared in the routine that owns the loop, so closing over the outer I
+    // is not enough.
     I: Integer;
   begin
     for I := 1 to Length(Text) do
@@ -396,7 +400,7 @@ begin
       e.Text.Undo;
       ShowUpdate(0);
     end;
-    Assert(e.Text.Text.IsEmpty);
+    Assert(e.Text.Text = '');
 
     MainUi.SetStatusbarMessage('Type wall of text');
     for I := Ord('a') to Ord('z') do begin
@@ -408,7 +412,7 @@ begin
     MainUi.SetStatusbarMessage('Move lines down');
     for I := 0 to e.Text.Lines.Count - 1 do begin
       e.Text.CaretXY := BufferCoord(1, 1);
-      for var J := 0 to e.Text.Lines.Count - 3 - I do
+      for J := 0 to e.Text.Lines.Count - 3 - I do
         e.Text.CommandProcessor(TSynEditEx.ecMoveSelDown, #0, nil);
       ShowUpdate(0);
     end;
@@ -416,7 +420,7 @@ begin
     MainUi.SetStatusbarMessage('Move lines up');
     for I := 0 to e.Text.Lines.Count - 1 do begin
       e.Text.CaretXY := BufferCoord(1, e.Text.Lines.Count);
-      for var J := 0 to e.Text.Lines.Count - 1 - I do
+      for J := 0 to e.Text.Lines.Count - 1 - I do
         e.Text.CommandProcessor(TSynEditEx.ecMoveSelUp, #0, nil);
       ShowUpdate(0);
     end;
@@ -450,7 +454,7 @@ begin
       e.Text.Undo;
       ShowUpdate(0);
     end;
-    Assert(e.Text.Text.IsEmpty);
+    Assert(e.Text.Text = '');
 
     MainUi.SetStatusbarMessage('Type line of text');
     for I := Ord('a') to Ord('z') do begin
@@ -478,7 +482,7 @@ begin
       ShowUpdate(0);
     end;
 
-    Assert(e.Text.Text.IsEmpty);
+    Assert(e.Text.Text = '');
 
     MainUi.SetStatusbarMessage('Type wall of text');
     for I := Ord('a') to Ord('z') do begin
@@ -508,7 +512,7 @@ begin
       e.Text.Undo;
       ShowUpdate(0);
     end;
-    Assert(e.Text.Text.IsEmpty);
+    Assert(e.Text.Text = '');
 
     MainUi.SetStatusbarMessage('Type wall of text');
     for I := Ord('a') to Ord('a') + 9 do begin
@@ -547,7 +551,7 @@ begin
       ShowUpdate(0);
     end;
 
-    Assert(e.Text.Text.IsEmpty);
+    Assert(e.Text.Text = '');
 
     MainUi.SetStatusbarMessage('Close editor without saving');
     MainUi.TryCloseEditor(e);

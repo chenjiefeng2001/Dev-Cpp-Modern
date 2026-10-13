@@ -169,7 +169,9 @@ begin
   else
     VarScope := scsNone; // shut up compiler
   end;
-  Line := MainUi.SuggestMemberInsertionLine(st, VarScope, AddScopeStr);
+  // TObject(st), not st -- see NewFunctionFrm.pas for the same call site.
+  Line := MainUi.SuggestMemberInsertionLine(TObject(st), Ord(VarScope),
+    AddScopeStr);
   if Line = -1 then begin
     MessageDlg(Lang[ID_NEWVAR_MSG_NOLINE], mtError, [mbOk], 0);
     Exit;
@@ -177,7 +179,8 @@ begin
 
   // Ask CppParser for insertion line suggestion of getter/setter
   if chkReadFunc.Checked or chkWriteFunc.Checked then begin
-    GetSetLine := MainUi.SuggestMemberInsertionLine(st, Ord(scsPublic), GetSetAddScopeStr);
+    GetSetLine := MainUi.SuggestMemberInsertionLine(TObject(st), Ord(scsPublic),
+      GetSetAddScopeStr);
     if Line = -1 then begin
       MessageDlg(Lang[ID_NEWVAR_MSG_NOLINE], mtError, [mbOk], 0);
       Exit;

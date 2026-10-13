@@ -24,7 +24,21 @@ interface
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
   Buttons, StdCtrls, Inifiles, ExtCtrls, ComCtrls, Spin, Math,
-  CompOptionsFrame;
+  CompOptionsFrame
+  {$IFDEF FPC}
+  , LclTextInput
+  {$ENDIF}
+;
+{$IFNDEF FPC}
+// Delphi's Dialogs.InputQuery is already Unicode, so the FPC compat helper is a
+// straight pass-through here. Declared so that the call sites below read the
+// same on both compilers -- one call site, not two that can drift apart.
+function UnicodeInputQuery(const ACaption, APrompt: UnicodeString;
+  var AValue: UnicodeString): Boolean;
+begin
+  Result := InputQuery(ACaption, APrompt, AValue);
+end;
+{$ENDIF}
 
 type
   TCompOptForm = class(TForm)
@@ -501,7 +515,7 @@ var
   S: String;
 begin
   S := 'New compiler';
-  if not InputQuery(Lang[ID_COPT_NEWCOMPSET], Lang[ID_COPT_PROMPTNEWCOMPSET], S) or (S = '') then
+  if not UnicodeInputQuery(Lang[ID_COPT_NEWCOMPSET], Lang[ID_COPT_PROMPTNEWCOMPSET], S) or (S = '') then
     Exit;
 
   // Add empty compiler set
@@ -569,7 +583,7 @@ var
 begin
   if cmbCompilerSetComp.ItemIndex <> -1 then begin
     S := cmbCompilerSetComp.Text;
-    if not InputQuery(Lang[ID_COPT_RENAMECOMPSET], Lang[ID_COPT_PROMPTRENAMECOMPSET], S) or (S = '') or (S =
+    if not UnicodeInputQuery(Lang[ID_COPT_RENAMECOMPSET], Lang[ID_COPT_PROMPTRENAMECOMPSET], S) or (S = '') or (S =
       cmbCompilerSetComp.Text) then
       Exit;
 

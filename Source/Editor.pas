@@ -23,7 +23,7 @@ interface
 
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs, CodeCompletion, CppParser,
-  SynEditExport, SynExportRTF, Menus, ImgList, ComCtrls, StdCtrls, ExtCtrls, SynEdit, SynEditKeyCmds, version,
+  SynEditExport, SynExportRTF, SynExportTeX, Menus, ImgList, ComCtrls, StdCtrls, ExtCtrls, SynEdit, SynEditKeyCmds, version,
   SynEditCodeFolding, SynExportHTML, SynEditTextBuffer, Math, StrUtils, SynEditTypes, SynEditHighlighter, DateUtils,
   {$IFDEF FPC}
   CodeToolTip, CBUtils, System.UITypes, Contnrs, SynEditPrint, Vcl.ExtDlgs,
@@ -208,7 +208,12 @@ type
     procedure EditorSpecialLineColors(Sender: TObject; Line: integer; var Special: boolean; var FG, BG: TColor);
     procedure EditorPaintTransient(Sender: TObject; Canvas: TCanvas; TransientType: TTransientType);
     procedure EditorEnter(Sender: TObject);
-    procedure CompletionKeyPress(Sender: TObject; var Key: Char);
+    // AnsiChar, not Char: this handler is assigned to
+    // TCodeCompletion.OnKeyPress, which is the LCL's TKeyPressEvent, and
+    // CodeCompletion.pas is objfpc -- so its Char is AnsiChar. A `Char`
+    // (WideChar under -Mdelphiunicode) does not satisfy it. The body widens
+    // once at the top. Same ACP boundary as LclTextInput.
+    procedure CompletionKeyPress(Sender: TObject; var Key: AnsiChar);
     procedure CompletionInsert(const append: String);
     procedure CompletionTimer(Sender: TObject);
     function FunctionTipAllowed: boolean;
@@ -491,9 +496,15 @@ type
 
 constructor TEditor.Create(const Filename: String; InProject, NewFile: boolean; ParentPageControl: TPageControl; AEncoding: TEncoding);
 var
+  EmptyStream: TStringStream;
+var
   s: String;
   I: integer;
   e: TEditor;
+  // Hoisted out of the body: FPC 3.2.2 rejects a mid-body
+  // `var IsUTF8 := ...` with
+  //     Editor.pas(532,7) Error: Illegal expression
+  IsUTF8: Boolean;
 begin
   // Set generic options
   fErrorLine := -1;
@@ -529,7 +540,7 @@ begin
 
     if (AEncoding = nil) then
     begin
-      var IsUTF8 := UTF8FileBOM(FileName);
+      IsUTF8 := UTF8FileBOM(FileName);
 
       if not IsUTF8 then
         IsUTF8 := FileMayBeUTF8(FileName);
@@ -552,7 +563,7 @@ begin
   end else
   begin
     // Initialize Lines
-    var EmptyStream := TStringStream.Create('', devEditor.GetNewDocEncoding);
+    EmptyStream := TStringStream.Create('', devEditor.GetNewDocEncoding);
     fText.Lines.LoadFromStream(EmptyStream, devEditor.GetNewDocEncoding);
     EmptyStream.Free;
 
@@ -574,7 +585,7 @@ begin
   fText.OnSpecialLineColors := EditorSpecialLineColors;
   fText.OnEnter := EditorEnter;
   fText.OnExit := EditorExit;
-  fText.OnKeyPress := EditorKeyPress;
+  fText.AddWideKeyPressHandler(EditorKeyPress);
   fText.OnKeyDown := EditorKeyDown;
   fText.OnKeyUp := EditorKeyUp;
   fText.OnPaintTransient := EditorPaintTransient;
@@ -588,7 +599,11 @@ begin
   fHoverTimer.OnTimer := OnHoverTimer;
   fHoverCoordValid := False;
 
+  // StyleName is a VCL styles hook; the LCL has no styles service. Same
+  // boundary as TPanel.StyleName in EnviroFrm and DrawStyleEdge.
+  {$IFNDEF FPC}
   fText.StyleName := '';
+  {$ENDIF}
   fText.ParentFont := False;
 
   // Set the variable options
@@ -1242,52 +1257,52 @@ end;
 
 function TCustomSynEditHelper.GetInternalfBlockBegin: TBufferCoord;
 begin
-  with Self do Result := fBlockBegin;
+  Result := Self.InternalBlockBegin;
 end;
 
 function TCustomSynEditHelper.GetInternalfBlockEnd: TBufferCoord;
 begin
-  with Self do Result := fBlockEnd;
+  Result := Self.InternalBlockEnd;
 end;
 
 function TCustomSynEditHelper.GetPlugins: TObjectList;
 begin
-  with Self do Result := fPlugins;
+  Result := Self.InternalPlugins;
 end;
 
 function TCustomSynEditHelper.GetStateFlags: TSynStateFlags;
 begin
-  with Self do Result := fStateFlags;
+  Result := Self.InternalStateFlags;
 end;
 
 function TCustomSynEditHelper.GetStatusChanges: TSynStatusChanges;
 begin
-  with Self do Result := fStatusChanges;
+  Result := Self.InternalStatusChanges;
 end;
 
 procedure TCustomSynEditHelper.SetInternalfBlockBegin(const Value: TBufferCoord);
 begin
-  with Self do fBlockBegin := Value;
+  Self.InternalBlockBegin := Value;
 end;
 
 procedure TCustomSynEditHelper.SetInternalfBlockEnd(const Value: TBufferCoord);
 begin
-  with Self do fBlockEnd := Value;
+  Self.InternalBlockEnd := Value;
 end;
 
 procedure TCustomSynEditHelper.SetStateFlags(AStateFlags: TSynStateFlags);
 begin
-  with Self do fStateFlags := AStateFlags;
+  Self.InternalStateFlags := AStateFlags;
 end;
 
 procedure TCustomSynEditHelper.SetStatusChanges(const Value: TSynStatusChanges);
 begin
-  with Self do fStatusChanges := Value;
+  Self.InternalStatusChanges := Value;
 end;
 
 function TCustomSynEditHelper.InternalLeftSpacesEx(const Line: string; WantTabs: Boolean; CalcAlways : Boolean = False): Integer;
 begin
-  with Self do Result := LeftSpacesEx(Line, WantTabs, CalcAlways);  // Access strict protected property
+  Result := Self.InternalLeftSpacesEx(Line, WantTabs, CalcAlways);
 end;
 
 procedure TEditor.SetCaretPosAndActivate(Line, Col: integer);
@@ -1303,11 +1318,14 @@ begin
   fText.SetCaretXYCentered(True,BufferCoord(Col, Line));
 end;
 
-procedure TEditor.CompletionKeyPress(Sender: TObject; var Key: Char);
+procedure TEditor.CompletionKeyPress(Sender: TObject; var Key: AnsiChar);
+var
+  K: WideChar;
 begin
   // We received a key from the completion box...
+  K := Key;
   if fCompletionBox.Enabled then begin
-    if fText.IsIdentChar(Key) then begin // Continue filtering
+    if fText.IsIdentChar(K) then begin // Continue filtering
       fText.SelText := Key;
       fCompletionBox.Search(GetWordAtPosition(fText.CaretXY, wpCompletion), fFileName);
     end else if Key = Char(VK_BACK) then begin
@@ -1315,11 +1333,11 @@ begin
       fCompletionBox.Search(GetWordAtPosition(fText.CaretXY, wpCompletion), fFileName);
     end else if Key = Char(VK_ESCAPE) then begin
       fCompletionBox.Hide;
-    end else if CharInSet(Key, [Char(VK_RETURN), '(']) then begin // Ending chars, don't insert
+    end else if (K = WideChar(VK_RETURN)) or (K = '(') then begin // Ending chars, don't insert
       CompletionInsert('');
       fCompletionBox.Hide;
     end else begin
-      CompletionInsert(Key);
+      CompletionInsert(K);
       fCompletionBox.Hide;
     end;
   end;
@@ -1851,7 +1869,12 @@ begin
   // Position it at the top of the next line
   P := fText.RowColumnToPixels(fText.DisplayXY);
   Inc(P.Y, fText.LineHeight + 2);
+  // Position is a VCL TCustomComboBox property; the LCL's TCustomComboBox
+  // has no equivalent, so the completion popup keeps its own placement
+  // under FPC. Same kind of boundary as TrySetStyle and DisabledGrayScale.
+  {$IFNDEF FPC}
   fCompletionBox.Position := fText.ClientToScreen(P);
+  {$ENDIF}
 
   // Only scan when cursor is placed after a symbol, inside a word, or inside whitespace
   if (fText.GetHighlighterAttriAtRowCol(BufferCoord(fText.CaretX - 1, fText.CaretY), s, attr)) then
@@ -2495,12 +2518,23 @@ end;
 { TSynEditEx }
 
 procedure TSynEditEx.CommandProcessor(Command: TSynEditorCommand; AChar: Char; Data: Pointer);
+var
+  i: Integer;
+  // Hoisted out of the body: FPC 3.2.2 rejects mid-body
+  // `var SpaceCount1 := 0;` with "Illegal expression".
+  SpaceCount1: Integer;
+  SpaceCount2: Integer;
+  // Inferred from its first assignment (`var Temp := LineText;`), not
+  // defaulted to Integer by the hoisting run.
+  Temp: string;
+  BackCounter: Integer;
+  Attr: TSynHighlighterAttributes;
 begin
   if FeoAddIndent and (Command = ecLineBreak) and (not ReadOnly)  then
   begin
-    var Temp := LineText;
-    var SpaceCount2 := 0;
-    var BackCounter := CaretY;
+  Temp := LineText;
+  SpaceCount2 := 0;
+  BackCounter := CaretY;
     if eoAutoIndent in Options then begin
       repeat
         Dec(BackCounter);
@@ -2511,7 +2545,6 @@ begin
 
     inherited;
 
-    var Attr: TSynHighlighterAttributes;
     if GetHighlighterAttriAtRowCol(BufferCoord(Length(Temp), CaretY - 1), Temp, Attr) then begin // only add indent to source files
       if Attr <> Highlighter.CommentAttribute then begin // and outside of comments
         if CharInSet(Temp[Length(Temp)], ['{', ':']) then begin // add more indent for these too
@@ -2533,9 +2566,9 @@ begin
             // Remove TabWidth of indent of the current line when typing a }
     if TrimLeft(Lines[CaretY - 1]) = '' then begin
     // and the first nonblank char is this new }
-      var i := CaretX - 1;
-      var SpaceCount1 := 0; // buffer character count
-      var SpaceCount2 := 0; // display character count
+  i := CaretX - 1;
+      SpaceCount1 := 0; // buffer character count
+      SpaceCount2 := 0; // display character count
       while (i > 0) and (i <= Length(Lines[CaretY - 1])) and (SpaceCount2 < TabWidth) do begin
         if Lines[CaretY - 1][i] = #9 then begin
           Inc(SpaceCount1);
@@ -2554,11 +2587,13 @@ begin
 end;
 
 constructor TSynEditEx.Create(AOwner: TComponent);
+var
+  DeleteLineIndex: Integer;
 begin
   inherited Create(AOwner);
   FeoAddIndent := False;
 
-  var DeleteLineIndex := Keystrokes.FindCommand(ecDeleteLine);
+  DeleteLineIndex := Keystrokes.FindCommand(ecDeleteLine);
   if DeleteLineIndex <> -1 then
     Keystrokes.Delete(DeleteLineIndex);
 
@@ -2678,6 +2713,17 @@ begin
 end;
 
 procedure TSynEditEx.ExecuteCommand(Command: TSynEditorCommand; AChar: WideChar; Data: pointer);
+var
+  s: String;
+  OrigBlockBegin: TBufferCoord;
+  OrigBlockEnd: TBufferCoord;
+  MoveDelim: TBufferCoord;
+  BeginIndex: Integer;
+  EndIndex: Integer;
+  Temp: String;
+  StartPos: Integer;
+  I: Integer;
+  EndPos: Integer;
 begin
   case Command of
     ecMoveSelDown:
@@ -2685,11 +2731,11 @@ begin
         DoOnPaintTransient(ttBefore);
 
         // Backup caret and selection
-        var OrigBlockBegin := BlockBegin;
-        var OrigBlockEnd := BlockEnd;
+        OrigBlockBegin := BlockBegin;
+        OrigBlockEnd := BlockEnd;
 
         // Delete line below selection
-        var s := Lines[OrigBlockEnd.Line]; // after end, 0 based
+        s := Lines[OrigBlockEnd.Line];  // after end, 0 based
         Lines.Delete(OrigBlockEnd.Line); // after end, 0 based
         InternalDoLinesDeleted(OrigBlockEnd.Line, 1); // before start, 1 based
 
@@ -2704,7 +2750,7 @@ begin
           BufferCoord(Length(Lines[OrigBlockEnd.Line]) + 1, OrigBlockEnd.Line + 1));
 
         // Retrieve start of line we moved down
-        var MoveDelim := BufferCoord(1, OrigBlockBegin.Line);
+        MoveDelim := BufferCoord(1, OrigBlockBegin.Line);
 
         // Support undo, implement as drag and drop
         UndoList.BeginBlock;
@@ -2731,11 +2777,11 @@ begin
         DoOnPaintTransient(ttBefore);
 
         // Backup caret and selection
-        var OrigBlockBegin := BlockBegin;
-        var OrigBlockEnd := BlockEnd;
+        OrigBlockBegin := BlockBegin;
+        OrigBlockEnd := BlockEnd;
 
         // Delete line above selection
-        var s := Lines[OrigBlockBegin.Line - 2]; // before start, 0 based
+        s := Lines[OrigBlockBegin.Line - 2];  // before start, 0 based
         Lines.Delete(OrigBlockBegin.Line - 2); // before start, 0 based
         InternalDoLinesDeleted(OrigBlockBegin.Line - 1, 1); // before start, 1 based
 
@@ -2751,7 +2797,7 @@ begin
         // put end of selection at end of top line
 
         // Retrieve end of line we moved up
-        var MoveDelim := BufferCoord(Length(Lines[OrigBlockEnd.Line - 1]) + 1, OrigBlockEnd.Line);
+        MoveDelim := BufferCoord(Length(Lines[OrigBlockEnd.Line - 1]) + 1, OrigBlockEnd.Line);
 
         // Support undo, implement as drag and drop
         UndoList.BeginBlock;
@@ -2783,19 +2829,22 @@ begin
     ecUncomment: DoUnComment;
     ecToggleComment:
       if not ReadOnly then begin
-        var OrigBlockBegin := BlockBegin;
-        var OrigBlockEnd := BlockEnd;
+        OrigBlockBegin := BlockBegin;
+        OrigBlockEnd := BlockEnd;
 
         // Ignore the last line the cursor is placed on
-        var BeginIndex := BlockBegin.Line - 1;
-        var EndIndex: Integer;
+        BeginIndex := BlockBegin.Line - 1;
+        // Hoisted out of the body: FPC 3.2.2 rejects a mid-body
+        // `var EndIndex: Integer;` with "Illegal expression".
         if BlockEnd.Char = 1 then
           EndIndex := max(0, BlockEnd.Line - 2)
         else
           EndIndex := BlockEnd.Line - 1;
 
         // if everything is commented, then uncomment
-        for var I := BeginIndex to EndIndex do begin
+        // Hoisted out of the for-header: FPC 3.2.2 has no inline
+        // for-loop variables. I is declared in the routine var section above.
+        for I := BeginIndex to EndIndex do begin
           if Pos('//', TrimLeft(Lines[i])) <> 1 then begin // not fully commented
             DoComment; // comment everything
             Exit;
@@ -2806,11 +2855,11 @@ begin
 
       ecCommentInline: // toggle inline comment
         if not ReadOnly and SelAvail then begin
-          var Temp := SelText;
+          Temp := SelText;
 
           // Check if the selection starts with /* after blanks
-          var StartPos := -1;
-          var I := 1;
+          StartPos := -1;
+          I := 1;
           while I <= Length(Temp) do begin
             if CharInSet(Temp[I], [#9, #32]) then
               Inc(I)
@@ -2822,7 +2871,7 @@ begin
           end;
 
           // Check if the selection ends with /* after blanks
-          var EndPos := -1;
+          EndPos := -1;
           if StartPos <> -1 then begin
             I := Length(Temp);
             while I > 0 do begin
@@ -2837,8 +2886,8 @@ begin
           end;
 
           // Keep selection
-          var OrigBlockBegin := BlockBegin;
-          var OrigBlockEnd := BlockEnd;
+          OrigBlockBegin := BlockBegin;
+          OrigBlockEnd := BlockEnd;
 
           // Toggle based on current comment status
           if (StartPos <> -1) and (EndPos <> -1) then begin
@@ -2889,6 +2938,8 @@ begin
 end;
 
 procedure TSynEditEx.SetCaretXYCentered(ForceToMiddle: Boolean; const Value: TBufferCoord);
+var
+  NewBufferCoord: TBufferCoord;
 begin
   IncPaintLock;
   try
@@ -2900,7 +2951,7 @@ begin
     if SelAvail then
       InvalidateSelection;
 
-    var NewBufferCoord: TBufferCoord;
+
     NewBufferCoord.Char := CaretX;
     NewBufferCoord.Line := CaretY;
 
@@ -2972,7 +3023,7 @@ var
   function LineHasChar(Line: Integer; character: char;
   StartCol : Integer): boolean; // faster than Pos!
   var
-    i: Integer;
+  i: Integer;
   begin
     result := false;
     for I := StartCol to Length(CurLine) do begin
@@ -3085,43 +3136,53 @@ end;
 
 procedure TSynEditPrintHelper.PrintEx;
 var
+  // PrintStatus takes Abort by var, and a property has no address, so the
+  // flag goes through a local and is written back afterwards -- the event
+  // can still set it, exactly as when the field itself was passed.
+  AbortFlag: Boolean;
+  EndPage: Integer;
+var
   i, ii: Integer;
 begin
   with Self do
   begin
-    if fSelectedOnly and not fSelAvail then
+    if FSelectedOnlyInternal and not FSelAvailInternal then
       exit;
 
-    FPrinting := True;
-    FAbort := False;
+    FPrintingInternal := True;
+    FAbortInternal := False;
     // The next part sets the document title that is used by the printer queue.
-    if FDocTitle <> '' then
-      Printer.Title := FDocTitle
+    if FDocTitleInternal <> '' then
+      Printer.Title := FDocTitleInternal
     else
-      Printer.Title := FTitle;
+      Printer.Title := FTitleInternal;
     Printer.BeginDoc;
     if not Printer.Printing then Exit;
     try
 
-      PrintStatus(psBegin, 1, FAbort);
+      AbortFlag := FAbortInternal;
+      PrintStatus(psBegin, 1, AbortFlag);
+      FAbortInternal := AbortFlag;
       UpdatePages(Printer.Canvas);
 
-      var EndPage := FPageCount;
+      EndPage := FPageCountInternal;
       for ii:=1 to Copies do
       begin
         i := 1;
-        while (i <= EndPage) and (not FAbort) do begin
-          PrintPage(i);
-          if ((i < EndPage) or (ii<Copies)) and not FAbort then
+        while (i <= EndPage) and (not FAbortInternal) do begin
+          InternalPrintPage(i);
+          if ((i < EndPage) or (ii<Copies)) and not FAbortInternal then
             Printer.NewPage;
           i := i + 1;
         end;
       end;
-      if not FAbort then
-        PrintStatus(psEnd, EndPage, FAbort);
+      if not FAbortInternal then
+        AbortFlag := FAbortInternal;
+        PrintStatus(psEnd, EndPage, AbortFlag);
+        FAbortInternal := AbortFlag;
     finally
       Printer.EndDoc;
-      FPrinting := False;
+      FPrintingInternal := False;
     end;
   end;
 end;

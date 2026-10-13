@@ -44,10 +44,49 @@ type
 var
   ProcessListForm: TProcessListForm;
 
+{$IFDEF FPC}
+// FPC 3.2.2 ships no tlhelp32 unit at all (checked under both units\x86_64-win64
+// and source\), so the three calls this form makes are declared externally here,
+// the same way Instances.pas declares GetModuleFileNameEx.
+//
+// The names are deliberately the UNSUFFIXED Delphi ones bound to the W exports.
+// Delphi's tlhelp32 does exactly that in Unicode mode -- its `Process32First` IS
+// `Process32FirstW` -- so the body below compiles unchanged under both compilers
+// and resolves to the same entry point.
+const
+  TH32CS_SNAPALL = $0000000F;
+
+type
+  TProcessEntry32 = record
+    dwSize: DWORD;
+    cntUsage: DWORD;
+    th32ProcessID: DWORD;
+    th32DefaultHeapID: DWORD_PTR;
+    th32ModuleID: DWORD;
+    cntThreads: DWORD;
+    th32ParentProcessID: DWORD;
+    pcPriClassBase: Longint;
+    dwFlags: DWORD;
+    szExeFile: array[0..MAX_PATH - 1] of WideChar;
+  end;
+
+function CreateToolhelp32Snapshot(dwFlags, th32ProcessID: DWORD): THandle; stdcall;
+  external 'kernel32' name 'CreateToolhelp32Snapshot';
+function Process32First(hSnapshot: THandle; var lppe: TProcessEntry32): BOOL; stdcall;
+  external 'kernel32' name 'Process32FirstW';
+function Process32Next(hSnapshot: THandle; var lppe: TProcessEntry32): BOOL; stdcall;
+  external 'kernel32' name 'Process32NextW';
+{$ENDIF}
+
 implementation
 
 uses 
-  tlhelp32, devcfg;
+  {$IFDEF FPC}
+  devcfg
+  {$ELSE}
+  tlhelp32, devcfg
+  {$ENDIF}
+;
 
 {$R *.dfm}
 

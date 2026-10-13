@@ -103,7 +103,7 @@ type
     fLines: TList;
     fUnits: TList;
     fFuncs: TList;
-    function StackStop: dword;
+    function StackStop: PtrUInt;
     procedure ReadMapFile(const Fname: String);
     function AddressInfo(Address: Cardinal): String;
     procedure GatherSystemInfo; // fill interface
@@ -160,7 +160,26 @@ end;
 
 { TfrmExceptionsAnalyzer }
 
-function TExceptionFrm.StackStop: dword;
+{ The stack pointer, without naming a register.
+
+  Both uses in this unit were `asm mov X, esp` blocks. Two problems, both
+  measured: FPC's assembler rejects a `//` comment inside an asm block outright
+  ("Assembler syntax error"), and `esp` is the 32-bit register -- this is an
+  x86-64 build, where it is `rsp` ("Unknown identifier "ESP"" / "RSP"").
+
+  Taking the address of a local gives the same thing -- a local lives on the
+  stack -- with no assembler, no register name, and no 32/64-bit split to get
+  wrong. It is the portable spelling of exactly the value the asm was reaching
+  for. }
+function StackPointer: PtrUInt;
+var
+  Marker: PtrUInt;
+begin
+  Marker := 0;
+  Result := PtrUInt(@Marker);   // @Marker is a Pointer; Result is PtrUInt
+end;
+
+function TExceptionFrm.StackStop: PtrUInt;
 var
   si: TSystemInfo;
   mbi: TMemoryBasicInformation;
@@ -174,14 +193,7 @@ begin
   // reference; FPC does not.
   GetSystemInfo(@si);
   pagesize := si.dwPageSize;
-  asm
-    // `register rsp` is what tells the assembler the register may be read. The
-    // name is rsp, not esp: the original `mov tmpSP,esp` is x86-32 code, which
-    // this build is not --
-    //     ExceptionFrm.pas(173,15) Error: Unknown identifier "ESP"
-    register rsp;
-    mov tmpSP, rsp
-  end;
+  tmpSP := StackPointer;
   tmpSP := pagesize * (tmpSP div pagesize);
   VirtualQuery(Pointer(tmpSP), @mbi, SizeOf(mbi));
   Result := mbi.RegionSize + PtrUInt(mbi.BaseAddress);
@@ -379,8 +391,12 @@ end;
 
 function TExceptionFrm.GetStackReport: String;
 var
-  {retaddr, }walker: ^pointer;
-  max: Cardinal;
+  // walker and max are 64-bit. They were pointer/Cardinal because the
+  // original `mov walker, esp` was 32-bit; on x64 a Cardinal address is
+  // truncated, and every frame above 4 GB -- most of them -- would compare
+  // wrong against `max` and make this walk run off.
+  {retaddr, }walker: Pointer;
+  max: PtrUInt;
 begin
 
   result := 'Stack trace' + #13#10
@@ -390,9 +406,7 @@ begin
   //result := result + AddressInfo(Cardinal(StrToInt(lblAddress.Caption)));
 
   // Hack fix, assume stack leftovers are not erased
-  asm
-		mov walker, esp
-  end;
+  walker := Pointer(StackPointer);
   max := StackStop;
   repeat
     result := result + AddressInfo(Cardinal(walker^));

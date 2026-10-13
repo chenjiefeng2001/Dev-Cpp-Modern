@@ -24,9 +24,23 @@ interface
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, ComCtrls, StdCtrls, ExtCtrls, Spin,
-  SynEdit, SynEditHighlighter, SynHighlighterCpp,
+  SynEdit, SynEditTypes, SynEditHighlighter, SynHighlighterCpp,
   Buttons, StrUtils, Grids, ColorBox,
-  CppPreprocessor;
+  CppPreprocessor
+  {$IFDEF FPC}
+  , LclTextInput
+  {$ENDIF}
+;
+{$IFNDEF FPC}
+// Delphi's Dialogs.InputQuery is already Unicode, so the FPC compat helper is a
+// straight pass-through here. Declared so that the call sites below read the
+// same on both compilers -- one call site, not two that can drift apart.
+function UnicodeInputQuery(const ACaption, APrompt: UnicodeString;
+  var AValue: UnicodeString): Boolean;
+begin
+  Result := InputQuery(ACaption, APrompt, AValue);
+end;
+{$ENDIF}
 
 type
   // Keep history of what we have accessed (does not mean changed)
@@ -238,8 +252,11 @@ var
   I: integer;
   FontIndex: Integer;
 begin
-  for var EncName in DefaultEncodingNames do
-    cbNewDocEncoding.Items.Add(EncName);
+  // Was or EncName in DefaultEncodingNames, which does not exist under FPC --
+  // DefaultEncodingNames is a Delphi RTL array. The list now comes from this
+  // project's own Encodings table instead, so the dropdown and the name written
+  // to devcpp.ini are the same vocabulary. See MultiLangSupport.
+  AddNewDocEncodingNames(cbNewDocEncoding.Items);
 
   LoadText;
 
@@ -829,7 +846,7 @@ begin
   end;
 
   // Save our code snippet even if we opted not to use it (user may want to keep it)
-  if not seDefault.Lines.Text.IsEmpty then
+  if seDefault.Lines.Text <> '' then
     seDefault.Lines.SavetoFile(devDirs.Config + DEV_DEFAULTCODE_FILE)
   else
     DeleteFile(devDirs.Config + DEV_DEFAULTCODE_FILE);
@@ -1329,7 +1346,7 @@ var
   pt: TPoint;
 begin
   s := 'New syntax';
-  if not InputQuery(Lang[ID_EOPT_SAVESYNTAX], Lang[ID_EOPT_SAVESYNTAXQUESTION], s) or (s = '') then
+  if not UnicodeInputQuery(Lang[ID_EOPT_SAVESYNTAX], Lang[ID_EOPT_SAVESYNTAXQUESTION], s) or (s = '') then
     Exit;
 
   fINI := TIniFile.Create(devDirs.Config + s + SYNTAX_EXT);
