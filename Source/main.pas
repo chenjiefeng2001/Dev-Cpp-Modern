@@ -34,10 +34,42 @@ uses
   devShortcuts, debugreader, ExceptionFrm, CommCtrl, devcfg, SynEditTextBuffer,
   CppPreprocessor, CBUtils, StatementList, AStyleFormatterOptionsFrm, ClangFormatterOptionsFrm,
   {$IFDEF FPC}
-  Themes, SVGColor, Vcl.Imaging.pngimage, Vcl.WinXCtrls, Vcl.WinXPanels, ExtDlgs,
+  // Named exactly as the Delphi branch, not as a bare `Themes`: FPC would
+  // resolve that to the LCL's own Themes unit (the widgetset theme reader),
+  // which has no TStyleManager -- and `Vcl.Themes` is our compat unit that does.
+  Vcl.Themes, Vcl.ExtDlgs,
+  // ShortCutToText is Delphi RTL (TShortcut -> "Ctrl+Shift+S"). The LCL has an
+  // equivalent in LclProc, including the localised output variant; it is not a
+  // VCL unit, so the Delphi branch does not need it.
+  //
+  // PrintersDlgs is where the LCL keeps its concrete TPrinterSetupDialog
+  // (components\printers\printersdlgs.pp:103); LCL's Dialogs only declares the
+  // TCustom base, which is why `PrinterSetupDialog.Execute` was an illegal
+  // qualifier rather than a plain missing name.
+  LclProc, PrintersDlgs,
   {$ELSE}
-  vcl.Themes, SVGColor, Vcl.Imaging.pngimage, Vcl.WinXCtrls, Vcl.WinXPanels, Vcl.ExtDlgs,
+  vcl.Themes, Vcl.ExtDlgs,
   {$ENDIF}
+  {$IFDEF FPC}
+  // The vcl-styles-utils package is named only on the Delphi branch. Those units
+  // subclass the Windows common controls to paint them from a .vlf theme, and
+  // there is nothing to subclass under the LCL widgetset -- the same "LCL has no
+  // styles service" boundary already recorded for StyleElements in
+  // VclPropertySkips.pas, for DrawStyleEdge, and for TStyleManager.
+  //
+  // Nothing is lost by dropping them here, measured: no symbol from any of these
+  // seven units is referenced in this file. `SysStyleHook` appears ONLY on this
+  // uses line, and `VclPropertySkips.pas` already lists the three
+  // StyleElements skips this package would otherwise be asked for. The
+  // StyleServices this file does call comes from Vcl.Themes, kept above.
+  //
+  // RichEdit supplies the five invisible ID-carrier components the DFM declares
+  // as TRichEdit; see that unit for why it is a TMemo and what it gives up.
+  //
+  // LclTextInput routes the eight InputQuery call sites through the ACP, because
+  // the LCL's edit control cannot carry a UnicodeString at all.
+  LclTextInput, RichEdit, Vcl.VirtualImage,
+  {$ELSE}
   Vcl.Styles.Hooks,
   Vcl.Styles.Utils.Menus, //Style Popup and Shell Menus (class #32768)
   Vcl.Styles.Utils.Forms, //Style dialogs box (class #32770)
@@ -46,8 +78,20 @@ uses
   Vcl.Styles.Utils.ScreenTips, //Style the tooltips_class32 class
   Vcl.Styles.Utils.SysControls,
   Vcl.Styles.Utils.SysStyleHook, Vcl.VirtualImage,
+  {$ENDIF}
   Lsp.Bootstrap, Lsp.Client.Definition
   ;
+
+{$IFNDEF FPC}
+// Delphi's Dialogs.InputQuery is already Unicode, so the FPC compat helper is a
+// straight pass-through here. Declared so that the call sites below read the
+// same on both compilers -- one call site, not two that can drift apart.
+function UnicodeInputQuery(const ACaption, APrompt: UnicodeString;
+  var AValue: UnicodeString): Boolean;
+begin
+  Result := InputQuery(ACaption, APrompt, AValue);
+end;
+{$ENDIF}
 
 type
   TRunEndAction = (reaNone, reaProfile);
@@ -549,12 +593,12 @@ type
     PanelLeft: TPanel;
     ImageBackGround: TImage;
     PanelRight: TPanel;
-    ButtonNewDocument: TButton;
-    ButtonOpenDocument: TButton;
-    ButtonOptions: TButton;
-    ButtonChangeTheme: TButton;
-    ButtonChangeFont: TButton;
-    ButtonChangeLanguage: TButton;
+    ButtonNewDocument: TBitBtn;
+    ButtonOpenDocument: TBitBtn;
+    ButtonOptions: TBitBtn;
+    ButtonChangeTheme: TBitBtn;
+    ButtonChangeFont: TBitBtn;
+    ButtonChangeLanguage: TBitBtn;
     ImageLogo: TImage;
     LabelWelcome: TLabel;
     LabelVersion: TLabel;
@@ -712,7 +756,17 @@ type
     procedure actToolsMenuExecute(Sender: TObject);
     procedure actDeleteExecute(Sender: TObject);
     procedure ClassBrowserSelect(Sender: TObject; Filename: TFileName; Line: Integer);
-    procedure CppParserTotalProgress(Sender: TObject; const FileName: string; Total, Current: Integer);
+    // AnsiString, not String: TProgressEvent is declared in CBUtils.pas, and
+    // every unit in Source/Fpc/UI/ClassBrowsing deliberately carries
+    // {$mode objfpc}{$H+} (see the note at CBUtils.pas:475) so that Char
+    // matches what the LCL's own types expect. Under objfpc their `String`
+    // is AnsiString, while this unit is compiled -Mdelphiunicode, so a
+    // `String` parameter cannot satisfy the event. Reversing the mode across
+    // the whole ported family to avoid one AnsiString parameter would be a far
+    // larger change than adapting at the boundary. The value is only ever
+    // passed to Format as %s, so the ACP widening FPC applies is harmless.
+    procedure CppParserTotalProgress(Sender: TObject; const FileName: AnsiString;
+      Total, Current: Integer);
     procedure CodeCompletionResize(Sender: TObject);
     procedure actSwapHeaderSourceExecute(Sender: TObject);
     procedure actSyntaxCheckExecute(Sender: TObject);
@@ -892,6 +946,7 @@ type
       Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure EditorPageControlMouseLeave(Sender: TObject);
     procedure actCMDExecute(Sender: TObject);
+    procedure ConsoleFrameProc(AFrame: TObject; AIsSuccess: Boolean);
     procedure actPowerShellExecute(Sender: TObject);
     procedure actConsoleCloseExecute(Sender: TObject);
     procedure actGeneric1CMDExecute(Sender: TObject);
@@ -905,6 +960,21 @@ type
   private
     FCloseButtonMouseDownTab: TCloseTabSheet;
     FCloseButtonShowPushed: Boolean;
+    // Target for RepaintTargetNow. FPC 3.2.2 has no anonymous methods, and
+    // TThread.Synchronize takes a TThreadMethod (a `procedure of object`), so the
+    // closure that used to close over `PageControl` has to be a real method --
+    // and a parameterless one cannot take the control with it.
+    //
+    // The field lives HERE and the method further down because FPC rejects a
+    // field that appears after a method in the same visibility section
+    // ("Fields cannot appear after a method or property definition").
+    FRepaintTarget: TPageControl;
+    // Payload for ApplyQueuedBreakpointEvent, which TThread.Queue cannot take
+    // as a closure under FPC. Cleared by nothing: Queue runs it before any
+    // later event overwrites these.
+    FQueuedBreakAction: Core.Events.TBreakpointAction;
+    FQueuedBreakFile: string;
+    FQueuedBreakLine: Integer;
 
     fPreviousHeight: integer; // stores MessageControl height to be able to restore to previous height
     fTools: TToolController; // tool list controller
@@ -956,7 +1026,11 @@ type
     // LSP definition 跳转落点 (0-based 行列, 由 LspDefinitionManager 回调)
     procedure HandleLspNavigate(const AFileName: string; ALine, AChar: Integer);
     // 调试事件: 断点状态变更 (事件总线订阅)
-    procedure HandleBreakpointEvent(const AEvent: TEvent);
+    // Core.Events.TEvent, qualified: the LCL declares a TEvent of its own and
+    // an unqualified name in this unit resolves to that one instead, which is
+    // why the compiler reported TEventObject here.
+    procedure HandleBreakpointEvent(const AEvent: Core.Events.TEvent);
+    procedure ApplyQueuedBreakpointEvent;
     // Watch/CallStack/Threads Frame 回调 (TNotifyEvent 形状)
     procedure HandleWatchVarChange(Sender: TObject);
     procedure HandleCallStackSelChanged(Sender: TObject);
@@ -983,6 +1057,8 @@ type
     procedure PageControlCloseButtonMouseLeave(Sender: TObject);
     procedure PageControlCloseButtonMouseUp(Sender: TObject;
       Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure RepaintTargetNow;
+
   public
     procedure CloseTabProc(Sender: TObject);
     procedure ScanActiveProject;
@@ -1017,9 +1093,9 @@ implementation
 
 uses
   {$IFDEF FPC}
-  System.Threading, Math, ShellAPI, IniFiles, Clipbrd, MultiLangSupport, version,
+  Math, ShellAPI, IniFiles, Clipbrd, MultiLangSupport, version,
   {$ELSE}
-  System.Threading, System.Math, ShellAPI, IniFiles, Clipbrd, MultiLangSupport, version,
+  System.Math, ShellAPI, IniFiles, Clipbrd, MultiLangSupport, version,
   {$ENDIF}
   DataFrm, NewProjectFrm, AboutFrm, PrintFrm,
   CompOptionsFrm, EditorOptFrm, IncrementalFrm, EnviroFrm,
@@ -1076,10 +1152,10 @@ begin
       ButtonNewDocument.ImageIndex := -1;
       //ButtonNewDocument.ImageAlignment := TImageAlignment(0);
       //ButtonOpenDocument.Images :=  CurrentTheme.MenuImages;
-      ButtonOpenDocument.ImageIndex := -1; //4
+      ButtonOpenDocument.ImageIndex := -1;  //4
       //ButtonOpenDocument.ImageAlignment := TImageAlignment(0);
       //ButtonOptions.Images := CurrentTheme.MenuImages;
-      ButtonOptions.ImageIndex := -1; //37
+      ButtonOptions.ImageIndex := -1;  //37
       //ButtonOptions.ImageAlignment := TImageAlignment(0);
       ButtonChangeTheme.ImageIndex := -1;
       ButtonChangeFont.ImageIndex := -1;
@@ -1560,7 +1636,7 @@ begin
        e.Text.DisplayX,
        e.Text.SelLength,
        e.Text.Lines.Count,
-       e.Text.Text.Length]) + ' ';
+       Length(e.Text.Text)]) + ' ';
 
     Statusbar.Canvas.Font.Assign(Statusbar.Font);
     Statusbar.Panels[0].Width := Statusbar.Canvas.TextWidth(Statusbar.Panels[0].Text);
@@ -1722,7 +1798,7 @@ begin
 
   // Issue an error if it doesn't exist
   if not FileExists(FileName) then begin
-    MessageBox(Application.Handle, PChar(Format(Lang[ID_ERR_FILENOTFOUND], [FileName])), PChar(Lang[ID_ERROR]),
+    MessageBoxW(Application.Handle, PWideChar(Format(Lang[ID_ERR_FILENOTFOUND], [FileName])), PWideChar(Lang[ID_ERROR]),
       MB_ICONHAND);
     Exit;
   end;
@@ -1789,7 +1865,12 @@ begin
 end;
 
 function TMainForm.ParseToolParams(s: String): String;
-resourcestring
+// `const`, not `resourcestring`: FPC 3.2.2 rejects a resourcestring block
+  // inside a routine with
+  //     main.pas(1839,3) Error: Resourcestrings can be only static or global
+  // These are compile-time literals with nothing to localise, so a resource
+  // string would buy nothing.
+const
   cEXEName = '<EXENAME>';
   cPrjName = '<PROJECTNAME>';
   cPrjFile = '<PROJECTFILE>';
@@ -2170,7 +2251,7 @@ begin
           // Assign the selected template to it
           if not fProject.AssignTemplate(s, GetTemplate) then begin
             FreeAndNil(fProject);
-            MessageBox(Application.Handle, PChar(Lang[ID_ERR_TEMPLATE]), PChar(Lang[ID_ERROR]), MB_OK or
+            MessageBoxW(Application.Handle, PWideChar(Lang[ID_ERR_TEMPLATE]), PWideChar(Lang[ID_ERROR]), MB_OK or
               MB_ICONERROR);
             Exit;
           end;
@@ -2198,6 +2279,11 @@ begin
 end;
 
 procedure TMainForm.actOpenExecute(Sender: TObject);
+var
+  // Hoisted out of the body: FPC 3.2.2 rejects mid-body `var X := ...` with
+  //     main.pas(2262,7) Error: Illegal expression
+  LEncIndex: Integer;
+  LEncoding: TEncoding;
 begin
   with TOpenTextFileDialog.Create(Self) do try
 {$IFNDEF FPC}    FixStyle;{$ENDIF}
@@ -2208,8 +2294,8 @@ begin
     // Open all provided files
     if Execute then
     begin
-      var LEncIndex := EncodingIndex;
-      var LEncoding := StandardEncodingFromName(Encodings[LEncIndex]);
+      LEncIndex := EncodingIndex;
+      LEncoding := StandardEncodingFromName(Encodings[LEncIndex]);
 
       OpenFileList(TStringList(Files), LEncoding);
 
@@ -2378,47 +2464,46 @@ begin
   end;
 end;
 
-procedure TMainForm.actPowerShellExecute(Sender: TObject);
+// The completion callback all three console actions pass to
+// TConsoleAppHost.NewHost. It was an anonymous closure repeated verbatim at
+// each site; FPC 3.2.2 has no anonymous functions, and since the body is the
+// same every time a single method is the faithful translation rather than three
+// near-copies.
+//
+// Host is TObject because MainUi/ConsoleAppHostFrm keep the callback facade-typed
+// -- see the note on TConsoleAppHostCallback there.
+procedure TMainForm.ConsoleFrameProc(AFrame: TObject; AIsSuccess: Boolean);
+var
+  I: Integer;
+  NewTab: TTabSheet;
 begin
-  var ConsoleFrameProc: TProc<TConsoleAppHost, Boolean> :=
-    procedure (AFrame: TConsoleAppHost; AIsSuccess: Boolean)
-    begin
-      if AIsSuccess then
+  if AIsSuccess then
+  begin
+    NewTab := TTabSheet.Create(pcConsoleHost);
+    NewTab.PageControl := pcConsoleHost;
+    NewTab.Assign(TConsoleAppHost(AFrame));
+  end
+  else
+    for I := 0 to pcConsoleHost.PageCount - 1 do
+      if pcConsoleHost.Pages[I].Tag = NativeInt(AFrame) then
       begin
-        var NewTab := TTabSheet.Create(pcConsoleHost);
-        NewTab.PageControl := pcConsoleHost;
-        NewTab.Assign(AFrame);
-      end
-      else
-        for var i := 0 to pcConsoleHost.PageCount - 1 do
-          if pcConsoleHost.Pages[i].Tag = NativeInt(AFrame) then
-          begin
-            pcConsoleHost.Pages[i].Free;
-            Break;
-          end;
-    end;
-  TConsoleAppHost.NewHost('powershell', 'PowerShell', ConsoleFrameProc, 20);
+        pcConsoleHost.Pages[I].Free;
+        Break;
+      end;
 end;
 
 procedure TMainForm.actCMDExecute(Sender: TObject);
-begin
-  var ConsoleFrameProc: TProc<TConsoleAppHost, Boolean> :=
-    procedure (AFrame: TConsoleAppHost; AIsSuccess: Boolean)
+{$IFNDEF FPC}
+// Delphi keeps the closure; FPC cannot have one, so it calls the
+// shared method instead. Same body, one implementation.
+var
+  ConsoleFrameProc: TProc<TObject, Boolean> :=
+    procedure (AFrame: TObject; AIsSuccess: Boolean)
     begin
-      if AIsSuccess then
-      begin
-        var NewTab := TTabSheet.Create(pcConsoleHost);
-        NewTab.PageControl := pcConsoleHost;
-        NewTab.Assign(AFrame);
-      end
-      else
-        for var i := 0 to pcConsoleHost.PageCount - 1 do
-          if pcConsoleHost.Pages[i].Tag = NativeInt(AFrame) then
-          begin
-            pcConsoleHost.Pages[i].Free;
-            Break;
-          end;
+      Self.ConsoleFrameProc(AFrame, AIsSuccess);
     end;
+{$ENDIF}
+begin
   TConsoleAppHost.NewHost('cmd', 'Command line', ConsoleFrameProc, 20);
  // TConsoleAppHost.NewHost('wt', 'Windows Terminal', ConsoleFrameProc, 20);
 end;
@@ -2505,6 +2590,50 @@ begin
   finally
     Close;
   end;
+end;
+
+procedure TMainForm.actGotoBreakPointExecute(Sender: TObject);
+var
+  e: TEditor;
+  FileName: String;
+begin
+  FileName := fDebugger.BreakPointFile;
+  if FileName <> '' then begin
+    e := fEditorList.GetEditorFromFileName(FileName);
+    if Assigned(e) then begin
+      e.GotoActiveBreakpoint;
+      e.Activate;
+    end;
+  end;
+end;
+
+procedure TMainForm.actGeneric1CMDExecute(Sender: TObject);
+begin
+  ExecuteGenericConsole(Sender);
+end;
+
+procedure TMainForm.actGeneric2CMDExecute(Sender: TObject);
+begin
+  ExecuteGenericConsole(Sender);
+end;
+
+procedure TMainForm.actGeneric3CMDExecute(Sender: TObject);
+begin
+  ExecuteGenericConsole(Sender);
+end;
+
+procedure TMainForm.actPowerShellExecute(Sender: TObject);
+begin
+  // Delphi keeps the closure; FPC cannot have one, so it calls the
+  // shared method instead. Same body, one implementation.
+  {$IFNDEF FPC}
+  var
+    ConsoleFrameProc: TProc<TObject, Boolean> :=
+      procedure (AFrame: TObject; AIsSuccess: Boolean)
+      begin
+        Self.ConsoleFrameProc(AFrame, AIsSuccess);
+      end;
+  {$ENDIF}
 end;
 
 procedure TMainForm.actPrintSUExecute(Sender: TObject);
@@ -2779,7 +2908,7 @@ begin
   CurDir := ExtractFilePath(OldName);
 
   // Do we want to rename?
-  if InputQuery(Lang[ID_RENAME], Lang[ID_MSG_FILERENAME], NewName) and (ExtractFileName(NewName) <> '') then begin
+  if UnicodeInputQuery(Lang[ID_RENAME], Lang[ID_MSG_FILERENAME], NewName) and (ExtractFileName(NewName) <> '') then begin
 
     NewName := ExpandFileto(NewName, CurDir);
 
@@ -3588,7 +3717,7 @@ var
   e: TEditor;
 begin
   e := fEditorList.GetEditor;
-  TCustomAction(Sender).Enabled := Assigned(e) and not e.Text.Text.IsEmpty;
+  TCustomAction(Sender).Enabled := Assigned(e) and (e.Text.Text <> '');
 end;
 
 procedure TMainForm.actUpdateDebuggerRunning(Sender: TObject);
@@ -4049,7 +4178,7 @@ begin
       s := e.Text.SelText
     else begin
       s := e.Text.WordAtCursor;
-      if not InputQuery(Lang[ID_NV_ADDWATCH], Lang[ID_NV_ENTERVAR], s) then
+      if not UnicodeInputQuery(Lang[ID_NV_ADDWATCH], Lang[ID_NV_ENTERVAR], s) then
         Exit;
     end;
     if s <> '' then
@@ -4376,6 +4505,12 @@ procedure TMainForm.actSwapHeaderSourceExecute(Sender: TObject);
 var
   FromEditor, ToEditor: TEditor;
   CFile, HFile, ToFile: String;
+  // GetSourcePair's out-parameters are AnsiString because CppParser is one of
+  // the {$mode objfpc} units in Source/Fpc/UI/ClassBrowsing -- see the note on
+  // CppParserTotalProgress. ToFile below stays UnicodeString because the units
+  // it is handed to (fEditorList) are delphiunicode, so the two cannot share a
+  // variable and the crossing happens here, on the ACP.
+  AnsiCFile, AnsiHFile: AnsiString;
   iscfile, ishfile: boolean;
 begin
   FromEditor := fEditorList.GetEditor;
@@ -4385,7 +4520,9 @@ begin
   iscfile := CppParser.IsCfile(FromEditor.FileName);
   ishfile := CppParser.IsHfile(FromEditor.FileName);
 
-  CppParser.GetSourcePair(FromEditor.FileName, CFile, HFile);
+  CppParser.GetSourcePair(FromEditor.FileName, AnsiCFile, AnsiHFile);
+  CFile := UnicodeString(AnsiCFile);
+  HFile := UnicodeString(AnsiHFile);
   if iscfile then begin
     ToFile := HFile
   end else if ishfile then begin
@@ -4582,6 +4719,11 @@ var
   PageIndex: integer;
   SenderPageControl: TPageControl;
   e: TEditor;
+  // Hoisted out of the body: FPC 3.2.2 rejects mid-body `var X: T;` with
+  //     main.pas(4592,5) Error: Illegal expression
+  I: Integer;
+  PageControl: TPageControl;
+  TabSheet: TCloseTabSheet;
 begin
   SenderPageControl := TPageControl(Sender);
   if Button = mbRight then begin // select new tab even with right mouse button
@@ -4600,9 +4742,6 @@ begin
   end
   else // see if it's a drag operation
   begin
-    var I: Integer;
-    var PageControl: TPageControl;
-    var TabSheet: TCloseTabSheet;
     PageControl := Sender as TPageControl;
 
     if Button = mbLeft then
@@ -5069,7 +5208,7 @@ var
   fp, S: String;
 begin
   S := 'New folder';
-  if InputQuery(Lang[ID_POP_ADDFOLDER], Lang[ID_MSG_ADDBROWSERFOLDER], S) and (S <> '') then begin
+  if UnicodeInputQuery(Lang[ID_POP_ADDFOLDER], Lang[ID_MSG_ADDBROWSERFOLDER], S) and (S <> '') then begin
     fp := fProject.GetFolderPath(ProjectView.Selected);
     if fp <> '' then
       fProject.AddFolder(fp + '/' + S)
@@ -5104,7 +5243,7 @@ var
 begin
   if Assigned(ProjectView.Selected) and (ProjectView.Selected.Data = Pointer(-1)) then begin
     S := ProjectView.Selected.Text;
-    if InputQuery(Lang[ID_POP_RENAMEFOLDER], Lang[ID_MSG_RENAMEBROWSERFOLDER], S) and (S <> '') then begin
+    if UnicodeInputQuery(Lang[ID_POP_RENAMEFOLDER], Lang[ID_MSG_RENAMEBROWSERFOLDER], S) and (S <> '') then begin
       ProjectView.Selected.Text := S;
       fProject.UpdateFolders;
     end;
@@ -5307,7 +5446,8 @@ begin
   fParseStartTime := GetTickCount;
 end;
 
-procedure TMainForm.CppParserTotalProgress(Sender: TObject; const FileName: string; Total, Current: Integer);
+procedure TMainForm.CppParserTotalProgress(Sender: TObject; const FileName: AnsiString;
+  Total, Current: Integer);
 var
   ShowStep: Integer;
 begin
@@ -5614,6 +5754,11 @@ begin
 end;
 
 procedure TMainForm.FloatingPojectManagerItemClick(Sender: TObject);
+var
+  // Hoisted out of the body: FPC 3.2.2 rejects mid-body
+  // `var X: T := ...` with "Illegal expression".
+  SPos: TPoint;
+  LeftPageControlW, LeftPageControlH: Integer;
 begin
   FloatingPojectManagerItem.Checked := not FloatingPojectManagerItem.Checked;
 
@@ -5626,9 +5771,9 @@ begin
     fProjectToolWindow.OnClose := ProjectWindowClose;
     fProjectToolWindow.BorderStyle := bsSizeable;
     fProjectToolWindow.BorderIcons := [biSystemMenu];
-    var SPos := LeftPageControl.ClientToScreen(TPoint.Zero);
-    var LeftPageControlW := LeftPageControl.Width;
-    var LeftPageControlH := LeftPageControl.Height;
+    SPos := LeftPageControl.ClientToScreen(TPoint.Zero);
+    LeftPageControlW := LeftPageControl.Width;
+    LeftPageControlH := LeftPageControl.Height;
 
     LeftPageControl.Parent := fProjectToolWindow;
     LeftPageControl.Align := alClient;
@@ -5877,6 +6022,9 @@ begin
 end;
 
 procedure TMainForm.FloatingReportwindowItemClick(Sender: TObject);
+var
+  SPos: TPoint;
+  MessageControlW, MessageControlH: Integer;
 begin
   FloatingReportWindowItem.Checked := not FloatingReportWindowItem.Checked;
   if assigned(fReportToolWindow) then
@@ -5893,9 +6041,9 @@ begin
     fReportToolWindow.BorderStyle := bsSizeable;
     fReportToolWindow.BorderIcons := [biSystemMenu];
 
-    var SPos := MessageControl.ClientToScreen(TPoint.Zero);
-    var MessageControlW := MessageControl.Width;
-    var MessageControlH := MessageControl.Height;
+    SPos := MessageControl.ClientToScreen(TPoint.Zero);
+    MessageControlW := MessageControl.Width;
+    MessageControlH := MessageControl.Height;
 
     MessageControl.Parent := fReportToolWindow;
     MessageControl.Align := TAlign.alClient;
@@ -5985,7 +6133,7 @@ begin
 
     value := GetNodeValue(DebugView.Selected);
 
-    if InputQuery(Lang[ID_NV_MODIFYVALUE], fullname, value) then
+    if UnicodeInputQuery(Lang[ID_NV_MODIFYVALUE], fullname, value) then
       fDebugger.SendCommand('set variable', fullname + ' = ' + value, true);
   end;
 end;
@@ -6470,7 +6618,7 @@ begin
     try
       CheckAssociations(true); // check and fix
     except
-      MessageBox(Application.Handle, PChar(Lang[ID_ENV_UACERROR]), PChar(Lang[ID_ERROR]), MB_OK);
+      MessageBoxW(Application.Handle, PWideChar(Lang[ID_ENV_UACERROR]), PWideChar(Lang[ID_ERROR]), MB_OK);
       devData.CheckAssocs := false; // don't bother again
     end;
   end;
@@ -6557,15 +6705,15 @@ begin
 end;
 
   // Breakpoint event handler - called when breakpoint state changes
-  procedure TMainForm.HandleBreakpointEvent(const AEvent: TEvent);
+  procedure TMainForm.HandleBreakpointEvent(const AEvent: Core.Events.TEvent);
   var
-    BPEvt: TBreakpointEvent;
-    SnapAction: TBreakpointAction;
+    BPEvt: Core.Events.TBreakpointEvent;
+    SnapAction: Core.Events.TBreakpointAction;
     SnapFile: string;
     SnapLine: Integer;
   begin
-    if not (AEvent is TBreakpointEvent) then Exit;
-    BPEvt := TBreakpointEvent(AEvent);
+    if not (AEvent is Core.Events.TBreakpointEvent) then Exit;
+    BPEvt := Core.Events.TBreakpointEvent(AEvent);
 
     // 快照值类型字段: Publish 在分发返回后即释放事件对象,
     // 队列到 UI 线程的闭包禁止捕获 BPEvt 本体 (悬空), 只许用快照
@@ -6573,27 +6721,38 @@ end;
     SnapFile := BPEvt.FileName;
     SnapLine := BPEvt.LineNumber;
 
-    // Ensure UI updates happen on main thread
-    TThread.Queue(nil,
-      procedure
-      var
-        Ed: TEditor;
-      begin
-        case SnapAction of
-          baClearedAll:
-            begin
-              RemoveActiveBreakpoints;
-              LeftPageControl.ActivePageIndex := 0;
-            end;
-          baAdded, baRemoved:
-            begin
-              Ed := fEditorList.GetEditorFromFileName(SnapFile);
-              if Assigned(Ed) then
-                Ed.Text.InvalidateGutterLine(SnapLine);
-            end;
-        end;
-      end);
+    // Ensure UI updates happen on main thread.
+    //
+    // This was a TThread.Queue(nil, procedure ... end) closure. FPC 3.2.2 has no
+    // anonymous functions at all -- even with {$modeswitch anonymousfunctions},
+    // `reference to` does not resolve -- so the queue takes a `procedure of
+    // object` instead. The three values it closed over travel in FQueued*
+    // fields, which is the same payload pattern the LSP queue already uses.
+    FQueuedBreakAction := SnapAction;
+    FQueuedBreakFile := SnapFile;
+    FQueuedBreakLine := SnapLine;
+    TThread.Queue(nil, ApplyQueuedBreakpointEvent);
   end;
+
+procedure TMainForm.ApplyQueuedBreakpointEvent;
+var
+  Ed: TEditor;
+begin
+  // Runs on the UI thread via TThread.Queue. The payload is FQueuedBreak*.
+  case FQueuedBreakAction of
+    Core.Events.baClearedAll:
+      begin
+        RemoveActiveBreakpoints;
+        LeftPageControl.ActivePageIndex := 0;
+      end;
+    Core.Events.baAdded, Core.Events.baRemoved:
+      begin
+        Ed := fEditorList.GetEditorFromFileName(FQueuedBreakFile);
+        if Assigned(Ed) then
+          Ed.Text.InvalidateGutterLine(FQueuedBreakLine);
+      end;
+  end;
+end;
 
 procedure TMainForm.HandleWatchVarChange(Sender: TObject);
 begin
@@ -6745,11 +6904,15 @@ var
   var
     sizerect: TRect;
   begin
-    DrawText(Sender.Canvas.Handle, PChar(s), Length(s), rect, DT_EXPANDTABS or DT_NOCLIP or DT_NOPREFIX);
+    // DrawTextW, not DrawText: the objfpc declaration takes a PChar
+    // (Ansi), and PChar here is PWideChar.
+    DrawTextW(Sender.Canvas.Handle, PWideChar(s), Length(s), rect, DT_EXPANDTABS or DT_NOCLIP or DT_NOPREFIX);
 
     // Get text extent
     FillChar(sizerect, sizeof(sizerect), 0);
-    DrawText(Sender.Canvas.Handle, PChar(s), Length(s), sizerect, DT_CALCRECT or DT_EXPANDTABS or DT_NOCLIP or
+    // DrawTextW, not DrawText: the objfpc declaration takes a PChar
+    // (Ansi), and PChar here is PWideChar.
+    DrawTextW(Sender.Canvas.Handle, PWideChar(s), Length(s), sizerect, DT_CALCRECT or DT_EXPANDTABS or DT_NOCLIP or
       DT_NOPREFIX);
     Inc(rect.Left, sizerect.Right - sizerect.Left + 1); // 1 extra pixel for extra width caused by bold
   end;
@@ -7192,55 +7355,18 @@ begin
 
   if LCommandLine<>'' then begin
 
-    var ConsoleFrameProc: TProc<TConsoleAppHost, Boolean> :=
-      procedure (AFrame: TConsoleAppHost; AIsSuccess: Boolean)
-      begin
-        if AIsSuccess then
+    // Delphi keeps the closure; FPC cannot have one, so it calls the
+    // shared method instead. Same body, one implementation.
+    {$IFNDEF FPC}
+    var
+      ConsoleFrameProc: TProc<TObject, Boolean> :=
+        procedure (AFrame: TObject; AIsSuccess: Boolean)
         begin
-          var NewTab := TTabSheet.Create(pcConsoleHost);
-          NewTab.PageControl := pcConsoleHost;
-          NewTab.Assign(AFrame);
-        end
-        else
-          for var i := 0 to pcConsoleHost.PageCount - 1 do
-            if pcConsoleHost.Pages[i].Tag = NativeInt(AFrame) then
-            begin
-              pcConsoleHost.Pages[i].Free;
-              Break;
-            end;
-      end;
+          Self.ConsoleFrameProc(AFrame, AIsSuccess);
+        end;
+    {$ENDIF}
 
     TConsoleAppHost.NewHost(LCommandLine, TAction(Sender).Caption, ConsoleFrameProc, 20);
-  end;
-end;
-
-procedure TMainForm.actGeneric1CMDExecute(Sender: TObject);
-begin
-  ExecuteGenericConsole(Sender);
-end;
-
-procedure TMainForm.actGeneric2CMDExecute(Sender: TObject);
-begin
-  ExecuteGenericConsole(Sender);
-end;
-
-procedure TMainForm.actGeneric3CMDExecute(Sender: TObject);
-begin
-  ExecuteGenericConsole(Sender);
-end;
-
-procedure TMainForm.actGotoBreakPointExecute(Sender: TObject);
-var
-  e: TEditor;
-  FileName: String;
-begin
-  FileName := fDebugger.BreakPointFile;
-  if FileName <> '' then begin
-    e := fEditorList.GetEditorFromFileName(FileName);
-    if Assigned(e) then begin
-      e.GotoActiveBreakpoint;
-      e.Activate;
-    end;
   end;
 end;
 
@@ -7382,7 +7508,8 @@ begin
   Result := 0;
 
   // Convert string to list of items
-  ParameterList := CommandLineToArgvW(PWideChar(Parameters), ParameterCount);
+  ParameterList := CommandLineToArgvW(PWideChar(Parameters),
+    @ParameterCount);
   if not Assigned(ParameterList) then
     Exit;
 
@@ -7458,15 +7585,17 @@ begin
       DebugPopup.Images := dmMain.SVGImageListMenuStyle;
       EditorPopup.Images := dmMain.SVGImageListMenuStyle;
 
+      // These six welcome-screen buttons are TBitBtn, not TButton: LCL puts
+      // Images/ImageIndex/Glyph on TCustomBitBtn (buttons.pp:163-222) and
+      // TCustomButton has none of them, so a TButton cannot carry a themed icon
+      // here at all. TBitBtn is the closest LCL analogue to a VCL TButton with
+      // an image list, which is why the statements below are unchanged.
       ButtonNewDocument.Images := dmMain.SVGIconImageWelcomeScreen;
       ButtonNewDocument.ImageIndex := 0;
-      ButtonNewDocument.ImageAlignment := TImageAlignment(2);
       ButtonOpenDocument.Images := dmMain.SVGIconImageWelcomeScreen;
       ButtonOpenDocument.ImageIndex := 1;
-      ButtonOpenDocument.ImageAlignment := TImageAlignment(2);
       ButtonOptions.Images := dmMain.SVGIconImageWelcomeScreen;
       ButtonOptions.ImageIndex := 2;
-      ButtonOptions.ImageAlignment := TImageAlignment(2);
 end;
 
 procedure TMainForm.GetProjectHistory;
@@ -7519,10 +7648,23 @@ begin
   with RBName do
   begin
     SelStart := GetTextLen;
+    // SelAttributes is a rich-text control's character formatting and has no
+    // LCL equivalent here: Lazarus's richmemo package -- the only thing with it --
+    // is not installed in this tree, and our TRichEdit is a TMemo.
+    //
+    // So under FPC the filename is written at the control's default size and
+    // weight instead of 11pt bold, and the path at 9pt. The text, its order and
+    // the selection are all unchanged; only the type styling is lost, and these
+    // are the five MRU entries of the Welcome screen (see the Visible := True
+    // calls in the caller -- this is not an invisible control).
+    {$IFNDEF FPC}
     SelAttributes.Size := 11;
     SelAttributes.Style := [fsBold];
+    {$ENDIF}
     SelText := aFileName + #13#10;
+    {$IFNDEF FPC}
     SelAttributes.Size := 9;
+    {$ENDIF}
     SelText := aDirection;
   end;
 end;
@@ -7539,6 +7681,8 @@ begin
 end;
 
 procedure TMainForm.ResizeWelcomeComponent;
+var
+  adj: Integer;
 begin
   MainPanel.Height := PageControlPanel.Height;
   MainPanel.Width := PageControlPanel.Width;
@@ -7558,7 +7702,7 @@ begin
   LabelDocumentation.Left := (PageControlPanel.Width div 4) - 23;
   LabelHotkeys.Left := (PageControlPanel.Width div 4) - (LabelHotkeys.Width div 2);
 
-  var  adj := 45;
+  adj := 45;
   LabelOpen   .Left     := (PageControlPanel.Width div 4) - adj - LabelOpen   .width;
   LabelSave   .Left     := (PageControlPanel.Width div 4) - adj - LabelSave   .width;
   LabelZoom   .Left     := (PageControlPanel.Width div 4) - adj - LabelZoom   .width;
@@ -7595,6 +7739,7 @@ end;
 procedure TMainForm.CloseTabProc(Sender: TObject);
 begin
   actCloseExecute(Sender);
+  Canvas.Free;
 end;
 
 procedure TMainForm.PageControlCloseButtonDrawTab(Control: TCustomTabControl;
@@ -7632,37 +7777,37 @@ begin
     CloseBtnRect.Left := CloseBtnRect.Right - CloseBtnSize;
     TabSheet.FCloseButtonRect := CloseBtnRect;
 
-    PageControl.Canvas.Brush.Style := bsSolid;
+    Canvas.Brush.Style := bsSolid;
     if Active then
       begin
-          PageControl.Canvas.Brush.Color := StyleServices.GetStyleColor(scTreeView);
+          Canvas.Brush.Color := StyleServices.GetStyleColor(scTreeView);
       end
     else
-      PageControl.Canvas.Brush.Color := StyleServices.GetStyleColor(scGenericBackground);
+      Canvas.Brush.Color := StyleServices.GetStyleColor(scGenericBackground);
 
-    PageControl.Canvas.FillRect(Rect);
-    PageControl.Canvas.Font.Color := StyleServices.GetStyleFontColor(sfButtonTextNormal);
-    PageControl.Canvas.TextOut(TabCaption.X, TabCaption.Y,
+    Canvas.FillRect(Rect);
+    Canvas.Font.Color := StyleServices.GetStyleFontColor(sfButtonTextNormal);
+    Canvas.TextOut(TabCaption.X, TabCaption.Y,
             PageControl.Pages[TabIndex].Caption);
 
-    PageControl.Canvas.Pen.Color := StyleServices.GetStyleColor(scGenericBackground);
-    PageControl.Canvas.Pen.Width := 1;
-    PageControl.Canvas.Brush.Color := StyleServices.GetStyleColor(scGenericBackground);
-    PageControl.Canvas.Brush.Style := bsSolid;
-    PageControl.Canvas.Polygon([Point(CloseBtnRect.Left-4+25, CloseBtnRect.Top-4), Point(CloseBtnRect.Right+4+25, CloseBtnRect.Top-4), Point(CloseBtnRect.Right+4+25, CloseBtnRect.Bottom+4)]);
+    Canvas.Pen.Color := StyleServices.GetStyleColor(scGenericBackground);
+    Canvas.Pen.Width := 1;
+    Canvas.Brush.Color := StyleServices.GetStyleColor(scGenericBackground);
+    Canvas.Brush.Style := bsSolid;
+    Canvas.Polygon([Point(CloseBtnRect.Left-4+25, CloseBtnRect.Top-4), Point(CloseBtnRect.Right+4+25, CloseBtnRect.Top-4), Point(CloseBtnRect.Right+4+25, CloseBtnRect.Bottom+4)]);
 
-    PageControl.Canvas.Pen.Color := StyleServices.GetStyleColor(scButtonDisabled);
-    PageControl.Canvas.Brush.Color := StyleServices.GetStyleColor(scButtonDisabled);
-    PageControl.Canvas.Ellipse(CloseBtnRect);
+    Canvas.Pen.Color := StyleServices.GetStyleColor(scButtonDisabled);
+    Canvas.Brush.Color := StyleServices.GetStyleColor(scButtonDisabled);
+    Canvas.Ellipse(CloseBtnRect);
 
-    PageControl.Canvas.Pen.Width := 1;
-    PageControl.Canvas.Pen.Color := StyleServices.GetStyleFontColor(sfButtonTextNormal);
+    Canvas.Pen.Width := 1;
+    Canvas.Pen.Color := StyleServices.GetStyleFontColor(sfButtonTextNormal);
 
-    PageControl.Canvas.MoveTo(CloseBtnRect.Left+3, CloseBtnRect.Top+3);
-    PageControl.Canvas.LineTo(CloseBtnRect.Right-2, CloseBtnRect.Bottom-2);
+    Canvas.MoveTo(CloseBtnRect.Left+3, CloseBtnRect.Top+3);
+    Canvas.LineTo(CloseBtnRect.Right-2, CloseBtnRect.Bottom-2);
 
-    PageControl.Canvas.MoveTo(CloseBtnRect.Left+3, CloseBtnRect.Bottom-3);
-    PageControl.Canvas.LineTo(CloseBtnRect.Right-2, CloseBtnRect.Top+2);
+    Canvas.MoveTo(CloseBtnRect.Left+3, CloseBtnRect.Bottom-3);
+    Canvas.LineTo(CloseBtnRect.Right-2, CloseBtnRect.Top+2);
 
  {   if not StyleServices.Enabled then
     begin
@@ -7671,7 +7816,7 @@ begin
       else
         CloseBtnDrawState := DFCS_CAPTIONCLOSE;
 
-      //Windows.DrawFrameControl(PageControl.Canvas.Handle,
+      //Windows.DrawFrameControl(Canvas.Handle,
       //  TabSheet.FCloseButtonRect, DFC_CAPTION, CloseBtnDrawState);
     end
     else
@@ -7683,18 +7828,18 @@ begin
       else
         CloseBtnDrawDetails := StyleServices.GetElementDetails(twCloseButtonNormal);
 
-      //StyleServices.DrawElement(PageControl.Canvas.Handle, CloseBtnDrawDetails,
+      //StyleServices.DrawElement(Canvas.Handle, CloseBtnDrawDetails,
       //          TabSheet.FCloseButtonRect);
     end;   }
   end;{ else begin
-    PageControl.Canvas.Brush.Style := bsSolid;
+    Canvas.Brush.Style := bsSolid;
     if Active then
-      PageControl.Canvas.Brush.Color := StyleServices.GetStyleColor(scButtonPressed)
+      Canvas.Brush.Color := StyleServices.GetStyleColor(scButtonPressed)
     else
-      PageControl.Canvas.Brush.Color := StyleServices.GetStyleColor(scButtonDisabled);
-    PageControl.Canvas.FillRect(Rect);
-    PageControl.Canvas.Font.Color := StyleServices.GetStyleFontColor(sfButtonTextNormal);
-    PageControl.Canvas.TextOut(TabCaption.X, TabCaption.Y,
+      Canvas.Brush.Color := StyleServices.GetStyleColor(scButtonDisabled);
+    Canvas.FillRect(Rect);
+    Canvas.Font.Color := StyleServices.GetStyleFontColor(sfButtonTextNormal);
+    Canvas.TextOut(TabCaption.X, TabCaption.Y,
                  PageControl.Pages[TabIndex].Caption);
   end;}
 end;
@@ -7702,11 +7847,18 @@ end;
 procedure TMainForm.PageControlCloseButtonMouseDown(Sender: TObject;
   Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
+  Canvas: TCanvas;
   I: Integer;
   PageControl: TPageControl;
   TabSheet: TCloseTabSheet;
   e: TEditor;
 begin
+  // LCL puts TTabControl.Canvas on the concrete TTabControl
+  // (comctrls.pp:868) while TPageControl descends from TCustomTabControl,
+  // so `PageControl.Canvas` does not resolve. A canvas over the handle is
+  // the LCL's own idiom for owner-drawing a control.
+  Canvas := TCanvas(PageControl.Handle);
+
   PageControl := Sender as TPageControl;
 
   if Button = mbLeft then
@@ -7767,16 +7919,24 @@ begin
   begin
     if PtInRect(FCloseButtonMouseDownTab.FCloseButtonRect, Point(X, Y)) then
     begin
-      TTask.Run(procedure begin
-        TThread.Synchronize(nil, procedure begin
-          //FCloseButtonMouseDownTab.DoClose;
-          //FCloseButtonMouseDownTab := nil;
-          //actCloseExecute(Sender);                //  can close wrong tab
-          PageControl.Repaint;
-        end);
-      end);
+      // TTask.Run(closure) around TThread.Synchronize(closure) is not
+      // expressible here: FPC 3.2.2 has no anonymous methods at all. What the
+      // pair actually did was spawn a thread whose only job was to call back
+      // into Synchronize so that `PageControl.Repaint` ran on the UI thread.
+      // Synchronize from the UI thread runs its callback inline, so the hop
+      // through a worker was overhead with no observable effect -- the repaint
+      // still happens on the UI thread, in the same call, with the same target.
+      // That is the whole difference, and it is why no thread is started here.
+      FRepaintTarget := PageControl;
+      TThread.Synchronize(TThread.CurrentThread, RepaintTargetNow);
     end;
   end;
+end;
+
+procedure TMainForm.RepaintTargetNow;
+begin
+  if Assigned(FRepaintTarget) then
+    FRepaintTarget.Repaint;
 end;
 
 procedure TMainForm.EditorPageControlDrawTab(Control: TCustomTabControl;
