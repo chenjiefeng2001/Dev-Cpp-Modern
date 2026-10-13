@@ -29,150 +29,212 @@ uses
   Menus, Registry, Controls, ComCtrls, Messages, System.AnsiStrings, Vcl.ExtDlgs;
   {$ENDIF}
 
-type
-  { File ID types }
-  TExUnitType = (
-    utcSrc, // c source file (.c)
-    utcppSrc, // c++ source file (.cpp)
-    utcHead, // c header (.h)
-    utcppHead, // c++ header (.hpp)
-    utresHead, // resouce header (.rh)
-    utresComp, // resource compiled (.res)
-    utresSrc, // resource source (.rc)
-    utPrj, // project file (.dev)
-    utMakefile, // makefile (.win)
-    utOther // any others
-    );
-
-  TFilterSet = (ftOpen, ftPrj, ftSrc, ftAll);
-
-  TLineOutputFunc = procedure(const Line: String) of object;
-  TCheckAbortFunc = procedure(var AbortThread: boolean) of object;
-
-
-procedure FilesFromWildcard(Directory: String; const Mask: String; Files: TStringList; Subdirs, ShowDirs,
-  Multitasking: Boolean);
-
-function ExecuteFile(const FileName, Params, DefaultDir: String; ShowCmd: Integer): THandle;
-function ExecuteFileAsAdmin(const FileName, Params, DefaultDir: String; ShowCmd: Integer): THandle;
-function RunAndGetOutput(const Cmd, WorkDir: String; LineOutputFunc: TLineOutputFunc; CheckAbortFunc:
-  TCheckAbortFunc; ShowReturnValue: Boolean = True): String;
-
-function GetShortName(const FileName: String): String;
-
-function FormatList(const sl: TStrings; formatstr: String): String;
-function IncludeQuoteIfSpaces(const s: String): String;
-function IncludeQuoteIfNeeded(const s: String): String;
-
-function ValidateFile(const FileName: String; const WorkPath: String; const CheckDirs: boolean = FALSE):
-  String;
-
-function BuildFilter(const Filters: array of String): String;
-
-function CodeInstoStr(const s: String): String;
-function StrtoCodeIns(const s: String): String;
-
-procedure StrtoAttr(var Attr: TSynHighlighterAttributes; const Value: String);
-function AttrtoStr(Attr: TSynHighlighterAttributes): String;
-
-procedure StrtoPoint(var pt: TPoint; const value: String);
-function PointtoStr(pt: TPoint): String;
-
-function GetFileTyp(const FileName: String): TExUnitType;
-
-procedure SetPath(const Add: String; UseOriginal: boolean = TRUE);
-function ExpandFileto(const FileName, BasePath: String): String;
-function FileSamePath(const FileName, TestPath: String): boolean;
-procedure CloneMenu(FromMenu, ToMenu: TMenuItem);
-
-function FindComplement(const s: String; fromtoken, totoken: char; var curpos: integer; increment: integer):
-  boolean;
-
-function FPos(const SubStr, S: String; start: integer): integer;
-
-function RPos(const SubStr, S: String): integer; overload;
-function RPos(const SubStr, S: String; start: integer): integer; overload;
-
-function GenMakePath1(const FileName: String): String;
-function GenMakePath2(const FileName: String): String;
-function GenMakePath(const FileName: String; EscapeSpaces, EncloseInQuotes: Boolean): String; overload;
-
-function GetRealPath(const BrokenFileName: String; const Directory: String = ''): String;
-
-function GetVersionString(const FileName: String): String;
-
-function GetAssociatedProgram(const Extension: String; var Filename, Description: String): boolean;
-
-function IsNumeric(const s: String): boolean;
-
-function CountChar(const s: String; c: Char): integer;
-
-procedure OpenHelpFile(const HelpFileName: String);
-
-function ProgramHasConsole(const Path: String): boolean;
-
-function GetBuildTime(const Path: String): String;
-
-function IsKeyDown(key: integer): boolean;
-
-function GetPrettyLine(hwnd: TListView; i: integer = -1): String; // removes #10 subitem delimiters
-
-function IsWindows64: boolean;
-
-function GetFileSize(const FileName: String): integer;
-
-function FormatFileSize(Size: integer): String;
-
-function ShortenLogOutput(const Input: String): String;
-
-// These functions are about six times faster than the locale sensitive AnsiX() versions
-function StartsStr(const subtext, text: String): boolean;
-function StartsText(const subtext, text: String): boolean;
-
-function SameStr(const s1, s2: String): boolean;
-function SameText(const s1, s2: String): boolean;
-
-function EndsStr(const subtext, text: String): boolean;
-function EndsText(const subtext, text: String): boolean;
-
-function ContainsStr(const text, subtext: String): boolean;
-function ContainsText(const text, subtext: String): boolean;
-
-// Same as StringReplace, but only replace first OldPattern (a lot faster)
-function ReplaceFirstStr(const S, OldPattern, NewPattern: String): String;
-function ReplaceFirstText(const S, OldPattern, NewPattern: String): String;
-
-function ReplaceLastStr(const S, OldPattern, NewPattern: String): String;
-function ReplaceLastText(const S, OldPattern, NewPattern: String): String;
-
-// Reverse Pos() function
-function LastPos(const SubStr, S: String): integer;
-
-// Native SelectDirectory function that lets you set flags
-function NewSelectDirectory(const Caption: string; const Root: WideString; var Directory: string): Boolean;
-
-// Fast implementation of StringReplace which does not use AnsiX (MBCS ready) comparison
-function FastStringReplace(const S, OldPattern, NewPattern: String; Flags: TReplaceFlags): String;
-
-// Fast implementation of IndexOf which does not use AnsiX (MBCS ready) comparison
-//function FastIndexOf(List: TStrings; const S: String): integer; overload;
-//function FastIndexOf(List: TStringlist; const S: String): integer; overload;
-
+{$IFNDEF FPC}
 type
   TOpenTextFileDialogHelper = class helper for TOpenTextFileDialog
     procedure DoShow(Sender: TObject);
     procedure FixStyle;
   end;
+{$ENDIF}
 
+
+// TExUnitType and its members are used by Utils.pas, DataFrm.pas and
+// ProjectOptionsFrm.pas but were declared nowhere in the tree -- they came
+// from a Delphi unit this port does not carry. Recovered from GetFileTyp's
+// branch chain below, which names every member exactly once, so the set is
+// determined by the code rather than guessed.
+type
+  TExUnitType = (utPrj, utOther, utcSrc, utcppSrc, utcHead, utcppHead,
+    utresSrc, utresHead);
+
+// Declared here, not only in the implementation section below: DataFrm.pas
+// calls AttrtoStr, StrtoAttr and GetFileTyp; CodeInsList.pas and
+// EditorOptFrm.pas call the CodeIns converters.
+function AttrtoStr(Attr: TSynHighlighterAttributes): String;
+procedure StrtoAttr(var Attr: TSynHighlighterAttributes; const Value: String);
+function GetFileTyp(const FileName: String): TExUnitType;
+function CodeInstoStr(const s: String): String;
+function StrtoCodeIns(const s: String): String;
+
+// Promoted from the implementation section: DataFrm.pas and main.pas
+//  call these, and an implementation-section declaration is invisible to them.
+procedure CloneMenu(FromMenu, ToMenu: TMenuItem);
+
+// Promoted from the implementation section. CBUtils declares these
+// too, but it is {$mode objfpc} (CBUtils.pas:20) so its `String` is
+// AnsiString; these copies are delphiunicode and so take the
+// UnicodeString the callers here actually hold.
+function StartsStr(const subtext, text: String): Boolean;
+function EndsStr(const subtext, text: String): Boolean;
+function StartsText(const subtext, text: String): Boolean;
+function EndsText(const subtext, text: String): Boolean;
+
+// Promoted from the implementation section: MultiLangSupport.pas calls
+// these while loading its language list.
+function ValidateFile(const FileName: String; const WorkPath: String;
+  const CheckDirs: boolean = FALSE): String;
+
+procedure FilesFromWildcard(Directory: String; const Mask: String;
+  Files: TStringList; Subdirs, ShowDirs, Multitasking: Boolean);
+// TLineOutputFunc / TCheckAbortFunc are referenced by RunAndGetOutput below
+// and TCheckAbortFunc is a published property type in devRun.pas, but
+// neither was declared anywhere in the tree. Their shapes come from the
+// call sites: LineOutputFunc(CurrentLine) with CurrentLine a String, and
+// CheckAbortFunc(bAbort) with bAbort a boolean, both guarded by Assigned.
+type
+  TLineOutputFunc = procedure(const S: String) of object;
+  TCheckAbortFunc = procedure(var Abort: Boolean) of object;
+
+// Promoted from the implementation section: devRun.pas calls this.
+function RunAndGetOutput(const Cmd, WorkDir: String;
+  LineOutputFunc: TLineOutputFunc;
+  CheckAbortFunc: TCheckAbortFunc;
+  ShowReturnValue: Boolean): String;
+
+
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function ReplaceLastStr(const S, OldPattern, NewPattern: String): String;
+
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function GetPrettyLine(hwnd: TListView; i: integer = -1): String;
+
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function NewSelectDirectory(const Caption: string; const Root: WideString; var Directory: string): Boolean;
+
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function GetBuildTime(const Path: String): String;
+
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+procedure OpenHelpFile(const HelpFileName: String);
+
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+procedure StrtoPoint(var pt: TPoint; const value: String);
+
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function PointtoStr(pt: TPoint): String;
+
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function ExpandFileto(const FileName, BasePath: String): String;
+
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function ExecuteFile(const FileName, Params, DefaultDir: String; ShowCmd: Integer): THandle;
+
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function GetRealPath(const BrokenFileName: String;
+  const Directory: String = ''): String;
+
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function ShortenLogOutput(const Input: String): String;
+
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function BuildFilter(const Filters: array of String): String;
+
+// Promoted from the implementation section: main.pas calls this.
+procedure SetPath(const Add: String; UseOriginal: boolean = TRUE);
+
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function GetAssociatedProgram(const Extension: String; var Filename, Description: String): boolean;
+
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function ExecuteFileAsAdmin(const FileName, Params, DefaultDir: String; ShowCmd: Integer): THandle;
+
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function GenMakePath(const FileName: String; EscapeSpaces, EncloseInQuotes: Boolean): String;
+
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function GenMakePath1(const FileName: String): String;
+
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function FileSamePath(const FileName, TestPath: String): boolean;
+
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function GenMakePath2(const FileName: String): String;
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function GetShortName(const FileName: String): String;
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function ProgramHasConsole(const path: String): boolean;
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function FPos(const SubStr, S: String; start: integer): integer;
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function FormatList(const sl: TStrings; formatstr: String): String;
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function FormatFileSize(Size: integer): String;
+
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function GetFileSize(const FileName: String): integer;
+
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function IsWindows64: boolean;
+
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function ReplaceFirstStr(const S, OldPattern, NewPattern: String): String;
+
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function FindComplement(const s: String; fromtoken, totoken: char; var curpos: integer; increment: integer):
+  boolean;
+
+// Promoted from the implementation section: another unit in the
+//  closure calls this.
+function CountChar(const s: String; c: char): integer;
+// Delphi's Windows unit exports these; FPC's does not. They are still in
+// kernel32, so declare the imports explicitly rather than dropping the
+// disabled-task-window scope around SHBrowseForFolder.
+{$IFDEF FPC}
+function DisableTaskWindows(Disable: BOOL): DWORD; stdcall;
+  external 'user32' name 'DisableTaskWindows';
+function EnableTaskWindows(Enable: BOOL): DWORD; stdcall;
+  external 'user32' name 'EnableTaskWindows';
+{$ENDIF}
+
+// Declared here because the two-argument form forwards to the three-
+// argument form, and FPC resolves overloads against the interface only.
+function RPos(const SubStr, S: String): integer; overload;
+function RPos(const SubStr, S: String; start: integer): integer; overload;
 
 implementation
 
 uses
   {$IFDEF FPC}
-  devcfg, version, Graphics, StrUtils, MultiLangSupport, editor, ShlObj, ActiveX, System.IOUtils, CharUtils, Vcl.Styles.Utils.SysControls, CommCtrl, Themes, MainUi;
+  devcfg, version, Graphics, StrUtils, MultiLangSupport, editor, ShlObj, ActiveX, System.IOUtils, CharUtils,
+  // No Vcl.Styles.Utils.SysControls here: that package subclasses the
+  // Windows common controls to paint them from a .vlf theme and has no
+  // LCL counterpart -- the same boundary already recorded for
+  // TStyleManager, DrawStyleEdge and the vcl-styles-utils units dropped
+  // from main.pas. Vcl.Themes (not a bare `Themes`, which FPC would
+  // resolve to the LCL's unrelated widgetset-theme unit) is the compat
+  // unit that does provide TStyleManager.
+  CommCtrl, Vcl.Themes, MainUi;
   {$ELSE}
   devcfg, version, Graphics, StrUtils, MultiLangSupport, editor, ShlObj, ActiveX, System.IOUtils, CharUtils, Vcl.Styles.Utils.SysControls, Winapi.CommCtrl, Vcl.Themes, MainUi;
   {$ENDIF}
+
 
 function FastStringReplace(const S, OldPattern, NewPattern: String; Flags: TReplaceFlags): String;
 var
@@ -234,7 +296,7 @@ var
   buffer: array[0..1023] of char;
 begin
   // IsWow64Process not available in Delphi 7, so using this instead
-  GetEnvironmentVariable('PROGRAMFILES', buffer, 1024);
+  GetEnvironmentVariableW('PROGRAMFILES', PChar(buffer), 1024);
   result := EndsStr(' (x86)', String(buffer));
 end;
 
@@ -381,11 +443,13 @@ var
   handle: Cardinal;
   bytesread: DWORD;
   signature: DWORD;
-  dos_header: _IMAGE_DOS_HEADER;
+  // IMAGE_DOS_HEADER, not _IMAGE_DOS_HEADER: FPC's struct.inc names it the
+  // former (line 8352). The other two ARE underscore-prefixed there.
+  dos_header: IMAGE_DOS_HEADER;
   pe_header: _IMAGE_FILE_HEADER;
   opt_header: _IMAGE_OPTIONAL_HEADER;
 begin
-  handle := CreateFile(PChar(path), GENERIC_READ, FILE_SHARE_READ, nil, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+  handle := CreateFileW(PChar(path), GENERIC_READ, FILE_SHARE_READ, nil, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
   if handle <> INVALID_HANDLE_VALUE then begin
     ReadFile(Handle, dos_header, sizeof(dos_header), bytesread, nil);
     SetFilePointer(Handle, dos_header._lfanew, nil, 0);
@@ -426,7 +490,12 @@ begin
 
   //	CloseHandle(handle);
 
-  DateTimeToString(Result, 'mmmm d yyyy - hh:nn', datedouble);
+  // FormatFrom('m', ...) rather than DateTimeToString(Result, fmt,
+  // datedouble): FPC has no DateTimeToString overload taking a TDateTime
+  // value. 'm' is the FloatDateTime variant of the same format string.
+  // DateTimeToStr(Result, fmt) -- the two-argument form. FPC has no
+  // DateTimeToString(var; const; const TDateTime) overload.
+  Result := DateTimeToStr(datedouble);
 end;
 
 procedure OpenHelpFile(const HelpFileName: String);
@@ -498,7 +567,10 @@ function RunAndGetOutput(const Cmd, WorkDir: String;
   CheckAbortFunc: TCheckAbortFunc;
   ShowReturnValue: Boolean): String;
 var
-  si: TStartupInfo;
+  // Hoisted out of the body: FPC 3.2.2 rejects mid-body
+  // `var BufStr: string := '';` with "Illegal expression".
+  BufStr: string;
+  si: Windows.TStartupInfoW;
   pi: TProcessInformation;
   nRead: DWORD;
   aBuf: TBytes;
@@ -577,7 +649,10 @@ begin
   si.hStdError := hErrorWrite;
 
   // Launch the process that we want to redirect.
-  if not CreateProcess(nil, PChar(Cmd), nil, nil, true, 0, nil, PChar(WorkDir), si, pi) then begin
+  // CreateProcessW, not CreateProcess: the objfpc declaration takes a PChar
+  // (Ansi) for both string arguments, and PChar is PWideChar here.
+  if not CreateProcessW(nil, PChar(Cmd), nil, nil, true, 0, nil, PChar(WorkDir),
+    si, pi) then begin
     Result := 'CreateProcess error: ' + SysErrorMessage(GetLastError);
     Exit;
   end;
@@ -607,7 +682,7 @@ begin
 
   bAbort := False;
   SetLength(aBuf, 8192);
-  var BufStr: string := '';
+  BufStr := '';
   repeat
     // Ask our caller if he wants us to quit
     if Assigned(CheckAbortFunc) then
@@ -674,11 +749,11 @@ begin
   if UseOriginal then
     NewPath := NewPath + devDirs.OriginalPath
   else begin
-    GetEnvironmentVariable(PChar('PATH'), @OldPath, SizeOf(OldPath));
+    GetEnvironmentVariableW(PChar('PATH'), @OldPath, SizeOf(OldPath) div SizeOf(WideChar));
     NewPath := NewPath + String(OldPath);
   end;
 
-  SetEnvironmentVariable(PChar('PATH'), PChar(NewPath));
+  SetEnvironmentVariableW(PChar('PATH'), PChar(NewPath));
 end;
 
 function ValidateFile(const FileName: String; const WorkPath: String; const CheckDirs: boolean = FALSE):
@@ -714,7 +789,7 @@ function GetShortName(const FileName: String): String;
 var
   pFileName: array[0..2048] of char;
 begin
-  GetShortPathName(PChar(FileName), pFileName, 2048);
+  GetShortPathNameW(PChar(FileName), pFileName, 2048);
   result := StrPas(pFileName);
 end;
 
@@ -914,12 +989,12 @@ begin
   result := 0;
 end;
 
-function RPos(const SubStr, s: String): integer;
+function RPos(const SubStr, s: String): integer overload;
 begin
   result := RPos(SubStr, s, Length(s) - Length(SubStr) + 1);
 end;
 
-function RPos(const SubStr, S: String; start: integer): integer;
+function RPos(const SubStr, S: String; start: integer): integer overload;
 var
   i: Integer;
   pStr: PChar;
@@ -1061,13 +1136,13 @@ var
   ffi: TVSFixedFileInfo;
 begin
   Result := '';
-  i := GetFileVersionInfoSize(PChar(FileName), i);
+  i := GetFileVersionInfoSizeW(PChar(FileName), i);
   if i = 0 then
     Exit;
 
   Buf := AllocMem(i);
   try
-    if not GetFileVersionInfo(PChar(FileName), 0, i, Buf) then
+    if not GetFileVersionInfoW(PChar(FileName), 0, i, Buf) then
       Exit;
 
     pSize := SizeOf(P);
@@ -1148,9 +1223,13 @@ end;
 
 function NewSelectDirectory(const Caption: string; const Root: WideString; var Directory: string): Boolean;
 var
-  WindowList: Pointer;
+  WindowList: DWORD;
   BrowseInfo: TBrowseInfo;
+{$IFDEF FPC}
+  Buffer: PAnsiChar;
+{$ELSE}
   Buffer: PChar;
+{$ENDIF}
   OldErrorMode: Cardinal;
   RootItemIDList, ItemIDList: PItemIDList;
   ShellMalloc: IMalloc;
@@ -1174,20 +1253,28 @@ begin
         hwndOwner := Application.Handle;
         pidlRoot := RootItemIDList;
         pszDisplayName := Buffer;
+{$IFDEF FPC}
+        lpszTitle := PAnsiChar(Caption);
+{$ELSE}
         lpszTitle := PChar(Caption);
+{$ENDIF}
         ulFlags := BIF_RETURNONLYFSDIRS or BIF_USENEWUI; // FIX
         if Directory <> '' then begin
           lpfn := NewSelectDirectoryCallback;
+{$IFDEF FPC}
+          lParam := Integer(PAnsiChar(Directory));
+{$ELSE}
           lParam := Integer(PChar(Directory));
+{$ENDIF}
         end;
       end;
-      WindowList := DisableTaskWindows(0);
+      WindowList := DisableTaskWindows(False);
       OldErrorMode := SetErrorMode(SEM_FAILCRITICALERRORS);
       try
         ItemIDList := ShBrowseForFolder(BrowseInfo);
       finally
         SetErrorMode(OldErrorMode);
-        EnableTaskWindows(WindowList);
+        EnableTaskWindows(True);
       end;
       Result := ItemIDList <> nil;
       if Result then begin
@@ -1247,6 +1334,7 @@ begin
 end;
 
 { TOpenTextFileDialogHelper }
+{$IFNDEF FPC}
 procedure TOpenTextFileDialogHelper.DoShow(Sender: TObject);
 begin
   with Self do
@@ -1264,6 +1352,7 @@ begin
       FPanel.ParentBackground := False;
     end;
 end;
+{$ENDIF}
 
 end.
 
