@@ -50,6 +50,7 @@ on:
       - "tools/f3_form_baseline.txt"
       - "tools/f3_svg_extract.py"
       - "tools/lcl_svg_struct_check.py"
+      - "tools/f3_unit_case_check.py"
       - "tools/f3_imageindex_audit.py"
       - "tools/f3_removed_controls.py"
       - "tools/f3_svg_semantics.py"
@@ -99,6 +100,7 @@ on:
       - "tools/f3_form_baseline.txt"
       - "tools/f3_svg_extract.py"
       - "tools/lcl_svg_struct_check.py"
+      - "tools/f3_unit_case_check.py"
       - "tools/f3_imageindex_audit.py"
       - "tools/f3_removed_controls.py"
       - "tools/f3_svg_semantics.py"
@@ -245,6 +247,17 @@ jobs:
 
       - name: "LCL SVG structural gate"
         run: python3 tools/lcl_svg_struct_check.py
+
+      # Unit names that only resolve on a case-insensitive filesystem. Twelve
+      # LSP units declared `LSP.JsonRpc` in a file named `Lsp.JsonRpc.pas`; the
+      # Linux runner reported "Can't find unit LSP.JsonRpc" while Windows built
+      # and tested the same tree for months. The local build cannot reproduce it,
+      # so the gate has to exist for anyone else who touches a unit name.
+      - name: "Unit/file-name case gate -- prove the checks can fail"
+        run: python3 tools/f3_unit_case_check.py --self-test
+
+      - name: "Unit/file-name case gate"
+        run: python3 tools/f3_unit_case_check.py
 
       # ImageIndex topology: every ImageIndex in the tree, classified, with the
       # SVG-bound ones range-asserted against the extracted icon counts. Fails on
