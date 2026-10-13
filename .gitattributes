@@ -13,23 +13,26 @@
 # What actually satisfied them was each Windows developer's LOCAL
 # core.autocrlf=true, which is recorded nowhere. The blobs are bare LF, so a CI
 # checkout on Linux -- where autocrlf does nothing -- handed five gates bare LF
-# and CI had been red on every run since at least 2026-10-07, on files nobody had
+# and CI was red on every run since at least 2026-10-07, on files nobody had
 # touched. Reproduced locally in a worktree with core.autocrlf=false before
 # changing anything.
 #
-# So the conversion moves into the repo, where a clone can see it. text=auto
-# leaves the 640 binary files alone.
+# So the conversion moves into the repo, where a clone can see it.
 #
-# Scoped to CRLF rather than "whatever autocrlf says" deliberately: it makes a
-# Linux checkout byte-identical to a Windows one, which is the whole point. Two
-# checkouts of the same commit must not differ in a way a byte-identity gate can
-# see.
+# The rule is deliberately one line and blanket. A narrower first attempt --
+# scoped to qa_check.py's own ACTIVE_DIRS + TOUCHED_FILES + MANIFEST -- turned
+# that one gate green and left four others red, because two of them require CRLF
+# INSIDE the FPC subtree qa_check deliberately skips. Scoping to one gate's view
+# is how three quarters of the problem gets missed.
 #
-# This does not rewrite any blob. The files stay LF in the object store and are
-# converted on checkout; renormalising them would have been a repo-wide rewrite
-# touching 2119 files, none of which this commit is about.
+# CRLF rather than "whatever autocrlf says" on purpose: it makes a Linux
+# checkout byte-identical to a Windows one, and two checkouts of one commit must
+# not differ in a way a byte-identity gate can see.
 #
-# Verified in a worktree with core.autocrlf=false -- what a Linux runner sees --
-# that all six text gates pass, and that they still FAIL when a file inside
-# their scope is deliberately given bare LF. An attribute that silenced the
-# gates instead of satisfying them would leave CI green with the invariant broken.
+# text=auto leaves the 640 binary files alone, and there are no shell scripts in
+# the tree that CRLF would break.
+#
+# This rewrites no blob. Files stay LF in the object store and convert on
+# checkout; renormalising would have been a repo-wide rewrite of 2119 files,
+# none of which is what this commit is about.
+* text=auto eol=crlf
