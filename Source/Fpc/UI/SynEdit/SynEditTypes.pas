@@ -205,7 +205,8 @@ type
     eoSmartTabDelete,          //TODO Similar to "Smart tabs", but when you delete characters
     eoSpacesToTabs,            // Converts long substrings of space characters to tabs and spaces
     eoAutoIndentOnPaste,       // Allows to indent text pasted from clipboard
-    //eoSpecialLineDefaultFg,    //TODO disables the foreground text color override when using the OnSpecialLineColor event
+    eoSpecialLineDefaultFg,   // disables the foreground text color override
+                              // when using the OnSpecialLineColor event
 
     // Only for compatibility, moved to TSynEditorMouseOptions
     // keep in one block
@@ -213,41 +214,42 @@ type
     eoDragDropEditing,         // Allows to drag-and-drop text blocks within the control
     eoRightMouseMovesCursor,   // When clicking with the right mouse button, for a popup menu, move the caret to clicked position
     eoDoubleClickSelectsLine,  // Selects entire line with double-click, otherwise double-click selects only current word
-    eoShowCtrlMouseLinks       // Pressing <Ctrl> key (SYNEDIT_LINK_MODIFIER) will highlight the word under mouse cursor
-    );
-
-  TSynEditorOption2 = (
-    eoCaretSkipsSelection,     // Allows <Left> and <Right> keys to move caret to selected block edges, without deselecting the block
-    eoCaretMoveEndsSelection,  // <Left> and <Right> will clear the selection, but the caret will NOT move.
-                               // Combine with eoCaretSkipsSelection, and the caret will move to the other selection bound, if needed
-                               // Kind of overrides eoPersistentBlock
-    eoCaretSkipTab,            // Disables caret positioning inside tab-characters internal area
-    eoAlwaysVisibleCaret,      // Keeps caret on currently visible control area, when scrolling control
-    eoEnhanceEndKey,           // Toggles behaviour of <End> key on line with trailing spaces. If turned on, key will jump to last non-spacing char, if it's nearer to caret position.
-    eoFoldedCopyPaste,         // Remember folding states of blocks, on Copy/Paste operations
-    eoPersistentBlock,         // Keeps selection, even if caret moves away or text is edited
-    eoOverwriteBlock,          // Allows to overwrite currently selected block, when pasting or typing new text
-    eoAutoHideCursor,          // Hide mouse cursor, when new text is typed
-    eoColorSelectionTillEol,   // Colorize selection background only till EOL of each line, not till edge of control
-    eoPersistentCaretStopBlink,// only if eoPersistentCaret > do not blink, draw fixed line
-    eoNoScrollOnSelectRange,   // SelectALl, SelectParagraph, SelectToBrace will not scroll
-    eoAcceptDragDropEditing,   // Accept dropping text dragged from a SynEdit (self or other).
-                               // OnDragOver: To use OnDragOver, this flag should NOT be set.
-                               // WARNING: Currently OnDragOver also works, if drag-source is NOT TSynEdit, this may be change for other drag sources.
-                               //          This may in future affect if OnDragOver is called at all or not.
-    eoScrollPastEolAddPage,    // Allows caret to go into empty space beyond end-of-line position
-                               // - Limit to length of longest line + width of one page
-                               // if eoScrollPastEol also is set, the bigger of the 2 limits is used
-    eoScrollPastEolAutoCaret,  // Allows caret to go into empty space beyond end-of-line position
-                               // Limit will follow the caret / scrollbar-range extends when caret goes further
-    eoBookmarkRestoresScroll   // Bookmarks also restore scroll pos
+    eoShowCtrlMouseLinks,       // Pressing <Ctrl> key (SYNEDIT_LINK_MODIFIER) will highlight the word under mouse cursor,
+    // eoShowLigatures is the only member the duplicate declaration in
+    // SynEdit.pas had that neither options enum here carried:
+    // eoEnhanceEndKey is in TSynEditorOption2, and eoSpecialLineDefaultFg
+    // is present but commented out. The two declarations were distinct
+    // TYPES sharing the same enumerator names, so `eoTabsToSpaces in
+    // fText.Options` in Editor.pas did not typecheck against the vendored
+    // SynEdit's own options set.
+    // Folded in from TSynEditorOption2, which this port introduced but the
+    // Delphi original never had: there, all of these are members of the single
+    // TSynEditorOption (Source/VCL/SynEdit/Source/SynEdit.pas:130).
+    eoCaretSkipsSelection,
+    eoCaretMoveEndsSelection,
+    eoCaretSkipTab,
+    eoAlwaysVisibleCaret,
+    eoEnhanceEndKey,
+    eoFoldedCopyPaste,
+    eoPersistentBlock,
+    eoOverwriteBlock,
+    eoAutoHideCursor,
+    eoColorSelectionTillEol,
+    eoPersistentCaretStopBlink,
+    eoNoScrollOnSelectRange,
+    eoAcceptDragDropEditing,
+    eoScrollPastEolAddPage,
+    eoScrollPastEolAutoCaret,
+    eoBookmarkRestoresScroll,   // Bookmarks also restore scroll pos
+    eoShowLigatures
   );
+
 
   TSynFrameEdges = (
     sfeNone,
     sfeAround,      // frame around
     sfeBottom,      // bottom part of the frame
-    sfeLeft         // left part of the frame
+    sfeLeft         // left part of the frame,
   );
 
   TSynLineState = (slsNone, slsSaved, slsUnsaved);
@@ -268,7 +270,14 @@ type
 
   TSynScrollEvent = (peBeforeScroll, peAfterScroll, peAfterScrollFailed);
 
-  TSynStatusChange = (scCaretX, scCaretY,
+  // scAll moved here from SynEdit.pas, which ALSO declared this enum -- two
+  // distinct types sharing the enumerator names, so `scModified in Changes`
+  // would not typecheck across the unit boundary. This one is the superset, so
+  // it is the one that survives; scAll is first so the set's ordinals below it
+  // keep their meaning ("update a statusbar when another TCustomSynEdit got the
+  // focus").
+  TSynStatusChange = (scAll,
+    scCaretX, scCaretY,
     scLeftChar, scTopLine, scLinesInWindow, scCharsInWindow,
     scInsertMode, scModified, scSelection, scReadOnly,
     scFocus,     // received or lost focus

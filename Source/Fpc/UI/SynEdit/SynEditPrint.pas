@@ -201,6 +201,18 @@ type
     procedure LoadFromStream(AStream: TStream);
     procedure SaveToStream(AStream: TStream);
   published
+    procedure InternalPrintPage(Num: Integer);
+  // Seam for TSynEditPrintHelper in Editor.pas, which drives the print
+  // job from outside. It is a class helper in ANOTHER unit, so these
+  // private fields are out of reach -- `private` is unit-scoped, not
+  // type-scoped. Same arrangement as TCustomSynEdit's Internal* set.
+    property FSelectedOnlyInternal: Boolean read fSelectedOnly write fSelectedOnly;
+    property FSelAvailInternal: Boolean read fSelAvail write fSelAvail;
+    property FPrintingInternal: Boolean read FPrinting write FPrinting;
+    property FAbortInternal: Boolean read FAbort write FAbort;
+    property FDocTitleInternal: string read FDocTitle write FDocTitle;
+    property FTitleInternal: string read FTitle write FTitle;
+    property FPageCountInternal: Integer read FPageCount write FPageCount;
     property Copies: integer read FCopies write FCopies;
     property Header: THeader read FHeader write SetHeader;
     property Footer: TFooter read FFooter write SetFooter;
@@ -1075,6 +1087,11 @@ end;
 procedure TSynEditPrint.SetMargins(const Value: TSynEditPrintMargins);
 begin
   FMargins.Assign(Value);
+end;
+
+procedure TSynEditPrint.InternalPrintPage(Num: Integer);
+begin
+  PrintPage(Num);
 end;
 
 end.

@@ -156,35 +156,11 @@ type
 
   TScrollHintFormat = (shfTopLineOnly, shfTopToBottom);
 
-  TSynEditorOption = (
-    eoAltSetsColumnMode,       //Holding down the Alt Key will put the selection mode into columnar format
-    eoAutoIndent,              //Will indent the caret on new lines with the same amount of leading white space as the preceding line
-    eoDisableScrollArrows,     //Disables the scroll bar arrow buttons when you can't scroll in that direction any more
-    eoDragDropEditing,         //Allows you to select a block of text and drag it within the document to another location
-    eoDropFiles,               //Allows the editor accept OLE file drops
-    eoEnhanceHomeKey,          //enhances home key positioning, similar to visual studio
-    eoEnhanceEndKey,           //enhances End key positioning, similar to JDeveloper
-    eoGroupUndo,               //When undoing/redoing actions, handle all continous changes of the same kind in one call instead undoing/redoing each command separately
-    eoHalfPageScroll,          //When scrolling with page-up and page-down commands, only scroll a half page at a time
-    eoHideShowScrollbars,      //if enabled, then the scrollbars will only show when necessary.  If you have ScrollPastEOL, then it the horizontal bar will always be there (it uses MaxLength instead)
-    eoKeepCaretX,              //When moving through lines w/o Cursor Past EOL, keeps the X position of the cursor
-    eoNoCaret,                 //Makes it so the caret is never visible
-    eoNoSelection,             //Disables selecting text
-    eoRightMouseMovesCursor,   //When clicking with the right mouse for a popup menu, move the cursor to that location
-    eoScrollByOneLess,         //Forces scrolling to be one less
-    eoScrollHintFollows,       //The scroll hint follows the mouse when scrolling vertically
-    eoScrollPastEof,           //Allows the cursor to go past the end of file marker
-    eoScrollPastEol,           //Allows the cursor to go past the last character into the white space at the end of a line
-    eoShowScrollHint,          //Shows a hint of the visible line numbers when scrolling vertically
-    eoShowSpecialChars,        //Shows the special Characters
-    eoSmartTabDelete,          //similar to Smart Tabs, but when you delete characters
-    eoSmartTabs,               //When tabbing, the cursor will go to the next non-white space character of the previous line
-    eoSpecialLineDefaultFg,    //disables the foreground text color override when using the OnSpecialLineColor event
-    eoTabIndent,               //When active <Tab> and <Shift><Tab> act as block indent, unindent when text is selected
-    eoTabsToSpaces,            //Converts a tab character to a specified number of space characters
-    eoTrimTrailingSpaces,      //Spaces at the end of lines will be trimmed and not saved
-    eoShowLigatures            //Shows font ligatures, by default it is disabled
-    );
+  // TSynEditorOption now lives in SynEditTypes only. It was ALSO declared
+  // here, with a different set of members, so the two were distinct types
+  // and `eoTabsToSpaces in fText.Options` in Editor.pas could not typecheck
+  // against the vendored SynEdit's own options set. SynEditTypes' copy
+  // carries every member this one had.
 
   TSynEditorOptions = set of TSynEditorOption;
 
@@ -208,9 +184,11 @@ type
   end;
 
 type
-// use scAll to update a statusbar when another TCustomSynEdit got the focus
-  TSynStatusChange = (scAll, scCaretX, scCaretY, scLeftChar, scTopLine,
-    scInsertMode, scModified, scSelection, scReadOnly);
+// TSynStatusChange / TSynStatusChanges now live in SynEditTypes only. They were
+// ALSO declared here, with the same enumerator names but a different set of
+// them, so the two were distinct types: `scModified in Changes` inside this unit
+// and the identically-spelled line in Editor.pas did not typecheck against each
+// other. SynEditTypes' declaration is the superset and is the one kept.
   TSynStatusChanges = set of TSynStatusChange;
 
   TContextHelpEvent = procedure(Sender: TObject; word: string)
@@ -897,6 +875,27 @@ type
     property PaintLock: Integer read fPaintLock;
     property ReadOnly: Boolean read GetReadOnly write SetReadOnly default False;
     property SearchEngine: TSynEditSearchCustom read fSearchEngine write SetSearchEngine;
+
+    // Seam for TCustomSynEditHelper in Editor.pas, which exposes these five
+    // internals to the rest of the application. It is a class helper declared in
+    // ANOTHER unit, so it cannot reach private fields -- and that is true in
+    // Delphi as much as in FPC; `private` is unit-scoped, not type-scoped. These
+    // are the public way in, deliberately named Internal* so nothing uses them by
+    // accident.
+    property InternalStateFlags: TSynStateFlags read fStateFlags write fStateFlags;
+    property InternalStatusChanges: TSynStatusChanges
+      read fStatusChanges write fStatusChanges;
+    property InternalBlockBegin: TBufferCoord read fBlockBegin write fBlockBegin;
+    property InternalBlockEnd: TBufferCoord read fBlockEnd write fBlockEnd;
+    function InternalPlugins: TObjectList;
+    // WideChar key-press registration. OnKeyPress is promoted to the LCL's
+    // TKeyPressEvent, which is AnsiChar-based because controls.pp is objfpc,
+    // while this port is WideChar -- a TKeyPressWideEvent cannot be
+    // assigned to it. The kbd handler's chain already speaks WideChar,
+    // so this is the supported way in.
+    procedure AddWideKeyPressHandler(aHandler: TKeyPressWideEvent);
+    function InternalLeftSpacesEx(const Line: string; WantTabs,
+      CalcAlways: Boolean): Integer;
     property SelAvail: Boolean read GetSelAvail;
     property SelLength: Integer read GetSelLength write SetSelLength;
     property SelTabBlock: Boolean read GetSelTabBlock;
@@ -937,8 +936,16 @@ type
     property Keystrokes: TSynEditKeyStrokes
       read FKeystrokes write SetKeystrokes stored False;
     property MaxUndo: Integer read GetMaxUndo write SetMaxUndo default 1024;
+    // Delphi accepts a default value on a set property; FPC does not. The
+    // initial value is applied in the constructor either way (fOptions :=
+    // SYNEDIT_DEFAULT_OPTIONS), so only the stored-default declaration
+    // differs between the two.
+    {$IFNDEF FPC}
     property Options: TSynEditorOptions read GetOptions write SetOptions
       default SYNEDIT_DEFAULT_OPTIONS;
+    {$ELSE}
+    property Options: TSynEditorOptions read GetOptions write SetOptions;
+    {$ENDIF}
     property OverwriteCaret: TSynEditCaretType read FOverwriteCaret
       write SetOverwriteCaret default ctBlock;
     property RightEdge: Integer read fRightEdge write SetRightEdge default 80;
@@ -1062,7 +1069,12 @@ type
     property Keystrokes;
     property Lines;
     property MaxUndo;
+    // Not re-declared here under FPC: the public declaration above already
+    // carries RTTI under FPC's default {$RTTI}, and publishing a `set of`
+    // property is rejected outright. Delphi needs the re-declaration.
+    {$IFNDEF FPC}
     property Options;
+    {$ENDIF}
     property OverwriteCaret;
     property ReadOnly;
     property RightEdge;
@@ -11053,4 +11065,22 @@ begin
   // nothing
 end;
 
+function TCustomSynEdit.InternalPlugins: TObjectList;
+begin
+  Result := fPlugins;
+end;
+
+
+function TCustomSynEdit.InternalLeftSpacesEx(const Line: string; WantTabs,
+  CalcAlways: Boolean): Integer;
+begin
+  Result := LeftSpacesEx(Line, WantTabs, CalcAlways);
+end;
+
+procedure TCustomSynEdit.AddWideKeyPressHandler(aHandler: TKeyPressWideEvent);
+begin
+  fKbdHandler.AddKeyPressHandler(aHandler);
+end;
+
 end.
+
