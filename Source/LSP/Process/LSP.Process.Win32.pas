@@ -5,9 +5,9 @@ interface
 uses
   {$IFDEF FPC}
   {$IFDEF FPC}
-  Classes, SysUtils, Windows, Lsp.Process;
+  Classes, SysUtils, Windows, LSP.Process;
   {$ELSE}
-  Classes, SysUtils, Winapi.Windows, Lsp.Process;
+  Classes, SysUtils, Winapi.Windows, LSP.Process;
   {$ENDIF}
   {$ELSE}
   System.Classes, System.SysUtils, Winapi.Windows, LSP.Process;

@@ -7,7 +7,7 @@ program FpcCoreTests;
 // line's -Mdelphiunicode. So the same spelling meant two different types:
 //
 //     FpcCoreTests.lpr   {$mode delphi}{$H+}   string = AnsiString
-//     Lsp.JsonRpc.pas    (none)               string = UnicodeString
+//     LSP.JsonRpc.pas    (none)               string = UnicodeString
 //
 // A var/out parameter demands an EXACT match, so every call passing a string
 // literal through one was refused:

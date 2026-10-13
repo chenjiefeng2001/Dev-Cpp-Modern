@@ -79,7 +79,7 @@ uses
   Vcl.Styles.Utils.SysControls,
   Vcl.Styles.Utils.SysStyleHook, Vcl.VirtualImage,
   {$ENDIF}
-  Lsp.Bootstrap, Lsp.Client.Definition
+  Lsp.Bootstrap, LSP.Client.Definition
   ;
 
 {$IFNDEF FPC}

@@ -33,7 +33,7 @@ uses
   Vcl.ExtCtrls,
   {$ENDIF}
   {$IFDEF FPC}
-  Lsp.Transport;
+  LSP.Transport;
   {$ELSE}
   LSP.Transport;
   {$ENDIF}

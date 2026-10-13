@@ -9,7 +9,7 @@ interface
 
 uses
   {$IFDEF FPC}
-  Classes, SysUtils, process, Lsp.Process;
+  Classes, SysUtils, process, LSP.Process;
   {$ELSE}
   System.Classes, System.SysUtils, LSP.Process;
   {$ENDIF}
@@ -71,7 +71,7 @@ begin
     // -- the child ignored its arguments and printed its usage banner, because
     // `--child-echo hello-lsp-process` had arrived as a single unknown flag.
     //
-    // This is NOT a test-only defect. Lsp.Transport.Connect passes clangd SEVEN
+    // This is NOT a test-only defect. LSP.Transport.Connect passes clangd SEVEN
     // flags, one quoted and containing a space (`--compile-commands-dir="C:\..."`),
     // so under this code clangd would receive one ~150-character argument and
     // refuse to start. Same failure class as the Input/Output inversion below: it

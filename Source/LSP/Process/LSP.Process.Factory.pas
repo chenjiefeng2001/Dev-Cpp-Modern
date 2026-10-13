@@ -4,7 +4,7 @@ interface
 
 uses
   {$IFDEF FPC}
-  Lsp.Process;
+  LSP.Process;
   {$ELSE}
   LSP.Process;
   {$ENDIF}
@@ -29,7 +29,7 @@ implementation
 uses
 {$IFDEF FPC}
   {$IFDEF FPC}
-  Lsp.Process.Fpc;
+  LSP.Process.Fpc;
   {$ELSE}
   LSP.Process.Fpc;
   {$ENDIF}

@@ -33,7 +33,7 @@ uses
   Vcl.Controls, Vcl.Forms, Vcl.Graphics,
   {$ENDIF}
   {$IFDEF FPC}
-  Lsp.Transport, Lsp.DocumentSync, Lsp.Client.UiQueue,
+  LSP.Transport, Lsp.DocumentSync, LSP.Client.UiQueue,
   {$ELSE}
   LSP.Transport, Lsp.DocumentSync,
   {$ENDIF}

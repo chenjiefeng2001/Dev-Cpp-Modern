@@ -34,7 +34,7 @@ uses
   {$ENDIF}
   SynEditTypes, SynEdit, SynCompletionProposal,
   {$IFDEF FPC}
-  Lsp.Transport, Lsp.DocumentSync, Lsp.Client.UiQueue;
+  LSP.Transport, Lsp.DocumentSync, LSP.Client.UiQueue;
   {$ELSE}
   LSP.Transport, Lsp.DocumentSync;
   {$ENDIF}

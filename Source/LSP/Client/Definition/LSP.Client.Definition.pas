@@ -28,7 +28,7 @@ uses
   System.SysUtils, System.Classes, System.Generics.Collections, System.SyncObjs,
   {$ENDIF}
   {$IFDEF FPC}
-  Lsp.Transport, Lsp.DocumentSync, Lsp.Client.UiQueue,
+  LSP.Transport, Lsp.DocumentSync, LSP.Client.UiQueue,
   {$ELSE}
   LSP.Transport, Lsp.DocumentSync,
   {$ENDIF}

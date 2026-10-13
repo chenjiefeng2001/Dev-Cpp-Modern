@@ -44,23 +44,23 @@
       <IsPartOfProject Value="True"/>
     </Unit4>
     <Unit5>
-      <Filename Value="../../Source/LSP/JsonRpc/Lsp.JsonRpc.pas"/>
+      <Filename Value="../../Source/LSP/JsonRpc/LSP.JsonRpc.pas"/>
       <IsPartOfProject Value="True"/>
     </Unit5>
     <Unit6>
-      <Filename Value="../../Source/LSP/Process/Lsp.Process.pas"/>
+      <Filename Value="../../Source/LSP/Process/LSP.Process.pas"/>
       <IsPartOfProject Value="True"/>
     </Unit6>
     <Unit7>
-      <Filename Value="../../Source/LSP/Process/Lsp.Process.Fpc.pas"/>
+      <Filename Value="../../Source/LSP/Process/LSP.Process.Fpc.pas"/>
       <IsPartOfProject Value="True"/>
     </Unit7>
     <Unit8>
-      <Filename Value="../../Source/LSP/Process/Lsp.Process.Factory.pas"/>
+      <Filename Value="../../Source/LSP/Process/LSP.Process.Factory.pas"/>
       <IsPartOfProject Value="True"/>
     </Unit8>
     <Unit9>
-      <Filename Value="../../Source/LSP/Transport/Lsp.Transport.pas"/>
+      <Filename Value="../../Source/LSP/Transport/LSP.Transport.pas"/>
       <IsPartOfProject Value="True"/>
     </Unit9>
   </Units>

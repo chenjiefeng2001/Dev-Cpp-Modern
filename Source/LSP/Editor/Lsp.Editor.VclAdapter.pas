@@ -20,7 +20,7 @@
   without it the outer Validate handler applies the edit a second time.
 
   It is left unimplemented rather than written for one reason: the same file
-  (Lsp.Client.pas:150-186) proves this vendored SynEdit has already diverged
+  (LSP.Client.pas:150-186) proves this vendored SynEdit has already diverged
   from what the LSP layer was written against -- its marker API does not exist
   at all, which tools/lsp_marker_api_check.py measures rather than assumes.
   Writing the write path against an API surface demonstrably not matching the
@@ -155,7 +155,7 @@ destructor TVclSynEditAdapter.Destroy;
 begin
   // Nothing to unsubscribe: this SynEdit has no MarkersChanged event (see
   // SetOnMarkersChanged), so the adapter never installs one. The real code
-  // at Lsp.Client.pas:84 does install such a handler and never removes it --
+  // at LSP.Client.pas:84 does install such a handler and never removes it --
   // its destructor at :91-96 frees the diagnostics list but leaves the
   // assignment in place. That is a latent dangling reference in the current
   // code, and it is why the adapter tracks FOwnsHandler: when a real event

@@ -48,7 +48,7 @@ type
   { The visual style of a gutter/diagnostic marker.
 
     Replaces TSynEditMarkerStyle. Only the members the client layer actually
-    uses are modelled: Lsp.Client.pas:169 sets `Style := msBar`, and nothing
+    uses are modelled: LSP.Client.pas:169 sets `Style := msBar`, and nothing
     in the layer ever reads it back. Keeping msBar as the sole value would be
     "faithful to today" but would make the contract lie to the next caller, so
     the enum is named for the intent instead.

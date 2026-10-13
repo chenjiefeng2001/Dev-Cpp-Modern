@@ -25,11 +25,11 @@ unit Lsp.Editor.Interfaces;
      Hence ReplaceRange.
 
   2. THE MARKER COLLECTION IS A COLLABORATOR. Markers is a list with
-     Count/Add/Delete (Lsp.Client.pas:139-182), not a property returning one
+     Count/Add/Delete (LSP.Client.pas:139-182), not a property returning one
      thing. A collaborator keeps SynEdit's marker class out of the signature.
 
   3. NOTIFICATION IS A REGISTRATION, NOT A FIELD. MarkersChanged is ASSIGNED
-     an anonymous method (Lsp.Client.pas:84). An interface cannot express an
+     an anonymous method (LSP.Client.pas:84). An interface cannot express an
      event FIELD, so it becomes a registration method. The callback type is
      declared HERE rather than taken from Vcl.Controls, which is what would
      otherwise drag the VCL into a supposedly toolkit-free contract.
@@ -60,7 +60,7 @@ type
 
     Identity note: the client layer never reads a marker back. Clear deletes
     by index and RecalculateMarkers rebuilds everything from its own
-    FDiagnostics list (Lsp.Client.pas:188-200), so no caller needs a marker
+    FDiagnostics list (LSP.Client.pas:188-200), so no caller needs a marker
     handle. That is why there is no GetMarker here -- adding one would be an
     untested member. }
   IEditorMarkerList = interface
@@ -69,7 +69,7 @@ type
     { Add one marker. Taken by const because it carries a string. }
     procedure Add(const AMarker: TLspMarkerSpec);
     { Delete the marker at AIndex. Callers re-read indices each step:
-      Lsp.Client.pas:139-144 deletes while decrementing, so indices shift. }
+      LSP.Client.pas:139-144 deletes while decrementing, so indices shift. }
     procedure Delete(AIndex: Integer);
     { Delete every marker. Covers Clear()'s loop in one call; an adapter may
       still implement it as an index loop internally. }
@@ -130,7 +130,7 @@ type
 
     // ---- markers and notification ----------------------------------------
     function GetMarkers: IEditorMarkerList;
-    { Register the marker-change callback (Lsp.Client.pas:84). Pass nil to
+    { Register the marker-change callback (LSP.Client.pas:84). Pass nil to
       unregister -- needed on teardown; the real code has no destructor that
       unsubscribes today, so the VCL adapter should. }
     procedure SetOnMarkersChanged(const AHandler: TLspNotifyEvent);
@@ -171,7 +171,7 @@ end.
     ONE operation (Completion:841-859), and the caret/selection-collapse step
     is mandatory: without it the outer Validate handler double-applies the
     edit. Splitting them would let a future caller produce that bug.
-  * A marker signature of (Line, Char, MarkerId). Lsp.Client.pas:169-179 sets
+  * A marker signature of (Line, Char, MarkerId). LSP.Client.pas:169-179 sets
     Style, Color, TopLine, BottomLine, EndColumn and ToolDescription on each
     marker. A triple cannot carry a style, a colour, a tooltip or an end
     column, so that shape would have forced the client layer back to a

@@ -28,7 +28,7 @@ uses
   System.SysUtils, System.Classes, System.SyncObjs,
   {$ENDIF}
   {$IFDEF FPC}
-  Lsp.Transport, Lsp.DocumentSync,
+  LSP.Transport, Lsp.DocumentSync,
   {$ELSE}
   LSP.Transport, Lsp.DocumentSync,
   {$ENDIF}
@@ -68,7 +68,7 @@ type
   //     Got "...procedure of object...", expected "...procedure..."
   // and FPC has no nested procedures to express the closure with. The long
   // form is the way: the subclass supplies Execute. Same shape as
-  // TLspReadThread in Lsp.Transport.
+  // TLspReadThread in LSP.Transport.
   //
   // Declared AFTER TLspBootstrap, not before it: FPC has no forward
   // references for types, so a thread class placed above the owner cannot

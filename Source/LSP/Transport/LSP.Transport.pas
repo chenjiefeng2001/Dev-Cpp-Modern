@@ -28,7 +28,7 @@ uses
   System.SysUtils, System.Classes, System.Generics.Collections, System.SyncObjs,
   {$ENDIF}
   {$IFDEF FPC}
-  Types, Lsp.JsonRpc, Lsp.Process, Lsp.Process.Factory;
+  Types, LSP.JsonRpc, LSP.Process, LSP.Process.Factory;
   {$ELSE}
   System.Types, System.IOUtils, LSP.JsonRpc, LSP.Process, LSP.Process.Factory;
   {$ENDIF}

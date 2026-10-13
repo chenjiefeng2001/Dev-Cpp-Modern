@@ -327,7 +327,7 @@ begin
     // unconditionally -- an earlier attempt at `PAnsiChar` for both trees fixed
     // FPC and would have broken Delphi, whose Winapi.Windows.CreateProcess takes
     // the WIDE entry point and whose PChar is therefore the correct argument
-    // (Lsp.Process.Win32.pas:124 uses exactly that and compiles today).
+    // (LSP.Process.Win32.pas:124 uses exactly that and compiles today).
     //
     // FPC disagrees: its Windows unit binds the bare name to the ANSI entry
     // point (rtl/win/ascdef.inc:359 -> LPCSTR/LPSTR), while -Mdelphiunicode
