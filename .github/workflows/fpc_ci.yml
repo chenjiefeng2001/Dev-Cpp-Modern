@@ -149,7 +149,11 @@ jobs:
       - name: Set up Lazarus / Free Pascal
         uses: gcarreno/setup-lazarus@v3
         with:
-          laz-version: ${{ env.LAZ_VERSION }}
+          # 'stable' is Lazarus 4.4 -- see LAZ_VERSION above. A literal rather
+          # than env on purpose: an action that silently ignores an unknown
+          # input and uses its own default is what this replaces, so the
+          # version belongs in the job where it can be read.
+          lazarus-version: 'stable'
 
       - name: Build portable core (lazbuild)
         shell: bash
@@ -179,7 +183,11 @@ jobs:
       - name: Set up Lazarus / Free Pascal
         uses: gcarreno/setup-lazarus@v3
         with:
-          laz-version: ${{ env.LAZ_VERSION }}
+          # 'stable' is Lazarus 4.4 -- see LAZ_VERSION above. A literal rather
+          # than env on purpose: an action that silently ignores an unknown
+          # input and uses its own default is what this replaces, so the
+          # version belongs in the job where it can be read.
+          lazarus-version: 'stable'
 
       - name: Build Windows variant (ToolchainConfig uses Win32 pipes)
         shell: bash
@@ -364,7 +372,11 @@ jobs:
       - name: Set up Lazarus / Free Pascal
         uses: gcarreno/setup-lazarus@v3
         with:
-          laz-version: ${{ env.LAZ_VERSION }}
+          # 'stable' is Lazarus 4.4 -- see LAZ_VERSION above. A literal rather
+          # than env on purpose: an action that silently ignores an unknown
+          # input and uses its own default is what this replaces, so the
+          # version belongs in the job where it can be read.
+          lazarus-version: 'stable'
 
       - name: Build the LCL (win32 widgetset)
         shell: pwsh
