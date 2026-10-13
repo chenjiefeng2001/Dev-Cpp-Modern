@@ -84,11 +84,11 @@ type
 type
   { VCL's global styling facade. GetSystemColor forwards to Win32; everything
 type
-  { The two style-query enums ClassBrowser uses. Only the members it names are
-    declared, because that is all the closure needs and a guessed rest-of-enum
-    would be invented data. }
-  TStyleFontColor = (sfTabTextActiveNormal);
-  TStyleColor = (scTreeView);
+  { The style-query enums the closure uses, and only those: three TStyleColor
+    members and two TStyleFontColor members, measured over every StyleServices
+    call site. A guessed rest-of-enum would be invented data. }
+  TStyleFontColor = (sfTabTextActiveNormal, sfButtonTextNormal);
+  TStyleColor = (scTreeView, scGenericBackground, scButtonDisabled);
 
   { VCL's global styling facade. GetSystemColor forwards to Win32; everything
     else is the single boolean, which is True here (see the header).
@@ -179,8 +179,13 @@ end;
 
 function TStyleServices.GetStyleColor(AColor: TStyleColor): TColor;
 begin
-  // What the VCL returns for scTreeView with no style loaded.
-  Result := clWindow;
+  // What the VCL returns for these elements with no style loaded: the window
+  // colour for scTreeView and the desktop background for the other two, both of
+  // which main.pas paints a page control with.
+  if AColor = scTreeView then
+    Result := clWindow
+  else
+    Result := clBtnFace;
 end;
 
 procedure DrawStyleEdge(ACanvas: TCanvas; ARect: TRect;
