@@ -101,6 +101,7 @@ def _load_converter():
 
 CONVERTER = _load_converter()
 CLASS_RENAME = CONVERTER.CLASS_RENAME
+NAME_RENAME = getattr(CONVERTER, "NAME_RENAME", {})
 
 
 def read(p):
@@ -115,7 +116,7 @@ def counts(lines):
             sum(1 for l in lines if END.match(l)))
 
 
-def object_names(lines, rename=None):
+def object_names(lines, rename=None, name_rename=None):
     """Ordered list of `Name:Type` for every object block.
 
     A LIST, not a multiset: two panels may legitimately declare the same control
@@ -126,6 +127,12 @@ def object_names(lines, rename=None):
     CLASS_RENAME before the pair is built. The DFM side is the one that needs
     it: the LFM side is what the converter WROTE, and if it wrote a class the
     rename table does not describe, that must surface as a difference.
+
+    `name_rename` carries the converter's per-NAME renames, which have the same
+    one-sided duty: the DFM says `TButton`, the converter wrote `TBitBtn`, and
+    that has to be agreed in advance or it reads as corruption. Precedence
+    matches the converter's own -- a class-wide rename wins, so a named node
+    cannot revert TVirtualImage back to TVirtualImage.
     """
     out = []
     for l in lines:
@@ -138,7 +145,10 @@ def object_names(lines, rename=None):
         # describe the same node differently.
         name, t = (m.group(2), m.group(3)) if m.group(3) else ("", m.group(2))
         if rename is not None:
-            t = rename.get(t, t)
+            t2 = rename.get(t, t)
+            if name_rename and t2 == t:
+                t2 = name_rename.get(name, t)
+            t = t2
         out.append(f"{name}:{t}")
     return out
 
@@ -288,7 +298,7 @@ def main() -> int:
             # the conversion, not a drift. Comparing raw types reported six
             # good files as differing -- four TSVGIconImageList nodes in
             # DataFrm, three TVirtualImage nodes, one more in NewProjectFrm.
-            d_objs = object_names(d_lines, CLASS_RENAME)
+            d_objs = object_names(d_lines, CLASS_RENAME, NAME_RENAME)
             l_objs = object_names(lines)
             if d_objs != l_objs:
                 missing = [n for n in d_objs if n not in l_objs]

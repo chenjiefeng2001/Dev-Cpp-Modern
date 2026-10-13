@@ -4426,7 +4426,7 @@ object MainForm: TMainForm
           OnClick = SpeedButton4Click
           OnDblClick = SpeedButton4DblClick
         end
-        object ButtonNewDocument: TButton
+        object ButtonNewDocument: TBitBtn
           Left = 70
           Top = 73
           Width = 138
@@ -4448,7 +4448,7 @@ object MainForm: TMainForm
           TabOrder = 0
           OnClick = actNewSourceExecute
         end
-        object ButtonOpenDocument: TButton
+        object ButtonOpenDocument: TBitBtn
           Left = 223
           Top = 73
           Width = 138
@@ -4464,7 +4464,7 @@ object MainForm: TMainForm
           WordWrap = True
           OnClick = actOpenExecute
         end
-        object ButtonOptions: TButton
+        object ButtonOptions: TBitBtn
           Left = 375
           Top = 73
           Width = 138
@@ -4479,7 +4479,7 @@ object MainForm: TMainForm
           WordWrap = True
           OnClick = actCompOptionsExecute
         end
-        object ButtonChangeTheme: TButton
+        object ButtonChangeTheme: TBitBtn
           Left = 70
           Top = 225
           Width = 138
@@ -4504,7 +4504,7 @@ object MainForm: TMainForm
           TabOrder = 3
           OnClick = actEnviroOptionsExecute
         end
-        object ButtonChangeFont: TButton
+        object ButtonChangeFont: TBitBtn
           Left = 223
           Top = 225
           Width = 138
@@ -4529,7 +4529,7 @@ object MainForm: TMainForm
           TabOrder = 4
           OnClick = actEnviroOptionsExecute
         end
-        object ButtonChangeLanguage: TButton
+        object ButtonChangeLanguage: TBitBtn
           Left = 375
           Top = 225
           Width = 138

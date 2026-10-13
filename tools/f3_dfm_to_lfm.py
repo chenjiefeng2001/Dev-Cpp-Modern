@@ -124,6 +124,32 @@ CLASS_RENAME = {
     "TVirtualImage": "TLclVirtualImage",
 }
 
+# Per-NAME renames, for controls whose replacement depends on the node rather
+# than the class.
+#
+# main.dfm holds 14 TButton nodes and only SIX of them carry an Images /
+# ImageIndex pair. Those six bind dmMain.SVGIconImageWelcomeScreen and are the
+# Welcome-screen tiles; LCL's TButton has no Images property at all, so the
+# converter cannot emit them and the icons are lost. TBitButton is the LCL
+# control that carries Images + ImageIndex, so those six become TBitBtn.
+#
+# The other eight (NextLineBtn, StepOverBtn, IntoLineBtn, AddWatchBtn, ViewCPUBtn,
+# SkipFuncBtn, IntoInsBtn, NextInsBtn) carry no image and must stay TButton. A
+# blanket TButton -> TBitBtn in CLASS_RENAME would rewrite all fourteen and is
+# exactly the kind of "plausible" change that survives review: TBitBtn renders
+# identically for an imageless button.
+#
+# Keyed by object name, so adding a new icon-bearing TButton does not silently
+# keep the old type -- it has to be listed here.
+NAME_RENAME = {
+    "ButtonNewDocument": "TBitBtn",
+    "ButtonOpenDocument": "TBitBtn",
+    "ButtonOptions": "TBitBtn",
+    "ButtonChangeTheme": "TBitBtn",
+    "ButtonChangeFont": "TBitBtn",
+    "ButtonChangeLanguage": "TBitBtn",
+}
+
 # Properties dropped on a TLclVirtualImage node, and ONLY those.
 #
 # This started as a whitelist -- the shape SVG_KEEP_PROPS uses -- and that was
@@ -423,11 +449,19 @@ def parse_dfm(text):
             name, ctype = None, name
         if root is None and len(indent) == 0:
             root = ctype
+        # CLASS_RENAME is keyed on the class and applies to EVERY node of that
+        # class, so it is consulted FIRST. NAME_RENAME only gets to decide when
+        # the class rename leaves the type alone -- otherwise a named node would
+        # silently revert whatever the class-wide rule established (which is how
+        # TVirtualImage came back as TVirtualImage in three forms).
+        renamed = CLASS_RENAME.get(ctype, ctype)
+        if renamed == ctype and name is not None:
+            renamed = NAME_RENAME.get(name, ctype)
         node = {
             "indent": len(indent),
             "name": name,
             "kind": kind,
-            "type": CLASS_RENAME.get(ctype, ctype),
+            "type": renamed,
             "props": [],
         }
         # Collect properties until `end` at the same indent, or the next object.
