@@ -9,7 +9,9 @@ interface
 
 uses
   {$IFDEF FPC}
-  Classes, SysUtils, process, LSP.Process;
+  // LSP.JsonRpc for Utf8Bytes: this writes to the same wire as the framing
+  // code, and TEncoding.UTF8 mis-encodes non-ASCII on the Linux runner.
+  Classes, SysUtils, process, LSP.Process, LSP.JsonRpc;
   {$ELSE}
   System.Classes, System.SysUtils, LSP.Process;
   {$ENDIF}
@@ -180,9 +182,11 @@ function TFpcLspProcess.WriteText(const AText: string): Boolean;
 var
   Bytes: TBytes;
 begin
-  SetLength(Bytes, TEncoding.UTF8.GetByteCount(AText));
-  if Length(Bytes) > 0 then
-    TEncoding.UTF8.GetBytes(AText, 0, Length(AText), Bytes, 0);
+  // Utf8Bytes, not TEncoding.UTF8: on the Linux runner TEncoding reports ONE
+  // byte for U+4E2D and emits '?', so any non-ASCII message written to the
+  // language server arrived corrupted. Measured against LSP.JsonRpc's framing,
+  // which had the identical defect on the identical wire.
+  Bytes := LSP.JsonRpc.Utf8Bytes(AText);
   Result := Write(Bytes);
 end;
 

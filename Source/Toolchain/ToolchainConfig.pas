@@ -136,6 +136,50 @@ type
 
 implementation
 
+// UTF-8 -> text, without TEncoding.
+//
+// The SAME defect LSP.JsonRpc had: on the Linux runner TEncoding.UTF8 reports
+// one byte for U+4E2D and emits '?', so a compiler that printed a non-ASCII
+// diagnostic in its output had that character replaced with a question mark
+// before anything read it.
+//
+// Duplicated rather than imported: LSP.JsonRpc.Utf8String would put a
+// dependency from a Delphi-shared toolchain unit onto an LSP unit, for a
+// twelve-line primitive. The duplication is deliberate and the two copies are
+// kept honest by the comment above.
+{$IFDEF FPC}
+function ToolchainUtf8String(const ABytes: TBytes): string;
+var
+  Raw: RawByteString;
+begin
+  // Move, not `Raw[I+1] := Char(ABytes[I])`. The loop form round-trips the
+  // bytes through a character conversion, which under delphiunicode is
+  // codepage-dependent: it turned E4 B8 AD into '?' '?' '-' before UTF8Decode
+  // ever saw them. Move copies bytes and has no code page in it.
+  SetLength(Raw, Length(ABytes));
+  if Length(ABytes) > 0 then
+    Move(ABytes[0], Raw[1], Length(ABytes));
+  try
+    Result := UTF8Decode(Raw);
+  except
+    Result := String(ABytes);
+  end;
+end;
+{$ELSE}
+function ToolchainUtf8String(const ABytes: TBytes): string;
+begin
+  if Length(ABytes) = 0 then
+    Exit('');
+  try
+    Result := TEncoding.UTF8.GetString(ABytes);
+  except
+    on E: EEncodingError do
+      Result := String(ABytes);
+  end;
+end;
+{$ENDIF}
+
+
 uses
   // SplitString. Delphi reaches it through the implicit StrUtils in System, so
   // listing it again is redundant there but legal; FPC has no implicit unit and
@@ -360,7 +404,7 @@ begin
         SetLength(Accum, OldLen + BytesRead);
         Move(Buf[0], Accum[OldLen], BytesRead);
       end;
-      AOutput := TEncoding.UTF8.GetString(Accum);
+      AOutput := ToolchainUtf8String(Accum);
       Result := True;
     finally
       CloseHandle(PI.hThread);

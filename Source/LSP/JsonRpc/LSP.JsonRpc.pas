@@ -56,6 +56,28 @@ type
     procedure Reset;
   end;
 
+// UTF-8 encode/decode that do not go through TEncoding.
+//
+// TEncoding.UTF8 is codepage-dependent on the Linux runner: asked for U+4E2D it
+// reported ONE byte and emitted 63 ('?'), so an LSP frame carrying one CJK
+// character left as "Content-Length: 1" + "?". Measured, both runners at
+// -MDelphiUnicode:
+//
+//            charlen utf8bytes hdrlen3 frame expected  body bytes
+//   Windows      1        3       21     24    24     228 184 173
+//   Linux        1        1       21     22    24      63
+//
+// UTF8Encode and UTF8Decode are backed by UnicodeToUtf8 and Utf8ToUnicode
+// (rtl/inc/ustrings.inc), which have no code page in them. Exported because
+// LSP.Process.Fpc writes to the same wire and had the same call.
+{$IFDEF FPC}
+function Utf8Bytes(const S: string): TBytes;
+function Utf8String(const ABytes: TBytes): string;
+{$ELSE}
+function Utf8Bytes(const S: string): TBytes;
+function Utf8String(const ABytes: TBytes): string;
+{$ENDIF}
+
 // Build a complete framed message (header + body) as raw bytes.
 // AJsonBody is converted to UTF-8; the Content-Length counts the encoded bytes.
 function BuildLspFrameBytes(const AJsonBody: string): TBytes;
@@ -141,14 +163,7 @@ end;
 // precisely when continuing is the right answer.
 function DecodeUtf8Lenient(const ABytes: TBytes): string;
 begin
-  if Length(ABytes) = 0 then
-    Exit('');
-  try
-    Result := TEncoding.UTF8.GetString(ABytes);
-  except
-    on E: EEncodingError do
-      Result := String(ABytes);
-  end;
+  Result := Utf8String(ABytes);
 end;
 
 function TLspFrameDecoder.TryPopBody(out ABody: string): Boolean;
@@ -241,13 +256,6 @@ end;
 
 { Framing helpers }
 
-// Encode to UTF-8 without going through TEncoding.
-//
-// TEncoding.UTF8 is codepage-dependent on the Linux runner: asked for U+4E2D it
-// reported ONE byte and emitted 63 ('?'), so an LSP frame carrying one CJK
-// character went out as "Content-Length: 1" + "?". UnicodeToUtf8, which backs
-// UTF8Encode, has no code page in it at all.
-//
 // The RawByteString -> TBytes copy is ELEMENT-wise on purpose. A pointer cast
 // would alias the string's bytes, which is the same mistake the header build
 // below already records once: Move(Header[1], Framed[0], Length(Header)) copied
@@ -268,6 +276,44 @@ end;
 function Utf8Bytes(const S: string): TBytes;
 begin
   Result := TEncoding.UTF8.GetBytes(S);
+end;
+{$ENDIF}
+
+// The mirror image: UTF-8 bytes back to text, still without TEncoding.
+//
+// Deliberately lenient, because a framed JSON-RPC body is arbitrary content
+// from a language server and a truncated multi-byte sequence or a lone
+// continuation byte is legal on the wire. The lossy fallback is stated, not
+// hidden: a caller needing exact bytes should read FBuffer.
+{$IFDEF FPC}
+function Utf8String(const ABytes: TBytes): string;
+var
+  Raw: RawByteString;
+begin
+  // Move, not `Raw[I+1] := Char(ABytes[I])`. The loop form round-trips the
+  // bytes through a character conversion, which under delphiunicode is
+  // codepage-dependent: it turned E4 B8 AD into '?' '?' '-' before UTF8Decode
+  // ever saw them. Move copies bytes and has no code page in it.
+  SetLength(Raw, Length(ABytes));
+  if Length(ABytes) > 0 then
+    Move(ABytes[0], Raw[1], Length(ABytes));
+  try
+    Result := UTF8Decode(Raw);
+  except
+    Result := String(ABytes);
+  end;
+end;
+{$ELSE}
+function Utf8String(const ABytes: TBytes): string;
+begin
+  if Length(ABytes) = 0 then
+    Exit('');
+  try
+    Result := TEncoding.UTF8.GetString(ABytes);
+  except
+    on E: EEncodingError do
+      Result := String(ABytes);
+  end;
 end;
 {$ENDIF}
 

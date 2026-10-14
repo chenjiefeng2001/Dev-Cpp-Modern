@@ -241,6 +241,46 @@ begin
     Result := Result + IntToStr(A[I]) + ' ';
 end;
 
+// Non-ASCII through the DECODER.
+//
+// The framing check covers the encoder. This covers the response side, which
+// had no non-ASCII case at all -- so a defect of the same class could sit there
+// unseen, and did: the decoder still called TEncoding.UTF8.GetString after the
+// encoder had stopped calling TEncoding.UTF8.GetBytes. One frame, both
+// directions, no ASCII shortcut.
+procedure CheckJsonRpcNonAsciiRoundTrip;
+var
+  Dec: TLspFrameDecoder;
+  Body: string;
+  Frame: TBytes;
+begin
+  WriteLn('LSP.JsonRpc non-ASCII round trip');
+  Frame := BuildLspFrameBytes(#$4E2D);
+  Dec := TLspFrameDecoder.Create;
+  try
+    Body := '';
+    Dec.Feed(Frame);
+    if not Dec.TryPopBody(Body) then
+    begin
+      Probe.Check('non-ASCII frame decodes', False, 'no frame emitted');
+      Exit;
+    end;
+    // Compared as CODE UNITS, not as bytes. Comparing Length(Body) = 1 would
+    // pass for the replacement character too: '?' and U+4E2D are both one unit.
+    Probe.Check('non-ASCII frame decodes to the character sent',
+      (Length(Body) = 1) and (Ord(Body[1]) = $4E2D),
+      'len=' + IntToStr(Length(Body)) +
+      ' ord=' + IntToStr(Ord(Body[1])));
+    // And back out again, so the check is a ROUND TRIP rather than a one-way
+    // decode that could pass with a compensating error on the way in.
+    Probe.Check('re-encoding the decoded body reproduces the frame',
+      BytesEqual(BuildLspFrameBytes(Body), Frame),
+      'body=' + ByteList(Frame));
+  finally
+    Dec.Free;
+  end;
+end;
+
 procedure CheckJsonRpcFraming;
 var
   Dec: TLspFrameDecoder;
@@ -760,6 +800,7 @@ begin
     WriteLn('Dev-Cpp-Modern FPC core smoke tests (Phase-F / F0)');
     WriteLn('-----------------------------------------------');
     CheckJsonRpcFraming;
+    CheckJsonRpcNonAsciiRoundTrip;
     CheckLspProcess;
     CheckTransportSmoke;
     CheckMiParser;
