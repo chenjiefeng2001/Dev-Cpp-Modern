@@ -25,7 +25,37 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$laz = 'C:\lazarus'
+
+# Where Lazarus lives is not a property of this repository. setup-lazarus on
+# windows-latest installs under D:\a\_temp\installers\lazarus, not C:\lazarus,
+# and a hard-coded prefix made every probe fail with
+# "ppcx64.exe returned an error exitcode" -- which names the compiler rather
+# than the missing directory, so it reads as a broken probe.
+#
+# Ask the compiler that is on PATH. It is also the honest source of truth: the
+# probes are built with that fpc, so the -Fu directories they need belong to
+# THAT installation. With two Lazarus installs present, a fixed prefix would mix
+# units from one with a compiler from the other.
+$laz = $null
+# Walk up from the compiler until an ancestor actually contains the LCL package.
+# Counting levels would be fragile -- <laz>/fpc/<version>/bin/<target>/fpc.exe is
+# five directories down, and the depth differs between layouts -- and asking the
+# tree whether it is a Lazarus tree is the question worth asking anyway.
+$laz = $null
+$dir = Split-Path -Parent (Get-Command fpc -ErrorAction SilentlyContinue).Source
+while ($dir) {
+    if (Test-Path (Join-Path $dir 'lcl\interfaces\lcl.lpk')) { $laz = $dir; break }
+    $parent = Split-Path -Parent $dir
+    if ($parent -eq $dir) { break }
+    $dir = $parent
+}
+if (-not $laz) {
+    throw ('no ancestor of fpc contains lcl\interfaces\lcl.lpk -- is this a ' +
+           'Lazarus installation?')
+}
+if (-not (Test-Path (Join-Path $laz 'components\fpvectorial'))) {
+    throw "'$laz' has an LCL but no components\fpvectorial"
+}
 $fpcBin = Join-Path $laz 'fpc\3.2.2\bin\x86_64-win64'
 $env:PATH = "$laz;$fpcBin;$env:PATH"
 
