@@ -391,14 +391,27 @@ jobs:
           # version belongs in the job where it can be read.
           lazarus-version: 'stable'
 
+      # Where Lazarus landed is decided by the setup action -- it installed under
+      # D:\a\_temp\installers\lazarus, not C:\lazarus -- and it only promises to put
+      # Lazarus on PATH. So derive the root from lazbuild itself rather than
+      # hard-coding a directory that the runner has never had.
+      - name: Locate Lazarus
+        shell: pwsh
+        run: |
+          $LazDir = Split-Path -Parent (Get-Command lazbuild).Source
+          "LAZARUS_DIR=$LazDir" >> $env:GITHUB_ENV
+          if (-not (Test-Path (Join-Path $LazDir 'lcl/interfaces/lcl.lpk'))) {
+            throw "expected an LCL package under $LazDir"
+          }
+
       - name: Build the LCL (win32 widgetset)
         shell: pwsh
-        run: lazbuild --ws=win32 C:\lazarus\lcl\interfaces\lcl.lpk
+        run: lazbuild --ws=win32 "$env:LAZARUS_DIR/lcl/interfaces/lcl.lpk"
         continue-on-error: false
 
       - name: Build fpvectorial (the SVG parser and canvas renderer)
         shell: pwsh
-        run: lazbuild C:\lazarus\components\fpvectorial\fpvectorialpkg.lpk
+        run: lazbuild "$env:LAZARUS_DIR/components/fpvectorial/fpvectorialpkg.lpk"
 
       # Regenerates SvgData.pas + svg_manifest.json and rewrites every .lfm,
       # so this job also proves the converters are reproducible from a clean
