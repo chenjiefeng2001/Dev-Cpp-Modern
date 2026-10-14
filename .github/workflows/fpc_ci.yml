@@ -428,6 +428,11 @@ jobs:
           # converter refuses it and exits 1 BY DESIGN. Assert that rather than
           # letting a working gate look like a red one.
           if ($LASTEXITCODE -ne 1) { throw "expected the Packman/Main refusal, got $LASTEXITCODE" }
+          # The refusal above is the PASS condition, but $LASTEXITCODE is still
+          # 1 from it, and a pwsh step exits with the last command's code -- so
+          # without this the step reports failure while every assertion in it
+          # succeeded. pwsh offers no way to reset $LASTEXITCODE.
+          exit 0
 
       - name: "Build the SVG probes"
         shell: pwsh
